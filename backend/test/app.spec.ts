@@ -5,6 +5,13 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { HealthResponse } from '@bankapp/shared';
 import { createApp } from '../src/app';
+import { FakeEnableBankingClient, testConfig } from './support';
+
+const baseOptions = {
+  config: testConfig,
+  enableBanking: new FakeEnableBankingClient(),
+  database: { inMemory: true as const },
+};
 
 describe('backend HTTP API', () => {
   let app: INestApplication;
@@ -13,7 +20,7 @@ describe('backend HTTP API', () => {
   beforeEach(async () => {
     staticDir = mkdtempSync(join(tmpdir(), 'bankapp-static-'));
     writeFileSync(join(staticDir, 'index.html'), '<html><body>bankapp</body></html>');
-    app = await createApp({ staticDir });
+    app = await createApp({ ...baseOptions, staticDir });
     await app.init();
   });
 
@@ -44,7 +51,7 @@ describe('backend HTTP API', () => {
 
 describe('backend HTTP API without a built frontend', () => {
   it('still serves the API', async () => {
-    const app = await createApp({});
+    const app = await createApp(baseOptions);
     await app.init();
 
     await request(app.getHttpServer()).get('/api/health').expect(200);

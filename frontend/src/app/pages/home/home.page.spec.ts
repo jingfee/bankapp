@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import type { HealthResponse } from '@bankapp/shared';
 import { HomePage } from './home.page';
 
@@ -8,7 +9,7 @@ describe('HomePage', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [HomePage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
   });
 
@@ -35,6 +36,7 @@ describe('HomePage', () => {
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Bankapp');
     expect(page.textContent).toContain('Inga banker är anslutna ännu.');
+    expect(page.querySelector('a')?.getAttribute('href')).toBe('/anslut-bank');
   });
 
   it('shows that the server is reachable', async () => {
