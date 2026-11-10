@@ -2,6 +2,8 @@
 
 A private, Swedish-language web app (installable as a PWA later) for viewing bank and credit card transactions fetched through [Enable Banking](https://enablebanking.com). See [`CONTEXT.md`](CONTEXT.md) for the domain language and [`docs/adr/`](docs/adr/) for key decisions.
 
+The app is called **Bankapp** everywhere, including the Swedish UI (not "Bankappen").
+
 ## Layout
 
 A pnpm workspace with three packages:

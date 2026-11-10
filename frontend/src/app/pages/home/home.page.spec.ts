@@ -33,7 +33,7 @@ describe('HomePage', () => {
   it('greets the owner in Swedish', async () => {
     const page = await render(serverUp);
 
-    expect(page.querySelector('h1')?.textContent).toContain('Bankappen');
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Bankapp');
     expect(page.textContent).toContain('Inga banker är anslutna ännu.');
   });
 

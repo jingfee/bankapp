@@ -4,6 +4,10 @@ A private, single-user app for viewing the owner's bank and credit card transact
 
 ## Language
 
+**Bankapp**:
+The app's name, used unchanged in the Swedish UI (page titles, headings, the installed PWA).
+_Avoid_: Bankappen, Bank app, BankApp
+
 ### Banks and access
 
 **Owner** (sv: _Ägare_):
