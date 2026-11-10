@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `closed` integer DEFAULT false NOT NULL;

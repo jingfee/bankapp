@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { eq, lt } from 'drizzle-orm';
+import { and, eq, lt, notInArray } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
@@ -12,6 +12,7 @@ import {
   EnableBankingClient,
   type EnableBankingSession,
 } from '../enable-banking/enable-banking-client';
+import { connectionStatus } from './connection-status';
 import { SyncService } from '../sync/sync.service';
 
 /** A login must be completed within this long of being started. */
@@ -36,7 +37,7 @@ export class ConnectionsService {
     const bank = this.db.select().from(banks).where(eq(banks.name, bankName)).get();
     if (!bank) throw new HttpException('Unknown bank', HttpStatus.NOT_FOUND);
 
-    if (this.hasConnection(bank.name)) {
+    if (!this.canConnect(bank.name)) {
       throw new HttpException('The bank is already connected', HttpStatus.CONFLICT);
     }
 
@@ -91,7 +92,7 @@ export class ConnectionsService {
 
     const bank = authorisation.bankName;
     if (error || !code) return { outcome: 'failed', bank };
-    if (this.hasConnection(bank)) return { outcome: 'already-connected', bank };
+    if (!this.canConnect(bank)) return { outcome: 'already-connected', bank };
     let session: EnableBankingSession;
     try {
       session = await this.enableBanking.createSession(code);
@@ -102,6 +103,8 @@ export class ConnectionsService {
     let connectionId: number;
     try {
       connectionId = this.db.transaction((tx) => {
+        const existing = tx.select().from(connections).where(eq(connections.bankName, bank)).get();
+        if (existing) return this.renew(tx, existing.id, session);
         const connection = tx
           .insert(connections)
           .values({ bankName: bank, sessionId: session.sessionId, validUntil: session.validUntil })
@@ -118,7 +121,7 @@ export class ConnectionsService {
       });
     } catch (cause) {
       // A concurrent login for the same bank may have won while we waited for Enable Banking.
-      if (this.hasConnection(bank)) return { outcome: 'already-connected', bank };
+      if (!this.canConnect(bank)) return { outcome: 'already-connected', bank };
       this.logger.warn(`Could not store the connection to ${bank}: ${String(cause)}`);
       return { outcome: 'failed', bank };
     }
@@ -127,10 +130,72 @@ export class ConnectionsService {
     return { outcome: 'connected', bank };
   }
 
-  private hasConnection(bankName: string): boolean {
-    return (
-      this.db.select().from(connections).where(eq(connections.bankName, bankName)).get() !==
-      undefined
+  /**
+   * Renews the connection in place. Accounts are matched by `identification_hash`, so their
+   * history carries on under the new `uid`; those the bank no longer returns are closed.
+   */
+  private renew(
+    tx: Pick<AppDatabase, 'select' | 'insert' | 'update'>,
+    connectionId: number,
+    session: EnableBankingSession,
+  ): number {
+    tx.update(connections)
+      .set({ sessionId: session.sessionId, validUntil: session.validUntil })
+      .where(eq(connections.id, connectionId))
+      .run();
+    const known = new Set(
+      tx
+        .select({ hash: accounts.identificationHash })
+        .from(accounts)
+        .where(eq(accounts.connectionId, connectionId))
+        .all()
+        .map((row) => row.hash),
     );
+    for (const account of session.accounts) {
+      if (known.has(account.identificationHash)) {
+        tx.update(accounts)
+          .set({
+            uid: account.uid,
+            name: account.name,
+            type: account.type,
+            currency: account.currency,
+            closed: false,
+          })
+          .where(
+            and(
+              eq(accounts.connectionId, connectionId),
+              eq(accounts.identificationHash, account.identificationHash),
+            ),
+          )
+          .run();
+      } else {
+        tx.insert(accounts)
+          .values({ ...account, connectionId })
+          .run();
+      }
+    }
+    const returned = session.accounts.map((account) => account.identificationHash);
+    tx.update(accounts)
+      .set({ closed: true })
+      .where(
+        returned.length === 0
+          ? eq(accounts.connectionId, connectionId)
+          : and(
+              eq(accounts.connectionId, connectionId),
+              notInArray(accounts.identificationHash, returned),
+            ),
+      )
+      .run();
+    return connectionId;
+  }
+
+  /** A bank can be connected if it has no connection yet, or its connection is due for renewal. */
+  private canConnect(bankName: string): boolean {
+    const existing = this.db
+      .select({ validUntil: connections.validUntil })
+      .from(connections)
+      .where(eq(connections.bankName, bankName))
+      .get();
+    return !existing || connectionStatus(existing.validUntil, this.now()) !== 'active';
   }
 }

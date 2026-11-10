@@ -29,6 +29,8 @@ export const accounts = sqliteTable('accounts', {
   name: text('name').notNull(),
   type: text('type', { enum: ['payment', 'savings', 'card'] }).notNull(),
   currency: text('currency').notNull(),
+  /** Set when a renewal no longer returns the account; it keeps its history but is not synced. */
+  closed: integer('closed', { mode: 'boolean' }).notNull().default(false),
 });
 
 /** A BankID login that has been started but not yet returned; `state` is the redirect's secret. */

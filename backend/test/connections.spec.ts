@@ -186,6 +186,7 @@ describe('connecting a bank', () => {
         name: 'Lönekonto',
         type: 'payment',
         currency: 'SEK',
+        closed: false,
       });
     });
 

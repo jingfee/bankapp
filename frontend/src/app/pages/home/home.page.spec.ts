@@ -1,20 +1,35 @@
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  type TestRequest,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type {
   AccountsResponse,
+  BankAccounts,
   ConnectedAccount,
   HealthResponse,
   SyncSummary,
 } from '@bankapp/shared';
+import { Redirector } from '../../redirector';
 import { HomePage, SYNC_POLL_INTERVAL_MS } from './home.page';
 
 describe('HomePage', () => {
+  let redirects: string[];
+
   beforeEach(() => {
+    redirects = [];
     TestBed.configureTestingModule({
       imports: [HomePage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: Redirector, useValue: { goTo: (url: string) => redirects.push(url) } },
+      ],
     });
   });
 
@@ -44,6 +59,20 @@ describe('HomePage', () => {
     lastSyncedAt: null,
   });
 
+  /** A bank group whose connection is good for a long time. */
+  const group = (
+    bank: string,
+    accounts: ConnectedAccount[],
+    overrides: Partial<BankAccounts> = {},
+  ): BankAccounts => ({
+    bank,
+    status: 'active',
+    validUntil: '2099-01-01T00:00:00.000Z',
+    accounts,
+    closedAccounts: [],
+    ...overrides,
+  });
+
   const serverUp: Respond = (request) => request.flush({ status: 'ok' } satisfies HealthResponse);
   const serverDown: Respond = (request) => request.error(new ProgressEvent('error'));
   const noAccounts: Respond = (request) =>
@@ -62,11 +91,8 @@ describe('HomePage', () => {
     const page = await render(serverUp, (request) =>
       request.flush({
         banks: [
-          { bank: 'Coop Mastercard', accounts: [{ ...account('Coop Mastercard', 'card') }] },
-          {
-            bank: 'Swedbank',
-            accounts: [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')],
-          },
+          group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
+          group('Swedbank', [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')]),
         ],
         syncing: false,
         lastSync: null,
@@ -98,7 +124,7 @@ describe('HomePage', () => {
   it('links each account to its transactions', async () => {
     const page = await render(serverUp, (request) =>
       request.flush({
-        banks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment', 42)] }],
+        banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
         syncing: false,
         lastSync: null,
       } satisfies AccountsResponse),
@@ -113,7 +139,7 @@ describe('HomePage', () => {
       syncing: boolean,
       lastSync: SyncSummary | null = null,
     ): AccountsResponse => ({
-      banks: [{ bank: 'Swedbank', accounts }],
+      banks: [group('Swedbank', accounts)],
       syncing,
       lastSync,
     });
@@ -225,9 +251,7 @@ describe('HomePage', () => {
       lastSync: SyncSummary | null = null,
       lastSyncedAt: string | null = null,
     ): AccountsResponse => ({
-      banks: [
-        { bank: 'Swedbank', accounts: [{ ...account('Lönekonto', 'payment'), lastSyncedAt }] },
-      ],
+      banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment'), lastSyncedAt }])],
       syncing,
       lastSync,
     });
@@ -359,6 +383,99 @@ describe('HomePage', () => {
       const { button } = await renderIdle({ banks: [], syncing: false, lastSync: null });
 
       expect(button()).toBeNull();
+    });
+  });
+
+  describe('connection expiry and renewal', () => {
+    const DAY = 24 * 3600 * 1000;
+    const inDays = (days: number) => new Date(Date.now() + days * DAY).toISOString();
+    const swedbank = (overrides: Partial<BankAccounts>) => (request: TestRequest) =>
+      request.flush({
+        banks: [group('Swedbank', [account('Lönekonto', 'payment')], overrides)],
+        syncing: false,
+        lastSync: null,
+      } satisfies AccountsResponse);
+    const renewButton = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Anslut igen',
+      );
+
+    it('shows the days left on a connection that is good for a while, without a warning', async () => {
+      const page = await render(serverUp, swedbank({ status: 'active', validUntil: inDays(60) }));
+
+      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe(
+        'Kopplingen går ut om 60 dagar.',
+      );
+      expect(page.querySelector('[data-expiry]')).toBeNull();
+      expect(renewButton(page)).toBeUndefined();
+    });
+
+    it('warns in Swedish when a connection is about to expire and offers to renew it', async () => {
+      const page = await render(serverUp, swedbank({ status: 'expiring', validUntil: inDays(10) }));
+
+      const banner = page.querySelector('[data-expiry]');
+      expect(banner?.textContent).toContain('Kopplingen till Swedbank går ut om 10 dagar.');
+      expect(renewButton(page)).toBeDefined();
+    });
+
+    it('says "1 dag" when a day is left', async () => {
+      const page = await render(
+        serverUp,
+        swedbank({ status: 'expiring', validUntil: inDays(0.5) }),
+      );
+
+      expect(page.querySelector('[data-expiry]')?.textContent).toContain('går ut om 1 dag.');
+    });
+
+    it('tells the owner a connection has expired and marks its accounts as not syncing', async () => {
+      const page = await render(serverUp, swedbank({ status: 'expired', validUntil: inDays(-2) }));
+
+      expect(page.querySelector('[data-expiry]')?.textContent).toContain(
+        'Kopplingen till Swedbank har gått ut. Kontona uppdateras inte längre.',
+      );
+      expect(page.querySelector('li [data-not-syncing]')?.textContent?.trim()).toBe(
+        'Uppdateras inte',
+      );
+      expect(page.querySelector('a[href="/konto/1"]')).not.toBeNull();
+      expect(renewButton(page)).toBeDefined();
+    });
+
+    it('sends the owner to BankID to renew the same bank', async () => {
+      const page = await render(serverUp, swedbank({ status: 'expired' }));
+      const http = TestBed.inject(HttpTestingController);
+
+      renewButton(page)!.click();
+      const request = http.expectOne({ method: 'POST', url: '/api/connections' });
+      expect(request.request.body).toEqual({ bank: 'Swedbank' });
+      request.flush({ url: 'https://bankid.example/auth' });
+
+      expect(redirects).toEqual(['https://bankid.example/auth']);
+    });
+
+    it('says so when the renewal cannot be started', async () => {
+      const page = await render(serverUp, swedbank({ status: 'expired' }));
+      const http = TestBed.inject(HttpTestingController);
+
+      renewButton(page)!.click();
+      http.expectOne({ method: 'POST', url: '/api/connections' }).error(new ProgressEvent('error'));
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain(
+        'Förnyelsen kunde inte startas',
+      );
+      expect(redirects).toEqual([]);
+    });
+
+    it('shows closed accounts apart from the others, still linked to their history', async () => {
+      const page = await render(
+        serverUp,
+        swedbank({ closedAccounts: [account('Sparkonto', 'savings', 9)] }),
+      );
+
+      const closed = page.querySelector('[data-closed-accounts]');
+      expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
+      expect(closed?.querySelector('a[href="/konto/9"]')?.textContent?.trim()).toBe('Sparkonto');
+      expect(page.querySelector('section[data-bank] > ul a[href="/konto/9"]')).toBeNull();
     });
   });
 

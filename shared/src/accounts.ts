@@ -16,10 +16,21 @@ export interface ConnectedAccount {
   lastSyncedAt: string | null;
 }
 
+/**
+ * Whether the owner's permission to read a bank is still good: `expiring` within 14 days of
+ * running out, `expired` once it has; an expired connection is not synced.
+ */
+export type ConnectionStatus = 'active' | 'expiring' | 'expired';
+
 /** The accounts of one connected bank. */
 export interface BankAccounts {
   bank: string;
+  status: ConnectionStatus;
+  /** When the connection's permission runs out (ISO 8601). */
+  validUntil: string;
   accounts: ConnectedAccount[];
+  /** Accounts a renewal no longer returned; they keep their history but are not synced. */
+  closedAccounts: ConnectedAccount[];
 }
 
 /** How the most recent finished sync went. */

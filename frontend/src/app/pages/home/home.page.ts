@@ -1,18 +1,22 @@
 import { Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type { AccountType, AccountsResponse, SyncSummary } from '@bankapp/shared';
+import type { AccountType, AccountsResponse, BankAccounts, SyncSummary } from '@bankapp/shared';
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { ConnectionsService } from '../../connections.service';
 import { DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { HealthService } from '../../health.service';
+import { Redirector } from '../../redirector';
 import { SyncService } from '../../sync.service';
 
 type Loaded = AccountsResponse | { failed: true };
 
 /** How often the overview asks again while a sync is running. */
 export const SYNC_POLL_INTERVAL_MS = 2000;
+
+const DAY_MS = 24 * 3600 * 1000;
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   payment: 'Betalkonto',
@@ -73,6 +77,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             </p>
           }
         }
+        @if (renewFailed()) {
+          <p role="alert" class="text-sm text-red-700 dark:text-red-400">
+            Förnyelsen kunde inte startas. Försök igen senare.
+          </p>
+        }
         @if (startFailed()) {
           <p role="alert" class="text-sm text-red-700 dark:text-red-400">
             Uppdateringen kunde inte startas. Försök igen senare.
@@ -93,6 +102,29 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
             <h2 class="text-lg font-semibold">{{ group.bank }}</h2>
+            @if (group.status === 'active') {
+              <p data-days-left class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Kopplingen går ut om {{ daysLeftText(group) }}.
+              </p>
+            }
+            @if (group.status !== 'active') {
+              <div
+                data-expiry
+                class="mt-3 flex flex-col gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+              >
+                <p [attr.role]="group.status === 'expired' ? 'alert' : null">
+                  {{ expiryText(group) }}
+                </p>
+                <button
+                  type="button"
+                  class="self-start rounded-lg bg-zinc-900 px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                  [disabled]="renewing()"
+                  (click)="renew(group.bank)"
+                >
+                  Anslut igen
+                </button>
+              </div>
+            }
             <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
               @for (account of group.accounts; track account.name) {
                 <li class="flex items-baseline justify-between gap-3 py-2">
@@ -115,10 +147,34 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                         ? 'Uppdaterad ' + (account.lastSyncedAt | dateTime)
                         : 'Inte uppdaterad ännu'
                     }}</span>
+                    @if (group.status === 'expired') {
+                      <span class="text-sm text-amber-700 dark:text-amber-400" data-not-syncing
+                        >Uppdateras inte</span
+                      >
+                    }
                   </span>
                 </li>
               }
             </ul>
+            @if (group.closedAccounts.length > 0) {
+              <div data-closed-accounts class="mt-4">
+                <h3 class="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+                  Avslutade konton
+                </h3>
+                <ul class="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
+                  @for (account of group.closedAccounts; track account.id) {
+                    <li class="flex flex-col py-2">
+                      <a [routerLink]="['/konto', account.id]" class="underline">{{
+                        account.name
+                      }}</a>
+                      <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                        typeLabel(account.type)
+                      }}</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
           </section>
         }
         <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
@@ -150,6 +206,10 @@ export class HomePage {
   protected readonly serverReachable = toSignal(inject(HealthService).isServerReachable());
   private readonly accounts = inject(AccountsService);
   private readonly sync = inject(SyncService);
+  private readonly connections = inject(ConnectionsService);
+  private readonly redirector = inject(Redirector);
+  protected readonly renewing = signal(false);
+  protected readonly renewFailed = signal(false);
   /** Emits to start (or restart) fetching the accounts. */
   private readonly refresh = new BehaviorSubject<void>(undefined);
   /** What the overview currently shows, kept across refreshes. */
@@ -202,6 +262,31 @@ export class HomePage {
         this.startFailed.set(true);
       },
     });
+  }
+
+  /** Sends the owner to BankID to renew the bank's connection. */
+  protected renew(bank: string): void {
+    this.renewing.set(true);
+    this.renewFailed.set(false);
+    this.connections.start(bank).subscribe({
+      next: (url) => this.redirector.goTo(url),
+      error: () => {
+        this.renewing.set(false);
+        this.renewFailed.set(true);
+      },
+    });
+  }
+
+  protected expiryText(group: BankAccounts): string {
+    if (group.status === 'expired') {
+      return `Kopplingen till ${group.bank} har gått ut. Kontona uppdateras inte längre.`;
+    }
+    return `Kopplingen till ${group.bank} går ut om ${this.daysLeftText(group)}.`;
+  }
+
+  protected daysLeftText(group: BankAccounts): string {
+    const days = Math.max(1, Math.ceil((Date.parse(group.validUntil) - Date.now()) / DAY_MS));
+    return days === 1 ? '1 dag' : `${days} dagar`;
   }
 
   protected newTransactionsText(count: number): string {

@@ -11,6 +11,8 @@ import {
   syncRuns,
   transactions,
 } from '../db/schema';
+import { connectionStatus } from '../connections/connection-status';
+import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 
 /**
@@ -26,6 +28,7 @@ export const TRANSACTIONS_PAGE_SIZE = 50;
 export class AccountsService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
+    @Inject(CLOCK) private readonly now: Clock,
     private readonly sync: SyncService,
   ) {}
 
@@ -37,6 +40,8 @@ export class AccountsService {
         bank: connections.bankName,
         name: accounts.name,
         type: accounts.type,
+        closed: accounts.closed,
+        validUntil: connections.validUntil,
       })
       .from(accounts)
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
@@ -53,9 +58,16 @@ export class AccountsService {
     );
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
-    for (const { id, bank, name, type } of rows) {
-      const group = byBank.get(bank) ?? { bank, accounts: [] };
-      group.accounts.push({
+    const now = this.now();
+    for (const { id, bank, name, type, closed, validUntil } of rows) {
+      const group = byBank.get(bank) ?? {
+        bank,
+        status: connectionStatus(validUntil, now),
+        validUntil: validUntil.toISOString(),
+        accounts: [],
+        closedAccounts: [],
+      };
+      (closed ? group.closedAccounts : group.accounts).push({
         id,
         name,
         type,
