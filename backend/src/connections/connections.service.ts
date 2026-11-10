@@ -161,7 +161,12 @@ export class ConnectionsService {
             currency: account.currency,
             closed: false,
           })
-          .where(eq(accounts.identificationHash, account.identificationHash))
+          .where(
+            and(
+              eq(accounts.connectionId, connectionId),
+              eq(accounts.identificationHash, account.identificationHash),
+            ),
+          )
           .run();
       } else {
         tx.insert(accounts)
