@@ -5,6 +5,11 @@ import { createApp } from './app';
 import { ConfigError, loadConfig } from './config/config';
 import { HttpEnableBankingClient } from './enable-banking/http-enable-banking-client';
 
+// Local development reads its configuration from backend/.env when there is one. Variables already
+// set in the environment win, so the Docker image (which has no such file) is unaffected.
+const envFile = resolve(__dirname, '../.env');
+if (existsSync(envFile)) process.loadEnvFile(envFile);
+
 // Where the built frontend lives. In the Docker image this is set explicitly; locally it points at
 // the Angular build output so `pnpm build && pnpm start` serves the whole app.
 const staticDir =
