@@ -123,7 +123,7 @@ export class ConnectionsService {
       return { outcome: 'failed', bank };
     }
     // The owner does not wait for the first fetch; the overview shows it as in progress.
-    void this.sync.start('initial', connectionId);
+    void this.sync.start('initial', { connectionId });
     return { outcome: 'connected', bank };
   }
 

@@ -191,7 +191,7 @@ describe('the initial sync', () => {
       // A later fetch (the next sync) in which the bank no longer reports the closing balance.
       enableBanking.balances.set('u1', [balance('ITAV', 900)]);
       now = new Date(START.getTime() + 3600_000);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect((await accountNamed('Lönekonto')).balance?.amount).toBe(900);
     });
@@ -374,7 +374,7 @@ describe('the initial sync', () => {
         transaction(-10, { entryReference: 'a' }),
         transaction(-20, { entryReference: 'b' }),
       ]);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored().map((row) => row.entryReference)).toEqual(['a', 'b']);
     });
@@ -403,7 +403,7 @@ describe('the initial sync', () => {
 
       // The same history again, plus one more identical purchase.
       enableBanking.transactions.set('u1', [coffee, coffee, coffee]);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored()).toHaveLength(5);
     });
@@ -418,7 +418,7 @@ describe('the initial sync', () => {
 
       // The pending one has booked; the booked one is unchanged.
       enableBanking.transactions.set('u1', [transaction(-35), transaction(-35)]);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored().filter((row) => row.status === 'booked')).toHaveLength(2);
     });
@@ -429,7 +429,7 @@ describe('the initial sync', () => {
       await settled();
 
       enableBanking.transactions.set('u1', []);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored()).toHaveLength(1);
     });
@@ -448,7 +448,7 @@ describe('the initial sync', () => {
         transaction(-10, { description: 'Booked A', entryReference: 'a' }),
         transaction(-30, { status: 'pending', description: 'Reserved C' }),
       ]);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored().map((row) => [row.status, row.description])).toEqual([
         ['booked', 'Booked A'],
@@ -475,7 +475,7 @@ describe('the initial sync', () => {
 
       enableBanking.failingTransactions.add('u1');
       enableBanking.balances.set('u1', [balance('CLBD', 5)]);
-      await app.get(SyncService).start('manual');
+      await app.get(SyncService).start('manual').finished;
 
       expect(stored()).toHaveLength(1);
       expect(db().select().from(balances).all()).toEqual([]);

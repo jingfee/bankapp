@@ -6,6 +6,8 @@ export type {
   BankAccounts,
   ConnectedAccount,
   Money,
+  StartSyncResponse,
+  SyncSummary,
   Transaction,
   TransactionsResponse,
 } from './accounts';

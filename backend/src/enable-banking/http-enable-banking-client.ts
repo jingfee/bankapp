@@ -1,8 +1,9 @@
 import { SignJWT } from 'jose';
 import { createPrivateKey, type KeyObject } from 'node:crypto';
 import { z } from 'zod';
-import type {
-  AuthorisationRequest,
+import {
+  RateLimitError,
+  type AuthorisationRequest,
   EnableBankingAccountType,
   EnableBankingBalance,
   EnableBankingBank,
@@ -10,6 +11,9 @@ import type {
   EnableBankingSession,
   EnableBankingTransaction,
   PersonnummerSupport,
+  PsuContext,
+  RequestOptions,
+  TransactionsRequestOptions,
 } from './enable-banking-client';
 
 /** Used when a bank does not state how long it grants access; short enough for any bank. */
@@ -182,8 +186,16 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     };
   }
 
-  async getBalances(accountUid: string): Promise<EnableBankingBalance[]> {
-    const response = await this.send('GET', `/accounts/${encodeURIComponent(accountUid)}/balances`);
+  async getBalances(
+    accountUid: string,
+    options: RequestOptions = {},
+  ): Promise<EnableBankingBalance[]> {
+    const response = await this.send(
+      'GET',
+      `/accounts/${encodeURIComponent(accountUid)}/balances`,
+      undefined,
+      options.psu,
+    );
     return balancesResponse.parse(response).balances.map((balance) => {
       const text = balance.balance_amount.amount.trim();
       const amount = text === '' ? Number.NaN : Number(text);
@@ -201,14 +213,20 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     });
   }
 
-  async getTransactions(accountUid: string): Promise<EnableBankingTransaction[]> {
-    const path = `/accounts/${encodeURIComponent(accountUid)}/transactions?strategy=longest`;
+  async getTransactions(
+    accountUid: string,
+    options: TransactionsRequestOptions = {},
+  ): Promise<EnableBankingTransaction[]> {
+    const range = options.dateFrom
+      ? `date_from=${encodeURIComponent(options.dateFrom)}`
+      : 'strategy=longest';
+    const path = `/accounts/${encodeURIComponent(accountUid)}/transactions?${range}`;
     const transactions: EnableBankingTransaction[] = [];
     const seenKeys = new Set<string>();
     let key: string | null | undefined;
     do {
       const url = key ? `${path}&continuation_key=${encodeURIComponent(key)}` : path;
-      const page = transactionsResponse.parse(await this.send('GET', url));
+      const page = transactionsResponse.parse(await this.send('GET', url, undefined, options.psu));
       for (const raw of page.transactions) transactions.push(toTransaction(raw));
       key = page.continuation_key;
       if (key) {
@@ -222,12 +240,18 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     return transactions;
   }
 
-  private async send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+  private async send(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    psu?: PsuContext,
+  ): Promise<unknown> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${await this.createToken()}`,
         Accept: 'application/json',
+        ...(psu ? { 'psu-ip-address': psu.ipAddress, 'psu-user-agent': psu.userAgent } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -235,9 +259,11 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     if (!response.ok) {
       // The body says why (e.g. a redirect URL that is not registered); keep it for the log.
       const reason = (await response.text().catch(() => '')).trim().slice(0, MAX_REASON_LENGTH);
-      throw new Error(
-        `Enable Banking answered ${response.status} for ${method} ${path}${reason ? `: ${reason}` : ''}`,
-      );
+      const message = `Enable Banking answered ${response.status} for ${method} ${path}${reason ? `: ${reason}` : ''}`;
+      if (response.status === 429 || reason.includes('ASPSP_RATE_LIMIT_EXCEEDED')) {
+        throw new RateLimitError(message);
+      }
+      throw new Error(message);
     }
     return response.json();
   }

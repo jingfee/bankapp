@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, max } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../clock';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
@@ -15,11 +15,26 @@ import {
 } from '../db/schema';
 import {
   EnableBankingClient,
+  RateLimitError,
   type EnableBankingBalance,
   type EnableBankingTransaction,
+  type PsuContext,
 } from '../enable-banking/enable-banking-client';
 
 export type SyncTrigger = 'initial' | 'scheduled' | 'manual';
+
+/**
+ * How many days before the last booked transaction a sync starts fetching again. Pending
+ * transactions are dated by the bank on booking, so the overlap catches those that book late.
+ */
+export const OVERLAP_DAYS = 7;
+
+export interface SyncOptions {
+  /** Sync only this connection's accounts, otherwise every connection that has not expired. */
+  connectionId?: number;
+  /** The owner's device, sent to the bank for a manual sync so it counts as user-present. */
+  psu?: PsuContext;
+}
 
 /** SQLite limits the number of variables in one statement. */
 const INSERT_BATCH_SIZE = 50;
@@ -29,6 +44,8 @@ type AccountRow = typeof accounts.$inferSelect;
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
+  /** The sync running in this process, if any. */
+  private current: Promise<void> | undefined;
 
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
@@ -59,44 +76,89 @@ export class SyncService implements OnModuleInit {
 
   /**
    * Starts a sync and returns once it is recorded as running; the promise resolves when it has
-   * finished and never rejects. With a `connectionId` only that connection's accounts are synced,
-   * otherwise every account of every connection that has not expired.
+   * finished and never rejects. Only one sync runs at a time: while one is running, nothing is
+   * started and `started` is false.
    */
-  start(trigger: SyncTrigger, connectionId?: number): Promise<void> {
-    let runId: number;
+  start(
+    trigger: SyncTrigger,
+    options: SyncOptions = {},
+  ): { started: boolean; finished: Promise<void> } {
+    let runId: number | undefined;
     let rows: AccountRow[];
     try {
       const now = this.now();
+      const claimed = this.db.transaction((tx) => {
+        if (
+          tx.select({ id: syncRuns.id }).from(syncRuns).where(isNull(syncRuns.finishedAt)).get()
+        ) {
+          return undefined;
+        }
+        return tx
+          .insert(syncRuns)
+          .values({ trigger, startedAt: now })
+          .returning({ id: syncRuns.id })
+          .get().id;
+      });
+      if (claimed === undefined)
+        return { started: false, finished: this.afterCurrent(trigger, options) };
+      runId = claimed;
       rows = this.db
         .select({ account: accounts })
         .from(accounts)
         .innerJoin(connections, eq(accounts.connectionId, connections.id))
         .where(
-          connectionId === undefined
+          options.connectionId === undefined
             ? gt(connections.validUntil, now)
-            : eq(connections.id, connectionId),
+            : eq(connections.id, options.connectionId),
         )
         .all()
         .map((row) => row.account);
-      runId = this.db
-        .insert(syncRuns)
-        .values({ trigger, startedAt: now })
-        .returning({ id: syncRuns.id })
-        .get().id;
     } catch (cause) {
       this.logger.error(`Could not start a ${trigger} sync: ${String(cause)}`);
-      return Promise.resolve();
+      if (runId !== undefined) {
+        this.db
+          .update(syncRuns)
+          .set({ finishedAt: this.now() })
+          .where(eq(syncRuns.id, runId))
+          .run();
+      }
+      return { started: false, finished: Promise.resolve() };
     }
-    return this.execute(runId, rows).catch((cause: unknown) =>
-      this.logger.error(`Sync ${runId} failed: ${String(cause)}`),
+    const psu = trigger === 'manual' ? options.psu : undefined;
+    const id = runId;
+    const finished = this.execute(id, rows, trigger === 'initial', psu).catch((cause: unknown) =>
+      this.logger.error(`Sync ${id} failed: ${String(cause)}`),
     );
+    this.current = finished;
+    return { started: true, finished };
   }
 
-  private async execute(runId: number, rows: AccountRow[]): Promise<void> {
+  /**
+   * A new connection's first sync must not be lost because another sync was running when the
+   * connection was made, so it waits its turn. Other syncs are simply not started.
+   */
+  private afterCurrent(trigger: SyncTrigger, options: SyncOptions): Promise<void> {
+    if (trigger !== 'initial' || this.current === undefined) return Promise.resolve();
+    return this.current.then(() => this.start(trigger, options).finished);
+  }
+
+  private async execute(
+    runId: number,
+    rows: AccountRow[],
+    initial: boolean,
+    psu: PsuContext | undefined,
+  ): Promise<void> {
+    /** Connections whose bank has refused for asking too often; asking again would not help. */
+    const rateLimited = new Set<number>();
     try {
       for (const account of rows) {
         try {
-          await this.syncAccount(runId, account);
+          if (rateLimited.has(account.connectionId)) {
+            this.recordFailure(runId, account, 'rate-limited', 'The bank was asked too often');
+            continue;
+          }
+          const outcome = await this.syncAccount(runId, account, initial, psu);
+          if (outcome === 'rate-limited') rateLimited.add(account.connectionId);
         } catch (cause) {
           // One account's storage problem must not stop the others from being synced.
           this.logger.error(`Could not record the sync of account ${account.id}: ${String(cause)}`);
@@ -107,25 +169,52 @@ export class SyncService implements OnModuleInit {
     }
   }
 
-  private async syncAccount(runId: number, account: AccountRow): Promise<void> {
+  private recordFailure(
+    runId: number,
+    account: AccountRow,
+    outcome: 'failed' | 'rate-limited',
+    error: string,
+  ): void {
+    this.db
+      .insert(syncAccountResults)
+      .values({ syncRunId: runId, accountId: account.id, outcome, error, syncedAt: this.now() })
+      .run();
+  }
+
+  /** Where to start fetching transactions; undefined means as far back as the bank allows. */
+  private dateFrom(account: AccountRow, initial: boolean): string | undefined {
+    if (initial) return undefined;
+    const lastBooked = this.db
+      .select({ date: max(transactions.bookingDate) })
+      .from(transactions)
+      .where(and(eq(transactions.accountId, account.id), eq(transactions.status, 'booked')))
+      .get()?.date;
+    if (!lastBooked) return undefined;
+    const day = new Date(`${lastBooked}T00:00:00.000Z`);
+    day.setUTCDate(day.getUTCDate() - OVERLAP_DAYS);
+    return day.toISOString().slice(0, 10);
+  }
+
+  private async syncAccount(
+    runId: number,
+    account: AccountRow,
+    initial: boolean,
+    psu: PsuContext | undefined,
+  ): Promise<'ok' | 'failed' | 'rate-limited'> {
     let fetched: EnableBankingBalance[];
     let fetchedTransactions: EnableBankingTransaction[];
     try {
-      fetched = await this.enableBanking.getBalances(account.uid);
-      fetchedTransactions = await this.enableBanking.getTransactions(account.uid);
+      const dateFrom = this.dateFrom(account, initial);
+      fetched = await this.enableBanking.getBalances(account.uid, psu ? { psu } : undefined);
+      fetchedTransactions = await this.enableBanking.getTransactions(account.uid, {
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(psu ? { psu } : {}),
+      });
     } catch (cause) {
       this.logger.warn(`Could not fetch data for account ${account.id}: ${String(cause)}`);
-      this.db
-        .insert(syncAccountResults)
-        .values({
-          syncRunId: runId,
-          accountId: account.id,
-          outcome: 'failed',
-          error: String(cause),
-          syncedAt: this.now(),
-        })
-        .run();
-      return;
+      const outcome = cause instanceof RateLimitError ? 'rate-limited' : 'failed';
+      this.recordFailure(runId, account, outcome, String(cause));
+      return outcome;
     }
     const fetchedAt = this.now();
     this.db.transaction((tx) => {
@@ -143,29 +232,32 @@ export class SyncService implements OnModuleInit {
           )
           .run();
       }
-      this.storeTransactions(tx, account, fetchedTransactions, fetchedAt);
+      const newTransactions = this.storeTransactions(tx, account, fetchedTransactions, fetchedAt);
       tx.insert(syncAccountResults)
         .values({
           syncRunId: runId,
           accountId: account.id,
           outcome: 'ok',
           error: null,
+          newTransactions,
           syncedAt: fetchedAt,
         })
         .run();
     });
+    return 'ok';
   }
 
   /**
    * Booked transactions are added unless already stored; pending ones are replaced, since the
-   * bank may change or drop them before booking. The dedup rules are provisional.
+   * bank may change or drop them before booking. The dedup rules are provisional. Returns how
+   * many booked transactions were new.
    */
   private storeTransactions(
     tx: Pick<AppDatabase, 'insert' | 'delete'>,
     account: AccountRow,
     fetched: EnableBankingTransaction[],
     fetchedAt: Date,
-  ): void {
+  ): number {
     tx.delete(transactions)
       .where(and(eq(transactions.accountId, account.id), eq(transactions.status, 'pending')))
       .run();
@@ -188,12 +280,17 @@ export class SyncService implements OnModuleInit {
         fetchedAt,
       };
     });
+    let added = 0;
     for (let start = 0; start < rows.length; start += INSERT_BATCH_SIZE) {
-      tx.insert(transactions)
+      const inserted = tx
+        .insert(transactions)
         .values(rows.slice(start, start + INSERT_BATCH_SIZE))
         .onConflictDoNothing()
-        .run();
+        .returning({ status: transactions.status })
+        .all();
+      added += inserted.filter((row) => row.status === 'booked').length;
     }
+    return added;
   }
 }
 
