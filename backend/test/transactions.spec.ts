@@ -9,7 +9,7 @@ import { FakeEnableBankingClient, testConfig } from './support';
 
 type Row = typeof transactions.$inferInsert;
 
-describe('GET /api/accounts/:id/transactions', () => {
+describe('GET /api/transactions', () => {
   let app: INestApplication;
   let db: AppDatabase;
   let nextId = 1;
@@ -70,25 +70,24 @@ describe('GET /api/accounts/:id/transactions', () => {
       .run();
   }
 
-  const get = (path: string) => request(app.getHttpServer()).get(`/api/accounts/${path}`);
-  const list = async (query = '', accountId = 1): Promise<TransactionsResponse> =>
-    (await get(`${accountId}/transactions${query}`).expect(200)).body;
+  const get = (query = '') => request(app.getHttpServer()).get(`/api/transactions${query}`);
+  const list = async (query = ''): Promise<TransactionsResponse> =>
+    (await get(query).expect(200)).body;
 
-  it('describes the account and lists its transactions newest first', async () => {
+  it('lists the transactions of every account newest first, each with its account', async () => {
     add({ date: '2026-11-08', description: 'Old', amount: -5 });
     add({ date: '2026-11-10', description: 'Newest', amount: 100 });
-    add({ date: '2026-11-09', description: 'Middle', status: 'pending' });
-    add({ date: '2026-11-10', description: 'Other account' }, 2);
+    add({ date: '2026-11-09', description: 'Middle', status: 'pending' }, 2);
 
     const body = await list();
 
-    expect(body.account).toEqual({ id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' });
     expect(
-      body.transactions.map(({ date, description, status, amount }) => ({
+      body.transactions.map(({ date, description, status, amount, account }) => ({
         date,
         description,
         status,
         amount,
+        account,
       })),
     ).toEqual([
       {
@@ -96,18 +95,21 @@ describe('GET /api/accounts/:id/transactions', () => {
         description: 'Newest',
         status: 'booked',
         amount: { amount: 100, currency: 'SEK' },
+        account: { id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
       },
       {
         date: '2026-11-09',
         description: 'Middle',
         status: 'pending',
         amount: { amount: -10, currency: 'SEK' },
+        account: { id: 2, name: 'Sparkonto', bank: 'Swedbank', type: 'savings' },
       },
       {
         date: '2026-11-08',
         description: 'Old',
         status: 'booked',
         amount: { amount: -5, currency: 'SEK' },
+        account: { id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
       },
     ]);
     expect(body.nextCursor).toBeNull();
@@ -144,13 +146,11 @@ describe('GET /api/accounts/:id/transactions', () => {
     expect(seen.at(-1)).toBe(1);
   });
 
-  it('returns an empty list for an account without transactions', async () => {
-    expect(await list('', 2)).toMatchObject({ transactions: [], nextCursor: null });
+  it('returns an empty list when there are no transactions', async () => {
+    expect(await list()).toEqual({ transactions: [], nextCursor: null });
   });
 
-  it('answers 404 for an unknown account and 400 for a bad cursor', async () => {
-    await get('99/transactions').expect(404);
-    await get('abc/transactions').expect(404);
-    await get('1/transactions?before=nonsense').expect(400);
+  it('answers 400 for a bad cursor', async () => {
+    await get('?before=nonsense').expect(400);
   });
 });

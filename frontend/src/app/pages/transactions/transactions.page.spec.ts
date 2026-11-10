@@ -1,23 +1,15 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import type { Transaction, TransactionsResponse } from '@bankapp/shared';
-import { AccountPage } from './account.page';
+import { TransactionsPage } from './transactions.page';
 
-describe('AccountPage', () => {
+describe('TransactionsPage', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      imports: [AccountPage],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        {
-          provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } },
-        },
-      ],
+      imports: [TransactionsPage],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
   });
 
@@ -29,6 +21,7 @@ describe('AccountPage', () => {
     amount: { amount: -10, currency: 'SEK' },
     date: '2026-11-10',
     description: `Köp ${id}`,
+    account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
     ...overrides,
   });
 
@@ -36,16 +29,15 @@ describe('AccountPage', () => {
     transactions: Transaction[],
     nextCursor: string | null = null,
   ): TransactionsResponse => ({
-    account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
     transactions,
     nextCursor,
   });
 
   async function render(body: TransactionsResponse | 'error') {
-    const fixture = TestBed.createComponent(AccountPage);
+    const fixture = TestBed.createComponent(TransactionsPage);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
-    const request = http.expectOne((r) => r.url === '/api/accounts/7/transactions');
+    const request = http.expectOne((r) => r.url === '/api/transactions');
     expect(request.request.params.has('before')).toBe(false);
     if (body === 'error') request.error(new ProgressEvent('error'));
     else request.flush(body);
@@ -59,7 +51,7 @@ describe('AccountPage', () => {
       amount: li.querySelector('[data-amount]')?.textContent?.trim(),
     }));
 
-  it('shows the account and its transactions grouped under Swedish date headings', async () => {
+  it('shows transactions grouped under Swedish date headings', async () => {
     const { page } = await render(
       response([
         transaction(3, { date: '2026-11-10' }),
@@ -68,8 +60,7 @@ describe('AccountPage', () => {
       ]),
     );
 
-    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Lönekonto');
-    expect(page.textContent).toContain('Swedbank');
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Transaktioner');
     const groups = Array.from(page.querySelectorAll('section[data-date]')).map((group) => ({
       heading: group.querySelector('h2')?.textContent?.trim(),
       descriptions: Array.from(group.querySelectorAll('[data-description]')).map((d) =>
@@ -107,7 +98,22 @@ describe('AccountPage', () => {
     expect(booked?.textContent).not.toContain('Reserverad');
   });
 
-  it('says so when the account has no transactions yet', async () => {
+  it('names the account and bank of each transaction', async () => {
+    const { page } = await render(
+      response([
+        transaction(2, {
+          account: { id: 8, name: 'Sparkonto', bank: 'Skandia', type: 'savings' },
+        }),
+        transaction(1),
+      ]),
+    );
+
+    expect(
+      Array.from(page.querySelectorAll('[data-account]')).map((a) => a.textContent?.trim()),
+    ).toEqual(['Sparkonto · Skandia', 'Lönekonto · Swedbank']);
+  });
+
+  it('says so when there are no transactions yet', async () => {
     const { page } = await render(response([]));
 
     expect(page.textContent).toContain('Inga transaktioner');
@@ -117,17 +123,6 @@ describe('AccountPage', () => {
     const { page } = await render('error');
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
-  });
-
-  it('answers not found for an account that does not exist', async () => {
-    const fixture = TestBed.createComponent(AccountPage);
-    await fixture.whenStable();
-    TestBed.inject(HttpTestingController)
-      .expectOne((r) => r.url === '/api/accounts/7/transactions')
-      .flush(null, { status: 404, statusText: 'Not Found' });
-    await fixture.whenStable();
-
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Kontot finns inte');
   });
 
   it('links back to the overview', async () => {
@@ -145,8 +140,7 @@ describe('AccountPage', () => {
 
       (page.querySelector('button[data-more]') as HTMLButtonElement).click();
       const next = http.expectOne(
-        (r) =>
-          r.url === '/api/accounts/7/transactions' && r.params.get('before') === '2026-11-10:2',
+        (r) => r.url === '/api/transactions' && r.params.get('before') === '2026-11-10:2',
       );
       next.flush(response([transaction(1, { date: '2026-11-10' })]));
       await fixture.whenStable();

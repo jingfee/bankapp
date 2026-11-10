@@ -423,6 +423,25 @@ describe('the initial sync', () => {
       expect(stored().filter((row) => row.status === 'booked')).toHaveLength(2);
     });
 
+    it('that are pending are dropped when the bank also returns their booked twin', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-35, { status: 'pending', description: 'Espresso House' }),
+        transaction(-35, { description: 'espresso house ' }),
+        transaction(-35, { status: 'pending', description: 'Espresso House' }),
+        transaction(-50, { status: 'pending', description: 'Espresso House' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      // One booked twin removes one reservation; the other two have no twin and stay.
+      expect(stored().map((row) => [row.status, row.amount])).toEqual([
+        ['booked', -35],
+        ['pending', -35],
+        ['pending', -50],
+      ]);
+    });
+
     it('that are booked are never deleted when the bank stops returning them', async () => {
       enableBanking.transactions.set('u1', [transaction(-10, { entryReference: 'a' })]);
       await connect('Swedbank', [account('u1', 'Lönekonto')]);

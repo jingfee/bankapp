@@ -7,9 +7,9 @@ import type { Observable } from 'rxjs';
 export class TransactionsService {
   private readonly http = inject(HttpClient);
 
-  /** One page of an account's transactions, newest first; `before` continues a previous page. */
-  list(accountId: number, before?: string): Observable<TransactionsResponse> {
-    return this.http.get<TransactionsResponse>(`/api/accounts/${accountId}/transactions`, {
+  /** One page of the transactions of every account, newest first; `before` continues a previous page. */
+  list(before?: string): Observable<TransactionsResponse> {
+    return this.http.get<TransactionsResponse>('/api/transactions', {
       params: before === undefined ? {} : { before },
     });
   }

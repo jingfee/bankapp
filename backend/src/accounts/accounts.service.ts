@@ -21,7 +21,7 @@ import { SyncService } from '../sync/sync.service';
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
 
-/** How many transactions one page of an account's history holds. */
+/** How many transactions one page of the transaction list holds. */
 export const TRANSACTIONS_PAGE_SIZE = 50;
 
 @Injectable()
@@ -106,27 +106,12 @@ export class AccountsService {
   }
 
   /**
-   * One page of an account's transactions, newest first. `before` is the `nextCursor` of the
-   * previous page; the cursor is a position rather than an offset, so transactions arriving
-   * from a sync while the owner scrolls neither repeat nor skip. Undefined for an unknown
-   * account, `'bad-cursor'` for a cursor that is not one we handed out.
+   * One page of the transactions of every account, newest first. `before` is the `nextCursor` of
+   * the previous page; the cursor is a position rather than an offset, so transactions arriving
+   * from a sync while the owner scrolls neither repeat nor skip. `'bad-cursor'` for a cursor
+   * that is not one we handed out.
    */
-  listTransactions(
-    accountId: number,
-    before?: string,
-  ): TransactionsResponse | 'bad-cursor' | undefined {
-    const account = this.db
-      .select({
-        id: accounts.id,
-        name: accounts.name,
-        type: accounts.type,
-        bank: connections.bankName,
-      })
-      .from(accounts)
-      .innerJoin(connections, eq(accounts.connectionId, connections.id))
-      .where(eq(accounts.id, accountId))
-      .get();
-    if (account === undefined) return undefined;
+  listTransactions(before?: string): TransactionsResponse | 'bad-cursor' {
     let after = undefined;
     if (before !== undefined) {
       const match = /^(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(before);
@@ -138,22 +123,29 @@ export class AccountsService {
       );
     }
     const rows = this.db
-      .select()
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+      })
       .from(transactions)
-      .where(and(eq(transactions.accountId, accountId), after))
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .where(after)
       .orderBy(desc(transactions.date), desc(transactions.id))
       .limit(TRANSACTIONS_PAGE_SIZE + 1)
       .all();
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
-    const last = page.at(-1);
+    const last = page.at(-1)?.transaction;
     return {
-      account: { id: account.id, name: account.name, bank: account.bank, type: account.type },
-      transactions: page.map((row) => ({
+      transactions: page.map(({ transaction: row, accountName, accountType, bank }) => ({
         id: row.id,
         status: row.status,
         amount: { amount: row.amount, currency: row.currency },
         date: row.date,
         description: row.description,
+        account: { id: row.accountId, name: accountName, bank, type: accountType },
       })),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
     };

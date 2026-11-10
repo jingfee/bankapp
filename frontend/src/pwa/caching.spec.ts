@@ -70,7 +70,7 @@ describe('service worker caching', () => {
 
     it('opens the app shell for app routes', () => {
       expect(opensAppShell('/')).toBe(true);
-      expect(opensAppShell('/konton/7')).toBe(true);
+      expect(opensAppShell('/transaktioner')).toBe(true);
     });
 
     it('lets the connection callback reach the backend', () => {
@@ -81,8 +81,8 @@ describe('service worker caching', () => {
   describe('data', () => {
     it.each([
       '/api/accounts',
-      '/api/accounts/7/transactions',
-      '/api/accounts/7/transactions?before=2026-11-01T10%3A00%3A00.000Z',
+      '/api/transactions',
+      '/api/transactions?before=2026-11-01T10%3A00%3A00.000Z',
     ])('serves %s from the network when it can and from the cache when it cannot', (url) => {
       const group = dataGroupFor(url);
 

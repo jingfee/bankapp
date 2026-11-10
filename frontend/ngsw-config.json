@@ -31,7 +31,7 @@
     },
     {
       "name": "transactions",
-      "urls": ["/api/accounts/*/transactions", "/api/accounts/*/transactions?*"],
+      "urls": ["/api/transactions", "/api/transactions?*"],
       "cacheConfig": {
         "strategy": "freshness",
         "timeout": "5s",
