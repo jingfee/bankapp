@@ -6,6 +6,7 @@ packages:
 allowBuilds:
   '@parcel/watcher': false
   '@swc/core': false
+  better-sqlite3: true
   '@nestjs/core': false
   esbuild: false
   lmdb: false

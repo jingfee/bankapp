@@ -31,4 +31,18 @@ pnpm dev          # backend on :3000, frontend on http://localhost:4200 (proxies
 | `pnpm build`     | Production build of frontend and backend          |
 | `pnpm start`     | Run the built backend, serving the built frontend |
 
+## Configuration
+
+The backend refuses to start unless all of these are set and valid:
+
+| Variable                          | Meaning                                                    |
+| --------------------------------- | ---------------------------------------------------------- |
+| `ENABLE_BANKING_APPLICATION_ID`   | Enable Banking application id (used as the JWT `kid`)      |
+| `ENABLE_BANKING_PRIVATE_KEY_PATH` | Path of the application's RSA private key (PEM), readable  |
+| `REDIRECT_URL`                    | Where Enable Banking sends the owner back after BankID     |
+| `DATA_DIR`                        | Directory for the SQLite database (`bankapp.db`)           |
+| `TIMEZONE`                        | IANA time zone for scheduled jobs, e.g. `Europe/Stockholm` |
+
+Migrations in `backend/src/db/migrations` run automatically on startup. After changing `backend/src/db/schema.ts`, run `pnpm --filter @bankapp/backend exec drizzle-kit generate`. The bank list is fetched on first start and refreshed nightly at 04:00 in `TIMEZONE`.
+
 Never commit `.env` files, `*.pem` keys or database files: the repository is public.
