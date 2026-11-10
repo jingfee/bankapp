@@ -1,0 +1,1 @@
+ALTER TABLE `sync_account_results` ADD `new_transactions` integer DEFAULT 0 NOT NULL;

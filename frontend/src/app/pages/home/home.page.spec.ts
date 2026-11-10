@@ -2,7 +2,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { AccountsResponse, ConnectedAccount, HealthResponse } from '@bankapp/shared';
+import type {
+  AccountsResponse,
+  ConnectedAccount,
+  HealthResponse,
+  SyncSummary,
+} from '@bankapp/shared';
 import { HomePage, SYNC_POLL_INTERVAL_MS } from './home.page';
 
 describe('HomePage', () => {
@@ -42,7 +47,7 @@ describe('HomePage', () => {
   const serverUp: Respond = (request) => request.flush({ status: 'ok' } satisfies HealthResponse);
   const serverDown: Respond = (request) => request.error(new ProgressEvent('error'));
   const noAccounts: Respond = (request) =>
-    request.flush({ banks: [], syncing: false } satisfies AccountsResponse);
+    request.flush({ banks: [], syncing: false, lastSync: null } satisfies AccountsResponse);
 
   it('greets the owner in Swedish with an empty state and a way to connect a bank', async () => {
     const page = await render(serverUp);
@@ -64,6 +69,7 @@ describe('HomePage', () => {
           },
         ],
         syncing: false,
+        lastSync: null,
       } satisfies AccountsResponse),
     );
 
@@ -94,6 +100,7 @@ describe('HomePage', () => {
       request.flush({
         banks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment', 42)] }],
         syncing: false,
+        lastSync: null,
       } satisfies AccountsResponse),
     );
 
@@ -101,9 +108,14 @@ describe('HomePage', () => {
   });
 
   describe('balances and syncing', () => {
-    const swedbank = (accounts: ConnectedAccount[], syncing: boolean): AccountsResponse => ({
+    const swedbank = (
+      accounts: ConnectedAccount[],
+      syncing: boolean,
+      lastSync: SyncSummary | null = null,
+    ): AccountsResponse => ({
       banks: [{ bank: 'Swedbank', accounts }],
       syncing,
+      lastSync,
     });
 
     it('shows each balance in Swedish format and when the account was last synced', async () => {
@@ -197,6 +209,156 @@ describe('HomePage', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('the Uppdatera button', () => {
+    const summary = (overrides: Partial<SyncSummary> = {}): SyncSummary => ({
+      finishedAt: '2026-11-10T12:00:00.000Z',
+      newTransactions: 0,
+      failedAccounts: 0,
+      rateLimited: false,
+      ...overrides,
+    });
+    const swedbank = (
+      syncing: boolean,
+      lastSync: SyncSummary | null = null,
+      lastSyncedAt: string | null = null,
+    ): AccountsResponse => ({
+      banks: [
+        { bank: 'Swedbank', accounts: [{ ...account('Lönekonto', 'payment'), lastSyncedAt }] },
+      ],
+      syncing,
+      lastSync,
+    });
+
+    /** Renders the page showing an idle overview, with fake timers so polling can be stepped. */
+    async function renderIdle(accounts: AccountsResponse = swedbank(false)) {
+      vi.useFakeTimers();
+      const fixture = TestBed.createComponent(HomePage);
+      const http = TestBed.inject(HttpTestingController);
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
+      http.expectOne('/api/accounts').flush(accounts);
+      await vi.advanceTimersByTimeAsync(0);
+      const page = fixture.nativeElement as HTMLElement;
+      const button = () => page.querySelector<HTMLButtonElement>('button[data-sync]');
+      return { page, http, button };
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it('starts a sync, shows progress and then how many transactions were new', async () => {
+      const { page, http, button } = await renderIdle();
+      expect(button()?.textContent?.trim()).toBe('Uppdatera');
+
+      button()!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne('/api/accounts').flush(swedbank(true));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(page.querySelector('[role=status]')?.textContent).toContain('Uppdaterar');
+      expect(button()?.disabled).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
+      http
+        .expectOne('/api/accounts')
+        .flush(swedbank(false, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(page.querySelector('[role=status]')?.textContent).toContain('3 nya transaktioner');
+      expect(button()?.disabled).toBe(false);
+    });
+
+    it('says so when nothing was new, and uses the singular for one', async () => {
+      const { page, http, button } = await renderIdle();
+
+      for (const [count, text] of [
+        [0, 'Inga nya transaktioner'],
+        [1, '1 ny transaktion'],
+      ] as const) {
+        button()!.click();
+        await vi.advanceTimersByTimeAsync(0);
+        http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
+        await vi.advanceTimersByTimeAsync(0);
+        http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: count })));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(page.querySelector('[role=status]')?.textContent).toContain(text);
+      }
+    });
+
+    it('mentions accounts the bank could not deliver', async () => {
+      const { page, http, button } = await renderIdle();
+
+      button()!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
+      await vi.advanceTimersByTimeAsync(0);
+      http
+        .expectOne('/api/accounts')
+        .flush(swedbank(false, summary({ newTransactions: 2, failedAccounts: 1 })));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain('1 konto kunde inte');
+      expect(page.querySelector('[role=status]')?.textContent).toContain('2 nya transaktioner');
+    });
+
+    it('explains a rate limit and shows when the data is from', async () => {
+      const { page, http, button } = await renderIdle(
+        swedbank(false, null, '2026-11-10T08:30:00.000Z'),
+      );
+
+      button()!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
+      await vi.advanceTimersByTimeAsync(0);
+      http
+        .expectOne('/api/accounts')
+        .flush(swedbank(false, summary({ rateLimited: true }), '2026-11-10T08:30:00.000Z'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      const alert = page.querySelector('[role=alert]')?.textContent;
+      expect(alert).toContain('Banken tillåter inte fler uppdateringar just nu');
+      expect(alert).toContain('Senast uppdaterad 10 nov. 09:30');
+      expect(page.querySelector('[data-balance]')).not.toBeNull();
+    });
+
+    it('keeps following the sync when a poll fails', async () => {
+      const { page, http, button } = await renderIdle();
+
+      button()!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne('/api/accounts').error(new ProgressEvent('error'));
+      await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
+      http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: 2 })));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(page.querySelector('[role=status]')?.textContent).toContain('2 nya transaktioner');
+      expect(button()?.disabled).toBe(false);
+    });
+
+    it('shows an error when the sync cannot be started', async () => {
+      const { page, http, button } = await renderIdle();
+
+      button()!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      http.expectOne({ method: 'POST', url: '/api/sync' }).error(new ProgressEvent('error'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain(
+        'Uppdateringen kunde inte startas',
+      );
+      expect(button()?.disabled).toBe(false);
+    });
+
+    it('is not offered when no bank is connected', async () => {
+      const { button } = await renderIdle({ banks: [], syncing: false, lastSync: null });
+
+      expect(button()).toBeNull();
     });
   });
 

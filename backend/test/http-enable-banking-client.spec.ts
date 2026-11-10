@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { decodeProtectedHeader, jwtVerify } from 'jose';
+import { RateLimitError } from '../src/enable-banking/enable-banking-client';
 import {
   HttpEnableBankingClient,
   TOKEN_LIFETIME_SECONDS,
@@ -302,6 +303,76 @@ describe('HttpEnableBankingClient', () => {
       await expect(client().getBalances('u1')).rejects.toThrow('not a number');
     });
   });
+  describe('on behalf of the owner', () => {
+    const psu = { ipAddress: '192.168.1.20', userAgent: 'Mozilla/5.0 (Test)' };
+
+    it('sends the owner’s IP address and user agent with balance and transaction requests', async () => {
+      respond = () => Response.json({ balances: [], transactions: [] });
+
+      await client().getBalances('u1', { psu });
+      await client().getTransactions('u1', { psu });
+
+      for (const request of requests) {
+        expect(request.headers).toMatchObject({
+          'psu-ip-address': '192.168.1.20',
+          'psu-user-agent': 'Mozilla/5.0 (Test)',
+        });
+      }
+    });
+
+    it('sends no owner headers when nobody is present', async () => {
+      respond = () => Response.json({ balances: [], transactions: [] });
+
+      await client().getBalances('u1');
+      await client().getTransactions('u1');
+
+      for (const request of requests) {
+        expect(request.headers).not.toHaveProperty('psu-ip-address');
+        expect(request.headers).not.toHaveProperty('psu-user-agent');
+      }
+    });
+  });
+
+  describe('when the bank limits how often it may be asked', () => {
+    it('reports an HTTP 429 as a rate limit', async () => {
+      respond = () => new Response('slow down', { status: 429 });
+
+      await expect(client().getBalances('u1')).rejects.toBeInstanceOf(RateLimitError);
+    });
+
+    it('reports ASPSP_RATE_LIMIT_EXCEEDED as a rate limit whatever the status', async () => {
+      respond = () =>
+        new Response('{"error":"ASPSP_RATE_LIMIT_EXCEEDED"}', {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      await expect(client().getTransactions('u1')).rejects.toBeInstanceOf(RateLimitError);
+    });
+
+    it('does not mistake other failures for a rate limit', async () => {
+      respond = () => new Response('nope', { status: 500 });
+
+      const error = await client()
+        .getBalances('u1')
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(RateLimitError);
+    });
+  });
+
+  describe('getTransactions from a date', () => {
+    it('asks for transactions from that date instead of the longest history', async () => {
+      respond = () => Response.json({ transactions: [] });
+
+      await client().getTransactions('u1', { dateFrom: '2026-11-03' });
+
+      expect(requests.map((request) => request.url)).toEqual([
+        'https://enable.test/accounts/u1/transactions?date_from=2026-11-03',
+      ]);
+    });
+  });
+
   describe('getTransactions', () => {
     const raw = (overrides: Record<string, unknown> = {}) => ({
       entry_reference: 'ref-1',

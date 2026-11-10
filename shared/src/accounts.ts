@@ -22,11 +22,31 @@ export interface BankAccounts {
   accounts: ConnectedAccount[];
 }
 
+/** How the most recent finished sync went. */
+export interface SyncSummary {
+  /** When it finished (ISO 8601). */
+  finishedAt: string;
+  /** Booked transactions it stored that were not there before. */
+  newTransactions: number;
+  /** Accounts the bank could not deliver, other than because of a rate limit. */
+  failedAccounts: number;
+  /** True if a bank refused because it was asked too often; the data shown is then older. */
+  rateLimited: boolean;
+}
+
 /** Response body of `GET /api/accounts`, banks sorted by name and accounts by name. */
 export interface AccountsResponse {
   banks: BankAccounts[];
   /** True while a sync is running; the overview refreshes until it is false. */
   syncing: boolean;
+  /** The most recent finished sync, or null if none has finished yet. */
+  lastSync: SyncSummary | null;
+}
+
+/** Response body of `POST /api/sync`. */
+export interface StartSyncResponse {
+  /** False when a sync was already running, in which case no second one was started. */
+  started: boolean;
 }
 
 /** A transaction as listed on the account page. `amount` is negative when money left the account. */

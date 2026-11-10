@@ -1,11 +1,14 @@
 import type { AppConfig } from '../src/config/config';
-import type {
-  AuthorisationRequest,
-  EnableBankingBalance,
-  EnableBankingBank,
-  EnableBankingClient,
-  EnableBankingSession,
-  EnableBankingTransaction,
+import {
+  RateLimitError,
+  type AuthorisationRequest,
+  type EnableBankingBalance,
+  type EnableBankingBank,
+  type EnableBankingClient,
+  type EnableBankingSession,
+  type EnableBankingTransaction,
+  type RequestOptions,
+  type TransactionsRequestOptions,
 } from '../src/enable-banking/enable-banking-client';
 
 export const testConfig: AppConfig = {
@@ -34,12 +37,18 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   failingBalances = new Set<string>();
   /** While set, balance requests wait for it, so a sync can be observed while running. */
   holdBalances: Promise<void> | undefined;
+  /** Account `uid`s whose requests the bank answers with a rate limit. */
+  rateLimited = new Set<string>();
   requestedBalances: string[] = [];
+  /** The options of every balance request, in order. */
+  balanceOptions: (RequestOptions | undefined)[] = [];
   /** Transactions by account `uid`; an account without an entry has none. */
   transactions = new Map<string, EnableBankingTransaction[]>();
   /** Account `uid`s whose transactions the bank refuses to return. */
   failingTransactions = new Set<string>();
   requestedTransactions: string[] = [];
+  /** The options of every transaction request, in order. */
+  transactionOptions: (TransactionsRequestOptions | undefined)[] = [];
 
   listBanks(country: string): Promise<EnableBankingBank[]> {
     this.requestedCountries.push(country);
@@ -59,15 +68,21 @@ export class FakeEnableBankingClient implements EnableBankingClient {
       : Promise.reject(new Error('Enable Banking refused the code'));
   }
 
-  async getBalances(accountUid: string): Promise<EnableBankingBalance[]> {
+  async getBalances(accountUid: string, options?: RequestOptions): Promise<EnableBankingBalance[]> {
     this.requestedBalances.push(accountUid);
+    this.balanceOptions.push(options);
     await this.holdBalances;
+    if (this.rateLimited.has(accountUid)) throw new RateLimitError('Too many requests');
     if (this.failingBalances.has(accountUid)) throw new Error('The bank refused the request');
     return this.balances.get(accountUid) ?? [];
   }
 
-  getTransactions(accountUid: string): Promise<EnableBankingTransaction[]> {
+  getTransactions(
+    accountUid: string,
+    options?: TransactionsRequestOptions,
+  ): Promise<EnableBankingTransaction[]> {
     this.requestedTransactions.push(accountUid);
+    this.transactionOptions.push(options);
     if (this.failingTransactions.has(accountUid)) {
       return Promise.reject(new Error('The bank refused the request'));
     }

@@ -70,6 +70,30 @@ export interface EnableBankingTransaction {
   raw: string;
 }
 
+/** The owner's device, sent so the bank treats a request as made with the owner present. */
+export interface PsuContext {
+  ipAddress: string;
+  userAgent: string;
+}
+
+export interface RequestOptions {
+  /** Set for requests made while the owner is present; omit for unattended ones. */
+  psu?: PsuContext;
+}
+
+export interface TransactionsRequestOptions extends RequestOptions {
+  /** `YYYY-MM-DD`. Fetches from this day on; without it the longest history the bank returns. */
+  dateFrom?: string;
+}
+
+/** The bank (or Enable Banking) refused because the account was asked for too often. */
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
 /**
  * The narrow seam to Enable Banking. Backend tests use a fake implementation; the real one is
  * {@link HttpEnableBankingClient}. Add methods here as features need them.
@@ -81,7 +105,17 @@ export abstract class EnableBankingClient {
   /** Exchanges the code from the redirect for a session with the bank's accounts. */
   abstract createSession(code: string): Promise<EnableBankingSession>;
   /** Every balance the bank reports for the account with this Enable Banking `uid`. */
-  abstract getBalances(accountUid: string): Promise<EnableBankingBalance[]>;
-  /** The longest history the bank returns for the account, with every page already fetched. */
-  abstract getTransactions(accountUid: string): Promise<EnableBankingTransaction[]>;
+  abstract getBalances(
+    accountUid: string,
+    options?: RequestOptions,
+  ): Promise<EnableBankingBalance[]>;
+  /**
+   * The transactions of the account from `dateFrom`, or the longest history the bank returns,
+   * with every page already fetched. Both fetches reject with {@link RateLimitError} when the
+   * bank says the account was asked for too often.
+   */
+  abstract getTransactions(
+    accountUid: string,
+    options?: TransactionsRequestOptions,
+  ): Promise<EnableBankingTransaction[]>;
 }

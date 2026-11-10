@@ -1,9 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, lt, max, or } from 'drizzle-orm';
-import type { AccountsResponse, Money, TransactionsResponse } from '@bankapp/shared';
+import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
+import type { AccountsResponse, Money, SyncSummary, TransactionsResponse } from '@bankapp/shared';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
-import { accounts, balances, connections, syncAccountResults, transactions } from '../db/schema';
+import {
+  accounts,
+  balances,
+  connections,
+  syncAccountResults,
+  syncRuns,
+  transactions,
+} from '../db/schema';
 import { SyncService } from '../sync/sync.service';
 
 /**
@@ -57,7 +64,33 @@ export class AccountsService {
       });
       byBank.set(bank, group);
     }
-    return { banks: [...byBank.values()], syncing: this.sync.isSyncing() };
+    return {
+      banks: [...byBank.values()],
+      syncing: this.sync.isSyncing(),
+      lastSync: this.lastSync(),
+    };
+  }
+
+  /** How the most recent finished sync went, or null if none has finished. */
+  private lastSync(): SyncSummary | null {
+    const run = this.db
+      .select({ id: syncRuns.id, finishedAt: syncRuns.finishedAt })
+      .from(syncRuns)
+      .where(isNotNull(syncRuns.finishedAt))
+      .orderBy(desc(syncRuns.id))
+      .get();
+    if (run?.finishedAt == null) return null;
+    const results = this.db
+      .select()
+      .from(syncAccountResults)
+      .where(eq(syncAccountResults.syncRunId, run.id))
+      .all();
+    return {
+      finishedAt: run.finishedAt.toISOString(),
+      newTransactions: results.reduce((sum, result) => sum + result.newTransactions, 0),
+      failedAccounts: results.filter((result) => result.outcome === 'failed').length,
+      rateLimited: results.some((result) => result.outcome === 'rate-limited'),
+    };
   }
 
   /**

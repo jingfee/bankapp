@@ -73,8 +73,10 @@ export const syncAccountResults = sqliteTable('sync_account_results', {
   accountId: integer('account_id')
     .notNull()
     .references(() => accounts.id),
-  outcome: text('outcome', { enum: ['ok', 'failed'] }).notNull(),
+  outcome: text('outcome', { enum: ['ok', 'failed', 'rate-limited'] }).notNull(),
   error: text('error'),
+  /** Booked transactions this run stored that were not there before. */
+  newTransactions: integer('new_transactions').notNull().default(0),
   syncedAt: integer('synced_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
