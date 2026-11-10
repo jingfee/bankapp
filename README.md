@@ -33,7 +33,7 @@ pnpm dev          # backend on :3000, frontend on http://localhost:4200 (proxies
 
 ## Configuration
 
-The backend refuses to start unless all of these are set and valid:
+The backend refuses to start unless all of these are set and valid. Locally, copy [`backend/.env.example`](backend/.env.example) to `backend/.env` and fill it in; the backend reads it on startup (it is git-ignored), and variables already set in the shell take precedence. Relative paths in it are resolved from `backend/`.
 
 | Variable                          | Meaning                                                    |
 | --------------------------------- | ---------------------------------------------------------- |
