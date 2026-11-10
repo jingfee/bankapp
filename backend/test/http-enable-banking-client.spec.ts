@@ -284,4 +284,117 @@ describe('HttpEnableBankingClient', () => {
       await expect(client().getBalances('u1')).rejects.toThrow('not a number');
     });
   });
+  describe('getTransactions', () => {
+    const raw = (overrides: Record<string, unknown> = {}) => ({
+      entry_reference: 'ref-1',
+      transaction_amount: { currency: 'SEK', amount: '125.50' },
+      credit_debit_indicator: 'DBIT',
+      status: 'BOOK',
+      booking_date: '2026-11-09',
+      value_date: '2026-11-08',
+      remittance_information: ['ICA Maxi', 'Stockholm'],
+      ...overrides,
+    });
+
+    /** Answers each request with the next page. */
+    const pages = (...bodies: unknown[]) => {
+      let next = 0;
+      respond = () => Response.json(bodies[next++]);
+    };
+
+    it('asks for the longest history and follows the continuation key until it runs out', async () => {
+      pages(
+        { transactions: [raw({ entry_reference: 'a' })], continuation_key: 'k1' },
+        { transactions: [raw({ entry_reference: 'b' })], continuation_key: 'k2' },
+        { transactions: [raw({ entry_reference: 'c' })], continuation_key: null },
+      );
+
+      const transactions = await client().getTransactions('u/1');
+
+      expect(transactions.map((t) => t.entryReference)).toEqual(['a', 'b', 'c']);
+      expect(requests.map((request) => request.url)).toEqual([
+        'https://enable.test/accounts/u%2F1/transactions?strategy=longest',
+        'https://enable.test/accounts/u%2F1/transactions?strategy=longest&continuation_key=k1',
+        'https://enable.test/accounts/u%2F1/transactions?strategy=longest&continuation_key=k2',
+      ]);
+    });
+
+    it('keeps going through an empty page that still carries a key', async () => {
+      pages(
+        { transactions: [raw({ entry_reference: 'a' })], continuation_key: 'k1' },
+        { transactions: [], continuation_key: 'k2' },
+        { transactions: [raw({ entry_reference: 'b' })] },
+      );
+
+      const transactions = await client().getTransactions('u1');
+
+      expect(transactions.map((t) => t.entryReference)).toEqual(['a', 'b']);
+      expect(requests).toHaveLength(3);
+    });
+
+    it('gives up when the bank keeps returning the same key', async () => {
+      respond = () => Response.json({ transactions: [], continuation_key: 'stuck' });
+
+      await expect(client().getTransactions('u1')).rejects.toThrow('continuation');
+    });
+
+    it('maps a booked debit to a negative amount with its dates and description', async () => {
+      pages({ transactions: [raw()] });
+
+      const [transaction] = await client().getTransactions('u1');
+
+      expect(transaction).toMatchObject({
+        status: 'booked',
+        amount: -125.5,
+        currency: 'SEK',
+        bookingDate: '2026-11-09',
+        valueDate: '2026-11-08',
+        description: 'ICA Maxi Stockholm',
+        entryReference: 'ref-1',
+      });
+    });
+
+    it('maps a pending credit to a positive amount and falls back for missing fields', async () => {
+      pages({
+        transactions: [
+          raw({
+            entry_reference: null,
+            status: 'PDNG',
+            credit_debit_indicator: 'CRDT',
+            booking_date: null,
+            value_date: undefined,
+            transaction_date: '2026-11-10',
+            remittance_information: [],
+            debtor: { name: 'Anna Andersson' },
+          }),
+        ],
+      });
+
+      const [transaction] = await client().getTransactions('u1');
+
+      expect(transaction).toMatchObject({
+        status: 'pending',
+        amount: 125.5,
+        bookingDate: null,
+        valueDate: '2026-11-10',
+        description: 'Anna Andersson',
+        entryReference: null,
+      });
+    });
+
+    it('keeps the raw transaction as the bank returned it', async () => {
+      const original = raw({ some_new_field: { nested: true } });
+      pages({ transactions: [original] });
+
+      const [transaction] = await client().getTransactions('u1');
+
+      expect(JSON.parse(transaction!.raw)).toEqual(original);
+    });
+
+    it('fails on an amount that is not a number', async () => {
+      pages({ transactions: [raw({ transaction_amount: { currency: 'SEK', amount: 'x' } })] });
+
+      await expect(client().getTransactions('u1')).rejects.toThrow('not a number');
+    });
+  });
 });

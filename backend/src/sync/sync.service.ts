@@ -1,15 +1,28 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../clock';
+import { APP_CONFIG } from '../config/config.module';
+import type { AppConfig } from '../config/config';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
-import { accounts, balances, connections, syncAccountResults, syncRuns } from '../db/schema';
+import {
+  accounts,
+  balances,
+  connections,
+  syncAccountResults,
+  syncRuns,
+  transactions,
+} from '../db/schema';
 import {
   EnableBankingClient,
   type EnableBankingBalance,
+  type EnableBankingTransaction,
 } from '../enable-banking/enable-banking-client';
 
 export type SyncTrigger = 'initial' | 'scheduled' | 'manual';
+
+/** SQLite limits the number of variables in one statement. */
+const INSERT_BATCH_SIZE = 50;
 
 type AccountRow = typeof accounts.$inferSelect;
 
@@ -20,6 +33,7 @@ export class SyncService implements OnModuleInit {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(CLOCK) private readonly now: Clock,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly enableBanking: EnableBankingClient,
   ) {}
 
@@ -95,10 +109,12 @@ export class SyncService implements OnModuleInit {
 
   private async syncAccount(runId: number, account: AccountRow): Promise<void> {
     let fetched: EnableBankingBalance[];
+    let fetchedTransactions: EnableBankingTransaction[];
     try {
       fetched = await this.enableBanking.getBalances(account.uid);
+      fetchedTransactions = await this.enableBanking.getTransactions(account.uid);
     } catch (cause) {
-      this.logger.warn(`Could not fetch balances for account ${account.id}: ${String(cause)}`);
+      this.logger.warn(`Could not fetch data for account ${account.id}: ${String(cause)}`);
       this.db
         .insert(syncAccountResults)
         .values({
@@ -127,6 +143,7 @@ export class SyncService implements OnModuleInit {
           )
           .run();
       }
+      this.storeTransactions(tx, account, fetchedTransactions, fetchedAt);
       tx.insert(syncAccountResults)
         .values({
           syncRunId: runId,
@@ -138,6 +155,71 @@ export class SyncService implements OnModuleInit {
         .run();
     });
   }
+
+  /**
+   * Booked transactions are added unless already stored; pending ones are replaced, since the
+   * bank may change or drop them before booking. The dedup rules are provisional.
+   */
+  private storeTransactions(
+    tx: Pick<AppDatabase, 'insert' | 'delete'>,
+    account: AccountRow,
+    fetched: EnableBankingTransaction[],
+    fetchedAt: Date,
+  ): void {
+    tx.delete(transactions)
+      .where(and(eq(transactions.accountId, account.id), eq(transactions.status, 'pending')))
+      .run();
+    const fetchedDay = localDay(fetchedAt, this.config.timezone);
+    const occurrences = new Map<string, number>();
+    const rows = fetched.map((transaction) => {
+      const date = transaction.bookingDate ?? transaction.valueDate ?? fetchedDay;
+      return {
+        accountId: account.id,
+        status: transaction.status,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        bookingDate: transaction.bookingDate,
+        valueDate: transaction.valueDate,
+        date,
+        description: transaction.description,
+        entryReference: transaction.entryReference,
+        dedupKey: dedupKey(transaction, date, occurrences),
+        raw: transaction.raw,
+        fetchedAt,
+      };
+    });
+    for (let start = 0; start < rows.length; start += INSERT_BATCH_SIZE) {
+      tx.insert(transactions)
+        .values(rows.slice(start, start + INSERT_BATCH_SIZE))
+        .onConflictDoNothing()
+        .run();
+    }
+  }
+}
+
+/**
+ * Identifies a booked transaction within its account: the bank's `entry_reference`, else a
+ * fingerprint of date, amount and description plus how many identical ones came before it in
+ * this response. Pending transactions are never compared, so theirs only needs to be filled in.
+ */
+function dedupKey(
+  transaction: EnableBankingTransaction,
+  date: string,
+  occurrences: Map<string, number>,
+): string {
+  if (transaction.entryReference !== null) return `ref:${transaction.entryReference}`;
+  // Pending ones must not shift the index of booked ones, or a transaction would be stored again
+  // under a new key when it books.
+  if (transaction.status === 'pending') return `pending:${occurrences.size}:${date}`;
+  const fingerprint = JSON.stringify([date, transaction.amount, transaction.description]);
+  const index = occurrences.get(fingerprint) ?? 0;
+  occurrences.set(fingerprint, index + 1);
+  return `fp:${fingerprint}:${index}`;
+}
+
+/** The calendar day (`YYYY-MM-DD`) a moment falls on in the owner's timezone. */
+function localDay(moment: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(moment);
 }
 
 /** Card accounts must read negative when money is owed, whichever way the bank signs it. */

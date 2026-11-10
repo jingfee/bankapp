@@ -8,6 +8,7 @@ import type {
   EnableBankingBank,
   EnableBankingClient,
   EnableBankingSession,
+  EnableBankingTransaction,
   PersonnummerSupport,
 } from './enable-banking-client';
 
@@ -80,6 +81,29 @@ const balancesResponse = z.object({
     }),
   ),
 });
+
+/** Transactions are kept as the bank returned them, so only the fields we read are described. */
+const transactionsResponse = z.object({
+  transactions: z.array(
+    z.looseObject({
+      entry_reference: z.string().nullish(),
+      transaction_amount: z.object({ amount: z.string(), currency: z.string() }),
+      credit_debit_indicator: z.string().nullish(),
+      status: z.string().nullish(),
+      booking_date: z.string().nullish(),
+      value_date: z.string().nullish(),
+      transaction_date: z.string().nullish(),
+      remittance_information: z.array(z.string()).nullish(),
+      creditor: z.object({ name: z.string().nullish() }).nullish(),
+      debtor: z.object({ name: z.string().nullish() }).nullish(),
+      note: z.string().nullish(),
+    }),
+  ),
+  continuation_key: z.string().nullish(),
+});
+
+/** A bank that keeps returning keys forever must not keep a sync running forever. */
+const MAX_TRANSACTION_PAGES = 1000;
 
 const ACCOUNT_TYPES: Record<string, EnableBankingAccountType> = {
   CACC: 'payment',
@@ -174,6 +198,27 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     });
   }
 
+  async getTransactions(accountUid: string): Promise<EnableBankingTransaction[]> {
+    const path = `/accounts/${encodeURIComponent(accountUid)}/transactions?strategy=longest`;
+    const transactions: EnableBankingTransaction[] = [];
+    const seenKeys = new Set<string>();
+    let key: string | null | undefined;
+    do {
+      const url = key ? `${path}&continuation_key=${encodeURIComponent(key)}` : path;
+      const page = transactionsResponse.parse(await this.send('GET', url));
+      for (const raw of page.transactions) transactions.push(toTransaction(raw));
+      key = page.continuation_key;
+      if (key) {
+        // An empty page can still carry a key, so only a missing key ends the history.
+        if (seenKeys.has(key) || seenKeys.size >= MAX_TRANSACTION_PAGES) {
+          throw new Error('Enable Banking did not stop returning a continuation key');
+        }
+        seenKeys.add(key);
+      }
+    } while (key);
+    return transactions;
+  }
+
   private async send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
@@ -200,4 +245,31 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       .setExpirationTime(issuedAt + TOKEN_LIFETIME_SECONDS)
       .sign(this.key);
   }
+}
+
+function toTransaction(
+  raw: z.infer<typeof transactionsResponse>['transactions'][number],
+): EnableBankingTransaction {
+  const text = raw.transaction_amount.amount.trim();
+  const size = text === '' ? Number.NaN : Math.abs(Number(text));
+  if (!Number.isFinite(size)) {
+    throw new Error('Enable Banking returned a transaction amount that is not a number');
+  }
+  const description =
+    raw.remittance_information?.join(' ').trim() ||
+    raw.creditor?.name?.trim() ||
+    raw.debtor?.name?.trim() ||
+    raw.note?.trim() ||
+    '';
+  return {
+    status: raw.status === 'BOOK' ? 'booked' : 'pending',
+    // The indicator carries the direction; the amount itself is unsigned.
+    amount: raw.credit_debit_indicator === 'DBIT' ? -size : size,
+    currency: raw.transaction_amount.currency,
+    bookingDate: raw.booking_date ?? null,
+    valueDate: raw.value_date ?? raw.transaction_date ?? null,
+    description,
+    entryReference: raw.entry_reference ?? null,
+    raw: JSON.stringify(raw),
+  };
 }

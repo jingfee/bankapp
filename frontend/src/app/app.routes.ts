@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { AccountPage } from './pages/account/account.page';
 import { ConnectBankPage } from './pages/connect-bank/connect-bank.page';
 import { ConnectionResultPage } from './pages/connection-result/connection-result.page';
 import { HomePage } from './pages/home/home.page';
@@ -11,5 +12,6 @@ export const routes: Routes = [
     component: ConnectionResultPage,
     title: 'Anslutning – Bankapp',
   },
+  { path: 'konto/:id', component: AccountPage, title: 'Konto – Bankapp' },
   { path: '**', redirectTo: '' },
 ];

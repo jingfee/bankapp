@@ -5,6 +5,7 @@ import type {
   EnableBankingBank,
   EnableBankingClient,
   EnableBankingSession,
+  EnableBankingTransaction,
 } from '../src/enable-banking/enable-banking-client';
 
 export const testConfig: AppConfig = {
@@ -32,6 +33,11 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   /** While set, balance requests wait for it, so a sync can be observed while running. */
   holdBalances: Promise<void> | undefined;
   requestedBalances: string[] = [];
+  /** Transactions by account `uid`; an account without an entry has none. */
+  transactions = new Map<string, EnableBankingTransaction[]>();
+  /** Account `uid`s whose transactions the bank refuses to return. */
+  failingTransactions = new Set<string>();
+  requestedTransactions: string[] = [];
 
   listBanks(country: string): Promise<EnableBankingBank[]> {
     this.requestedCountries.push(country);
@@ -55,6 +61,14 @@ export class FakeEnableBankingClient implements EnableBankingClient {
     await this.holdBalances;
     if (this.failingBalances.has(accountUid)) throw new Error('The bank refused the request');
     return this.balances.get(accountUid) ?? [];
+  }
+
+  getTransactions(accountUid: string): Promise<EnableBankingTransaction[]> {
+    this.requestedTransactions.push(accountUid);
+    if (this.failingTransactions.has(accountUid)) {
+      return Promise.reject(new Error('The bank refused the request'));
+    }
+    return Promise.resolve(this.transactions.get(accountUid) ?? []);
   }
 }
 
