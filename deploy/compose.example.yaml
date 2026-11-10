@@ -1,0 +1,18 @@
+# Example for Komodo (or plain `docker compose`). Copy it, then copy .env.example to .env
+# next to it and fill in real values. Never commit the real files.
+services:
+  bankapp:
+    image: ghcr.io/jingfee/bankapp:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Caddy proxies https://bankapp.hew.ovh to this port. Keep it on the LAN/tailnet only (ADR 0002).
+      - '3000:3000'
+    volumes:
+      # Database and backups.
+      - bankapp-data:/data
+      # Enable Banking private key, read-only.
+      - ./enablebanking.pem:/run/secrets/enablebanking.pem:ro
+
+volumes:
+  bankapp-data:

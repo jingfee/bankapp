@@ -32,3 +32,9 @@ pnpm dev          # backend on :3000, frontend on http://localhost:4200 (proxies
 | `pnpm start`     | Run the built backend, serving the built frontend |
 
 Never commit `.env` files, `*.pem` keys or database files: the repository is public.
+
+## Deployment
+
+CI (`.github/workflows/ci.yml`) runs lint, format check, type-check and tests on every pull request. Pushes to `main` run the same checks and then publish a linux/amd64 image to `ghcr.io/jingfee/bankapp`, tagged `latest` and the commit SHA.
+
+To run it in Komodo, start from [`deploy/compose.example.yaml`](deploy/compose.example.yaml) and [`deploy/.env.example`](deploy/.env.example): a volume at `/data` for the database and backups, the Enable Banking private key mounted read-only, and configuration through environment variables. The image runs as a non-root user and has a Docker health check on `/api/health`. Build it locally with `docker build -t bankapp .`.

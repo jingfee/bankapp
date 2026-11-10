@@ -1,0 +1,15 @@
+.git
+.github
+**/node_modules
+**/dist
+**/.angular
+**/coverage
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+data
+backups
+deploy
+docs
