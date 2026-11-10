@@ -11,7 +11,8 @@ services:
     volumes:
       # Database and backups.
       - bankapp-data:/data
-      # Enable Banking private key, read-only.
+      # Enable Banking private key, read-only. The container runs as uid 1000 (node), so the file
+      # must be readable by that user on the host (e.g. chown 1000 and chmod 400).
       - ./enablebanking.pem:/run/secrets/enablebanking.pem:ro
 
 volumes:
