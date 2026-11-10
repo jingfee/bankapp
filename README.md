@@ -43,6 +43,8 @@ The backend refuses to start unless all of these are set and valid:
 | `DATA_DIR`                        | Directory for the SQLite database (`bankapp.db`)           |
 | `TIMEZONE`                        | IANA time zone for scheduled jobs, e.g. `Europe/Stockholm` |
 
+Optional: `PERSONNUMMER` (12 digits, e.g. `199001011234`) is passed to banks that take it when connecting, such as Coop Mastercard. `REDIRECT_URL` must point at the backend callback, `<public address>/api/connections/callback`, and be registered with the Enable Banking application.
+
 Migrations in `backend/src/db/migrations` run automatically on startup. After changing `backend/src/db/schema.ts`, run `pnpm --filter @bankapp/backend exec drizzle-kit generate`. The bank list is fetched on first start and refreshed nightly at 04:00 in `TIMEZONE`.
 
 Never commit `.env` files, `*.pem` keys or database files: the repository is public.

@@ -4,16 +4,26 @@ import {
   type TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { Bank, BanksResponse } from '@bankapp/shared';
+import type { Bank, BanksResponse, StartConnectionResponse } from '@bankapp/shared';
+import { Redirector } from '../../redirector';
 import { ConnectBankPage } from './connect-bank.page';
 
 describe('ConnectBankPage', () => {
+  let redirects: string[];
+
   beforeEach(() => {
+    redirects = [];
     TestBed.configureTestingModule({
       imports: [ConnectBankPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: Redirector, useValue: { goTo: (url: string) => redirects.push(url) } },
+      ],
     });
   });
 
@@ -35,6 +45,13 @@ describe('ConnectBankPage', () => {
       page,
       names: () =>
         Array.from(page.querySelectorAll('li')).map((li) => li.textContent?.trim() ?? ''),
+      async choose(name: string) {
+        const button = Array.from(page.querySelectorAll('button')).find(
+          (candidate) => candidate.textContent?.trim() === name,
+        )!;
+        button.click();
+        await fixture.whenStable();
+      },
       async type(text: string) {
         const input = page.querySelector('input')!;
         input.value = text;
@@ -50,7 +67,7 @@ describe('ConnectBankPage', () => {
     const { page, names } = await render(withBanks);
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Anslut bank');
-    expect(names()).toEqual(['NorthmillBeta', 'Skandia', 'Swedbank']);
+    expect(names()).toEqual(['Northmill Beta', 'Skandia', 'Swedbank']);
     expect(page.querySelectorAll('li')[0]?.textContent).toContain('Beta');
     expect(page.textContent?.match(/Beta/g)).toHaveLength(1);
   });
@@ -82,5 +99,49 @@ describe('ConnectBankPage', () => {
     const { page } = await render((request) => request.error(new ProgressEvent('error')));
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
+  });
+
+  describe('choosing a bank', () => {
+    const answerStart = (request: TestRequest) =>
+      request.flush({ url: 'https://bankid.example/go' } satisfies StartConnectionResponse);
+
+    it('starts the connection and sends the owner to BankID', async () => {
+      const { choose } = await render(withBanks);
+
+      await choose('Skandia');
+      const request = TestBed.inject(HttpTestingController).expectOne('/api/connections');
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({ bank: 'Skandia' });
+      answerStart(request);
+
+      expect(redirects).toEqual(['https://bankid.example/go']);
+    });
+
+    it('shows an error and stays put when the connection cannot be started', async () => {
+      const { page, choose } = await render(withBanks);
+
+      await choose('Skandia');
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/connections')
+        .flush({}, { status: 500, statusText: 'Server Error' });
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain(
+        'Anslutningen kunde inte startas',
+      );
+      expect(redirects).toEqual([]);
+    });
+
+    it('says so when the bank is already connected', async () => {
+      const { page, choose } = await render(withBanks);
+
+      await choose('Skandia');
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/connections')
+        .flush({}, { status: 409, statusText: 'Conflict' });
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain('redan ansluten');
+    });
   });
 });

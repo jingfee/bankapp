@@ -1,8 +1,11 @@
-import { type DynamicModule, Module } from '@nestjs/common';
+import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { AccountsModule } from './accounts/accounts.module';
 import { BanksModule } from './banks/banks.module';
 import type { AppConfig } from './config/config';
+import { CLOCK, type Clock } from './clock';
+import { ConnectionsModule } from './connections/connections.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule, type DatabaseLocation } from './db/database.module';
 import type { EnableBankingClient } from './enable-banking/enable-banking-client';
@@ -20,8 +23,11 @@ export interface AppOptions {
   database?: DatabaseLocation;
   /** Directory holding the built frontend. When omitted, only the API is served (e.g. in development). */
   staticDir?: string;
+  /** Current time; injectable for tests. */
+  now?: Clock;
 }
 
+@Global()
 @Module({})
 export class AppModule {
   static register(options: AppOptions): DynamicModule {
@@ -37,12 +43,16 @@ export class AppModule {
 
     return {
       module: AppModule,
+      providers: [{ provide: CLOCK, useValue: options.now ?? (() => new Date()) }],
+      exports: [CLOCK],
       imports: [
         ConfigModule.register(options.config),
         DatabaseModule.register(options.database ?? { dataDir: options.config.dataDir }),
         EnableBankingModule.register(options.enableBanking),
         ScheduleModule.forRoot(),
         BanksModule,
+        ConnectionsModule,
+        AccountsModule,
         ...staticFrontendModules,
       ],
       controllers: [HealthController],

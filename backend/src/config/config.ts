@@ -13,6 +13,8 @@ export interface AppConfig {
   dataDir: string;
   /** IANA time zone the scheduler runs in, e.g. `Europe/Stockholm`. */
   timezone: string;
+  /** The owner's personnummer (12 digits), passed to banks that take it when connecting. */
+  personnummer?: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -35,6 +37,11 @@ const schema = z.object({
     z.url({ protocol: /^https?$/, error: 'REDIRECT_URL must be an http(s) URL' }),
   ),
   DATA_DIR: required('DATA_DIR'),
+  PERSONNUMMER: z
+    .string()
+    .trim()
+    .regex(/^\d{12}$/, 'PERSONNUMMER must be 12 digits, e.g. 199001011234')
+    .optional(),
   TIMEZONE: required('TIMEZONE').refine(isTimeZone, {
     error: 'TIMEZONE must be an IANA time zone such as Europe/Stockholm',
   }),
@@ -86,6 +93,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     redirectUrl: values.REDIRECT_URL,
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
+    personnummer: values.PERSONNUMMER,
   };
 }
 

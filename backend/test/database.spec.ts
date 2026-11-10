@@ -25,7 +25,10 @@ describe('openDatabase', () => {
 
   it('keeps data and tolerates already-applied migrations on restart', () => {
     const first = openDatabase({ dataDir: dir });
-    first.db.insert(banks).values({ name: 'Skandia', country: 'SE' }).run();
+    first.db
+      .insert(banks)
+      .values({ name: 'Skandia', country: 'SE', maximumConsentSeconds: 3600, personnummer: 'none' })
+      .run();
     first.close();
 
     const second = openDatabase({ dataDir: dir });

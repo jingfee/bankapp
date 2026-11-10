@@ -1,9 +1,12 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import type { Bank } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { BanksService } from '../../banks.service';
+import { ConnectionsService } from '../../connections.service';
+import { Redirector } from '../../redirector';
 
 type Loaded = { banks: Bank[] } | { failed: true };
 
@@ -31,6 +34,10 @@ type Loaded = { banks: Bank[] } | { failed: true };
         />
       </label>
 
+      @if (startError(); as message) {
+        <p role="alert">{{ message }}</p>
+      }
+
       @let result = loaded();
       @if (!result) {
         <p aria-live="polite">Hämtar banker…</p>
@@ -56,7 +63,14 @@ type Loaded = { banks: Bank[] } | { failed: true };
                     aria-hidden="true"
                   ></span>
                 }
-                <span class="flex-1">{{ bank.name }}</span>
+                <button
+                  type="button"
+                  class="flex-1 cursor-pointer text-left font-medium hover:underline disabled:opacity-50"
+                  [disabled]="starting()"
+                  (click)="connect(bank.name)"
+                >
+                  {{ bank.name }}
+                </button>
                 @if (bank.beta) {
                   <span
                     class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-100"
@@ -72,7 +86,11 @@ type Loaded = { banks: Bank[] } | { failed: true };
   `,
 })
 export class ConnectBankPage {
+  private readonly connections = inject(ConnectionsService);
+  private readonly redirector = inject(Redirector);
   protected readonly query = signal('');
+  protected readonly starting = signal(false);
+  protected readonly startError = signal<string | undefined>(undefined);
   protected readonly loaded = toSignal<Loaded>(
     inject(BanksService)
       .list()
@@ -88,4 +106,20 @@ export class ConnectBankPage {
     const needle = this.query().trim().toLocaleLowerCase('sv-SE');
     return result.banks.filter((bank) => bank.name.toLocaleLowerCase('sv-SE').includes(needle));
   });
+
+  protected connect(bank: string): void {
+    this.starting.set(true);
+    this.startError.set(undefined);
+    this.connections.start(bank).subscribe({
+      next: (url) => this.redirector.goTo(url),
+      error: (error: unknown) => {
+        this.starting.set(false);
+        this.startError.set(
+          error instanceof HttpErrorResponse && error.status === 409
+            ? `${bank} är redan ansluten.`
+            : 'Anslutningen kunde inte startas. Försök igen senare.',
+        );
+      },
+    });
+  }
 }
