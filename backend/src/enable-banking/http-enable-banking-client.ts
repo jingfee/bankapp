@@ -102,6 +102,9 @@ const transactionsResponse = z.object({
   continuation_key: z.string().nullish(),
 });
 
+/** Enough of an error body to explain a rejection without flooding the log. */
+const MAX_REASON_LENGTH = 500;
+
 /** A bank that keeps returning keys forever must not keep a sync running forever. */
 const MAX_TRANSACTION_PAGES = 1000;
 
@@ -230,7 +233,11 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
-      throw new Error(`Enable Banking answered ${response.status} for ${method} ${path}`);
+      // The body says why (e.g. a redirect URL that is not registered); keep it for the log.
+      const reason = (await response.text().catch(() => '')).trim().slice(0, MAX_REASON_LENGTH);
+      throw new Error(
+        `Enable Banking answered ${response.status} for ${method} ${path}${reason ? `: ${reason}` : ''}`,
+      );
     }
     return response.json();
   }

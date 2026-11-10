@@ -21,6 +21,8 @@ export const testConfig: AppConfig = {
 export class FakeEnableBankingClient implements EnableBankingClient {
   banks: EnableBankingBank[] = [];
   failWith: Error | undefined;
+  /** Makes `startAuthorisation` fail, as Enable Banking does when it rejects the request. */
+  failAuthorisationWith: Error | undefined;
   requestedCountries: string[] = [];
   authorisations: AuthorisationRequest[] = [];
   /** What the bank returns when the owner completes BankID; `createSession` fails if unset. */
@@ -46,6 +48,7 @@ export class FakeEnableBankingClient implements EnableBankingClient {
 
   startAuthorisation(request: AuthorisationRequest): Promise<{ url: string }> {
     this.authorisations.push(request);
+    if (this.failAuthorisationWith) return Promise.reject(this.failAuthorisationWith);
     return Promise.resolve({ url: `https://bankid.example/auth?bank=${request.bank}` });
   }
 

@@ -58,6 +58,18 @@ describe('connecting a bank', () => {
       expect(enableBanking.authorisations[0]!.state).toMatch(/^[\w-]{20,}$/);
     });
 
+    it('answers 502 and keeps no login when Enable Banking refuses to start one', async () => {
+      enableBanking.banks = [bank('Skandia')];
+      enableBanking.failAuthorisationWith = new Error('Enable Banking answered 400 for POST /auth');
+      await start();
+
+      await startConnection('Skandia').expect(502);
+
+      // The login was never handed out, so no callback can complete it.
+      const state = enableBanking.authorisations[0]!.state;
+      await callback({ state, code: 'code-1' }).expect(400);
+    });
+
     describe('personnummer', () => {
       const withPersonnummer = { ...testConfig, personnummer: '199001011234' };
 

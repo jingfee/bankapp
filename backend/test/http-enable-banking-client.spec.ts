@@ -106,6 +106,24 @@ describe('HttpEnableBankingClient', () => {
     await expect(client().listBanks('SE')).rejects.toThrow(/401/);
   });
 
+  it("includes Enable Banking's explanation when it rejects a request", async () => {
+    respond = () =>
+      new Response('{"message":"Redirect URI not allowed"}', {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+    await expect(client().listBanks('SE')).rejects.toThrow(
+      'Enable Banking answered 400 for GET /aspsps?country=SE: {"message":"Redirect URI not allowed"}',
+    );
+  });
+
+  it('cuts a long explanation short', async () => {
+    respond = () => new Response('x'.repeat(5000), { status: 500 });
+
+    await expect(client().listBanks('SE')).rejects.toThrow(/^.{1,600}$/);
+  });
+
   it.each([
     [true, 'required'],
     [false, 'optional'],
