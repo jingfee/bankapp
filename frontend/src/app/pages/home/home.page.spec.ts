@@ -400,11 +400,13 @@ describe('HomePage', () => {
         (button) => button.textContent?.trim() === 'Anslut igen',
       );
 
-    it('shows nothing about a connection that is good for a while', async () => {
-      const page = await render(serverUp, swedbank({ status: 'active' }));
+    it('shows the days left on a connection that is good for a while, without a warning', async () => {
+      const page = await render(serverUp, swedbank({ status: 'active', validUntil: inDays(60) }));
 
-      expect(page.textContent).not.toContain('går ut');
-      expect(page.textContent).not.toContain('gått ut');
+      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe(
+        'Kopplingen går ut om 60 dagar.',
+      );
+      expect(page.querySelector('[data-expiry]')).toBeNull();
       expect(renewButton(page)).toBeUndefined();
     });
 

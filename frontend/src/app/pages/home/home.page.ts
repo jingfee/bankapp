@@ -102,6 +102,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
             <h2 class="text-lg font-semibold">{{ group.bank }}</h2>
+            @if (group.status === 'active') {
+              <p data-days-left class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Kopplingen går ut om {{ daysLeftText(group) }}.
+              </p>
+            }
             @if (group.status !== 'active') {
               <div
                 data-expiry
@@ -276,8 +281,12 @@ export class HomePage {
     if (group.status === 'expired') {
       return `Kopplingen till ${group.bank} har gått ut. Kontona uppdateras inte längre.`;
     }
+    return `Kopplingen till ${group.bank} går ut om ${this.daysLeftText(group)}.`;
+  }
+
+  protected daysLeftText(group: BankAccounts): string {
     const days = Math.max(1, Math.ceil((Date.parse(group.validUntil) - Date.now()) / DAY_MS));
-    return `Kopplingen till ${group.bank} går ut om ${days === 1 ? '1 dag' : days + ' dagar'}.`;
+    return days === 1 ? '1 dag' : `${days} dagar`;
   }
 
   protected newTransactionsText(count: number): string {
