@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import * as schema from './schema';
 
-export type AppDatabase = BetterSQLite3Database<typeof schema>;
+export type AppDatabase = BetterSQLite3Database<typeof schema> & { $client: Database.Database };
 
 export const DATABASE_FILE_NAME = 'bankapp.db';
 const migrationsFolder = resolve(__dirname, 'migrations');
