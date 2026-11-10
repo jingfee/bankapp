@@ -1,0 +1,31 @@
+# Dependencies and build output
+node_modules/
+dist/
+out-tsc/
+coverage/
+.angular/
+*.tsbuildinfo
+
+# Secrets: never commit these (the repo is public)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Data: databases and backups
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-*
+*.db-*
+data/
+backups/
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+npm-debug.log*
