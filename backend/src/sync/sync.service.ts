@@ -107,9 +107,12 @@ export class SyncService implements OnModuleInit {
         .from(accounts)
         .innerJoin(connections, eq(accounts.connectionId, connections.id))
         .where(
-          options.connectionId === undefined
-            ? gt(connections.validUntil, now)
-            : eq(connections.id, options.connectionId),
+          and(
+            eq(accounts.closed, false),
+            options.connectionId === undefined
+              ? gt(connections.validUntil, now)
+              : eq(connections.id, options.connectionId),
+          ),
         )
         .all()
         .map((row) => row.account);

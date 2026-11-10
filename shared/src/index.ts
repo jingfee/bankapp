@@ -5,6 +5,7 @@ export type {
   AccountsResponse,
   BankAccounts,
   ConnectedAccount,
+  ConnectionStatus,
   Money,
   StartSyncResponse,
   SyncSummary,
