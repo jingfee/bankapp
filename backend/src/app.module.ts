@@ -2,6 +2,7 @@ import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AccountsModule } from './accounts/accounts.module';
+import { BackupModule } from './backup/backup.module';
 import { BanksModule } from './banks/banks.module';
 import type { AppConfig } from './config/config';
 import { CLOCK, type Clock } from './clock';
@@ -53,6 +54,7 @@ export class AppModule {
         BanksModule,
         ConnectionsModule,
         AccountsModule,
+        BackupModule,
         ...staticFrontendModules,
       ],
       controllers: [HealthController],
