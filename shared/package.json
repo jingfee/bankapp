@@ -1,0 +1,18 @@
+{
+  "name": "@bankapp/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "API types shared by the frontend and the backend. Type-only for now: import with `import type`.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
