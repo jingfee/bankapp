@@ -18,7 +18,7 @@ Requires Node 22.22.3+ (see `.nvmrc`) and pnpm 12.
 
 ```bash
 pnpm install
-pnpm dev          # backend on :3000, frontend on http://localhost:4200 (proxies /api to the backend)
+pnpm dev          # backend on :3000, frontend on https://localhost:4200 (proxies /api to the backend)
 ```
 
 | Command          | What it does                                      |
@@ -45,7 +45,7 @@ The backend refuses to start unless all of these are set and valid. Locally, cop
 
 Optional: `PERSONNUMMER` (12 digits, e.g. `199001011234`) is passed to banks that take it when connecting, such as Coop Mastercard. `REDIRECT_URL` must point at the backend callback, `<public address>/api/connections/callback`, and be registered with the Enable Banking application.
 
-For local development, use the frontend's address, `REDIRECT_URL=http://localhost:4200/api/connections/callback`, and register that URL in Enable Banking too. The Angular dev server proxies `/api` to the backend, so the callback reaches the backend and the redirect to the result page stays on port 4200. Pointing it at `http://localhost:3000` would end on a 404, because the backend serves no frontend under `pnpm dev`.
+For local development, use the frontend's address, `REDIRECT_URL=https://localhost:4200/api/connections/callback`, and register that URL in Enable Banking too (it only accepts https). The dev server uses HTTPS with a self-signed certificate, so the browser warns once; accept it to continue. The Angular dev server proxies `/api` to the backend, so the callback reaches the backend and the redirect to the result page stays on port 4200. Pointing it at `localhost:3000` would end on a 404, because the backend serves no frontend under `pnpm dev`.
 
 Migrations in `backend/src/db/migrations` run automatically on startup. After changing `backend/src/db/schema.ts`, run `pnpm --filter @bankapp/backend exec drizzle-kit generate`. The bank list is fetched on first start and refreshed nightly at 04:00 in `TIMEZONE`.
 
