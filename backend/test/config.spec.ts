@@ -34,7 +34,20 @@ describe('loadConfig', () => {
       redirectUrl: 'https://bankapp.example/callback',
       dataDir: join(dir, 'data'),
       timezone: 'Europe/Stockholm',
+      scheduledSyncs: false,
     });
+  });
+
+  it('turns scheduled syncs on with SCHEDULED_SYNCS=true', () => {
+    expect(loadConfig({ ...validEnv, SCHEDULED_SYNCS: 'true' }).scheduledSyncs).toBe(true);
+  });
+
+  it.each(['false', ''])('keeps scheduled syncs off when SCHEDULED_SYNCS is %j', (value) => {
+    expect(loadConfig({ ...validEnv, SCHEDULED_SYNCS: value }).scheduledSyncs).toBe(false);
+  });
+
+  it('rejects an unclear SCHEDULED_SYNCS', () => {
+    expect(() => loadConfig({ ...validEnv, SCHEDULED_SYNCS: 'yes' })).toThrow(/SCHEDULED_SYNCS/);
   });
 
   it.each([

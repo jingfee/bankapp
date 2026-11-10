@@ -13,6 +13,8 @@ export interface AppConfig {
   dataDir: string;
   /** IANA time zone the scheduler runs in, e.g. `Europe/Stockholm`. */
   timezone: string;
+  /** Whether syncs run on a schedule; off in development, which shares the banks' request limit. */
+  scheduledSyncs: boolean;
   /** The owner's personnummer (12 digits), passed to banks that take it when connecting. */
   personnummer?: string | undefined;
 }
@@ -41,6 +43,9 @@ const schema = z.object({
     .string()
     .trim()
     .regex(/^\d{12}$/, 'PERSONNUMMER must be 12 digits, e.g. 199001011234')
+    .optional(),
+  SCHEDULED_SYNCS: z
+    .enum(['true', 'false', ''], { error: 'SCHEDULED_SYNCS must be true or false' })
     .optional(),
   TIMEZONE: required('TIMEZONE').refine(isTimeZone, {
     error: 'TIMEZONE must be an IANA time zone such as Europe/Stockholm',
@@ -93,6 +98,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     redirectUrl: values.REDIRECT_URL,
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
+    scheduledSyncs: values.SCHEDULED_SYNCS === 'true',
     personnummer: values.PERSONNUMMER,
   };
 }
