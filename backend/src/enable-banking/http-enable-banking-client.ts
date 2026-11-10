@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type {
   AuthorisationRequest,
   EnableBankingAccountType,
+  EnableBankingBalance,
   EnableBankingBank,
   EnableBankingClient,
   EnableBankingSession,
@@ -65,6 +66,17 @@ const sessionResponse = z.object({
       account_id: z.object({ iban: z.string().nullish() }).nullish(),
       cash_account_type: z.string().nullish(),
       currency: z.string(),
+    }),
+  ),
+});
+
+const balancesResponse = z.object({
+  balances: z.array(
+    z.object({
+      balance_type: z.string(),
+      balance_amount: z.object({ amount: z.string(), currency: z.string() }),
+      reference_date: z.string().nullish(),
+      credit_debit_indicator: z.string().nullish(),
     }),
   ),
 });
@@ -141,6 +153,25 @@ export class HttpEnableBankingClient implements EnableBankingClient {
         currency: account.currency,
       })),
     };
+  }
+
+  async getBalances(accountUid: string): Promise<EnableBankingBalance[]> {
+    const response = await this.send('GET', `/accounts/${encodeURIComponent(accountUid)}/balances`);
+    return balancesResponse.parse(response).balances.map((balance) => {
+      const text = balance.balance_amount.amount.trim();
+      const amount = text === '' ? Number.NaN : Number(text);
+      if (!Number.isFinite(amount)) {
+        throw new Error(`Enable Banking returned a balance that is not a number`);
+      }
+      const indicator = balance.credit_debit_indicator;
+      return {
+        type: balance.balance_type,
+        amount,
+        currency: balance.balance_amount.currency,
+        referenceDate: balance.reference_date ?? null,
+        creditDebit: indicator === 'DBIT' ? 'debit' : indicator === 'CRDT' ? 'credit' : null,
+      };
+    });
   }
 
   private async send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {

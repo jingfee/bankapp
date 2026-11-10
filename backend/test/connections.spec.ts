@@ -115,8 +115,20 @@ describe('connecting a bank', () => {
     ],
   };
 
-  const getAccounts = async (): Promise<AccountsResponse> =>
-    (await request(app.getHttpServer()).get('/api/accounts').expect(200)).body;
+  /** The overview without balances and sync times, which sync.spec.ts covers. */
+  const getAccounts = async (): Promise<{
+    banks: { bank: string; accounts: { name: string; type: string }[] }[];
+  }> => {
+    const { banks }: AccountsResponse = (
+      await request(app.getHttpServer()).get('/api/accounts').expect(200)
+    ).body;
+    return {
+      banks: banks.map(({ bank, accounts }) => ({
+        bank,
+        accounts: accounts.map(({ name, type }) => ({ name, type })),
+      })),
+    };
+  };
 
   /** Starts a connection and returns the state the bank will echo back on the redirect. */
   async function begin(bankName: string): Promise<string> {

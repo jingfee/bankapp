@@ -1,12 +1,17 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type { AccountType, BankAccounts } from '@bankapp/shared';
-import { catchError, map, of } from 'rxjs';
+import type { AccountType, AccountsResponse } from '@bankapp/shared';
+import { catchError, map, of, scan, switchMap, takeWhile, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { DateTimePipe } from '../../formatting/date-time.pipe';
+import { MoneyPipe } from '../../formatting/money.pipe';
 import { HealthService } from '../../health.service';
 
-type Loaded = { banks: BankAccounts[] } | { failed: true };
+type Loaded = AccountsResponse | { failed: true };
+
+/** How often the overview asks again while a sync is running. */
+export const SYNC_POLL_INTERVAL_MS = 2000;
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   payment: 'Betalkonto',
@@ -16,7 +21,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink],
+  imports: [RouterLink, DateTimePipe, MoneyPipe],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       <header>
@@ -41,6 +46,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           >
         </section>
       } @else {
+        @if (result.syncing) {
+          <p role="status" aria-live="polite" class="text-sm text-zinc-600 dark:text-zinc-400">
+            Första uppdateringen pågår…
+          </p>
+        }
         @for (group of result.banks; track group.bank) {
           <section
             [attr.data-bank]="group.bank"
@@ -50,10 +60,24 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
               @for (account of group.accounts; track account.name) {
                 <li class="flex items-baseline justify-between gap-3 py-2">
-                  <span>{{ account.name }}</span>
-                  <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                    typeLabel(account.type)
-                  }}</span>
+                  <span class="flex flex-col">
+                    <span>{{ account.name }}</span>
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                      typeLabel(account.type)
+                    }}</span>
+                  </span>
+                  <span class="flex flex-col items-end">
+                    <span class="font-medium tabular-nums" data-balance>{{
+                      account.balance
+                        ? (account.balance.amount | money: account.balance.currency)
+                        : '–'
+                    }}</span>
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400" data-synced>{{
+                      account.lastSyncedAt
+                        ? 'Uppdaterad ' + (account.lastSyncedAt | dateTime)
+                        : 'Inte uppdaterad ännu'
+                    }}</span>
+                  </span>
                 </li>
               }
             </ul>
@@ -86,13 +110,24 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 })
 export class HomePage {
   protected readonly serverReachable = toSignal(inject(HealthService).isServerReachable());
+  private readonly accounts = inject(AccountsService);
+  /** Fetches the accounts, and keeps fetching while a sync is running so balances appear. */
   protected readonly loaded = toSignal<Loaded>(
-    inject(AccountsService)
-      .listByBank()
-      .pipe(
-        map((banks): Loaded => ({ banks })),
-        catchError(() => of<Loaded>({ failed: true })),
+    timer(0, SYNC_POLL_INTERVAL_MS).pipe(
+      switchMap(() =>
+        this.accounts.list().pipe(
+          map((response): Loaded => response),
+          catchError(() => of<Loaded>({ failed: true })),
+        ),
       ),
+      // A failed refresh keeps what is already shown; only a failed first load is an error.
+      scan(
+        (previous: Loaded, next: Loaded) =>
+          'failed' in next && previous && !('failed' in previous) ? previous : next,
+        undefined as unknown as Loaded,
+      ),
+      takeWhile((result) => !('failed' in result) && result.syncing, true),
+    ),
     { initialValue: undefined },
   );
 

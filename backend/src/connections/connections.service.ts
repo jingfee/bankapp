@@ -12,6 +12,7 @@ import {
   EnableBankingClient,
   type EnableBankingSession,
 } from '../enable-banking/enable-banking-client';
+import { SyncService } from '../sync/sync.service';
 
 /** A login must be completed within this long of being started. */
 export const AUTHORISATION_TTL_MS = 15 * 60 * 1000;
@@ -27,6 +28,7 @@ export class ConnectionsService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly now: Clock,
     private readonly enableBanking: EnableBankingClient,
+    private readonly sync: SyncService,
   ) {}
 
   /** Starts a BankID login for the bank and returns the URL to send the owner to. */
@@ -91,17 +93,22 @@ export class ConnectionsService {
       this.logger.warn(`Could not complete the connection to ${bank}: ${String(cause)}`);
       return { outcome: 'failed', bank };
     }
+    let connectionId: number;
     try {
-      this.db.transaction((tx) => {
+      connectionId = this.db.transaction((tx) => {
         const connection = tx
           .insert(connections)
           .values({ bankName: bank, sessionId: session.sessionId, validUntil: session.validUntil })
           .returning({ id: connections.id })
           .get();
-        if (session.accounts.length === 0) return;
-        tx.insert(accounts)
-          .values(session.accounts.map((account) => ({ ...account, connectionId: connection.id })))
-          .run();
+        if (session.accounts.length > 0) {
+          tx.insert(accounts)
+            .values(
+              session.accounts.map((account) => ({ ...account, connectionId: connection.id })),
+            )
+            .run();
+        }
+        return connection.id;
       });
     } catch (cause) {
       // A concurrent login for the same bank may have won while we waited for Enable Banking.
@@ -109,6 +116,8 @@ export class ConnectionsService {
       this.logger.warn(`Could not store the connection to ${bank}: ${String(cause)}`);
       return { outcome: 'failed', bank };
     }
+    // The owner does not wait for the first fetch; the overview shows it as in progress.
+    void this.sync.start('initial', connectionId);
     return { outcome: 'connected', bank };
   }
 
