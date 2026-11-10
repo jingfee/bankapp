@@ -31,7 +31,8 @@ describe('HomePage', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  const account = (name: string, type: ConnectedAccount['type']): ConnectedAccount => ({
+  const account = (name: string, type: ConnectedAccount['type'], id = 1): ConnectedAccount => ({
+    id,
     name,
     type,
     balance: null,
@@ -70,7 +71,7 @@ describe('HomePage', () => {
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
       bank: group.querySelector('h2')?.textContent?.trim(),
       accounts: Array.from(group.querySelectorAll('li')).map((li) =>
-        Array.from(li.querySelectorAll(':scope > span:first-child span')).map((span) =>
+        Array.from(li.querySelectorAll(':scope > span:first-child > *')).map((span) =>
           span.textContent?.trim(),
         ),
       ),
@@ -86,6 +87,17 @@ describe('HomePage', () => {
       },
     ]);
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
+  });
+
+  it('links each account to its transactions', async () => {
+    const page = await render(serverUp, (request) =>
+      request.flush({
+        banks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment', 42)] }],
+        syncing: false,
+      } satisfies AccountsResponse),
+    );
+
+    expect(page.querySelector('a[href="/konto/42"]')?.textContent?.trim()).toBe('Lönekonto');
   });
 
   describe('balances and syncing', () => {

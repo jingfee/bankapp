@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, max } from 'drizzle-orm';
-import type { AccountsResponse, Money } from '@bankapp/shared';
+import { and, asc, desc, eq, lt, max, or } from 'drizzle-orm';
+import type { AccountsResponse, Money, TransactionsResponse } from '@bankapp/shared';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
-import { accounts, balances, connections, syncAccountResults } from '../db/schema';
+import { accounts, balances, connections, syncAccountResults, transactions } from '../db/schema';
 import { SyncService } from '../sync/sync.service';
 
 /**
@@ -11,6 +11,9 @@ import { SyncService } from '../sync/sync.service';
  * interim, then available. Provisional; revisit once real bank data has been seen.
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
+
+/** How many transactions one page of an account's history holds. */
+export const TRANSACTIONS_PAGE_SIZE = 50;
 
 @Injectable()
 export class AccountsService {
@@ -46,6 +49,7 @@ export class AccountsService {
     for (const { id, bank, name, type } of rows) {
       const group = byBank.get(bank) ?? { bank, accounts: [] };
       group.accounts.push({
+        id,
         name,
         type,
         balance: shown.get(id) ?? null,
@@ -54,6 +58,60 @@ export class AccountsService {
       byBank.set(bank, group);
     }
     return { banks: [...byBank.values()], syncing: this.sync.isSyncing() };
+  }
+
+  /**
+   * One page of an account's transactions, newest first. `before` is the `nextCursor` of the
+   * previous page; the cursor is a position rather than an offset, so transactions arriving
+   * from a sync while the owner scrolls neither repeat nor skip. Undefined for an unknown
+   * account, `'bad-cursor'` for a cursor that is not one we handed out.
+   */
+  listTransactions(
+    accountId: number,
+    before?: string,
+  ): TransactionsResponse | 'bad-cursor' | undefined {
+    const account = this.db
+      .select({
+        id: accounts.id,
+        name: accounts.name,
+        type: accounts.type,
+        bank: connections.bankName,
+      })
+      .from(accounts)
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .where(eq(accounts.id, accountId))
+      .get();
+    if (account === undefined) return undefined;
+    let after = undefined;
+    if (before !== undefined) {
+      const match = /^(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(before);
+      if (match === null) return 'bad-cursor';
+      const [, date, id] = match as unknown as [string, string, string];
+      after = or(
+        lt(transactions.date, date),
+        and(eq(transactions.date, date), lt(transactions.id, Number(id))),
+      );
+    }
+    const rows = this.db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.accountId, accountId), after))
+      .orderBy(desc(transactions.date), desc(transactions.id))
+      .limit(TRANSACTIONS_PAGE_SIZE + 1)
+      .all();
+    const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
+    const last = page.at(-1);
+    return {
+      account: { id: account.id, name: account.name, bank: account.bank, type: account.type },
+      transactions: page.map((row) => ({
+        id: row.id,
+        status: row.status,
+        amount: { amount: row.amount, currency: row.currency },
+        date: row.date,
+        description: row.description,
+      })),
+      nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
+    };
   }
 
   /** The balance of the preferred type from each account's most recent fetch. */

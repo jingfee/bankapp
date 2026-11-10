@@ -1,4 +1,5 @@
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /** Cached list of banks Enable Banking supports, replaced wholesale on every refresh. */
 export const banks = sqliteTable('banks', {
@@ -76,3 +77,39 @@ export const syncAccountResults = sqliteTable('sync_account_results', {
   error: text('error'),
   syncedAt: integer('synced_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * Transactions as the bank reported them, with the raw response kept next to the parsed fields
+ * (ADR 0001). Booked transactions are never deleted; pending ones are replaced on every sync.
+ * The dedup rules are provisional until real data has been observed.
+ */
+export const transactions = sqliteTable(
+  'transactions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    status: text('status', { enum: ['booked', 'pending'] }).notNull(),
+    /** Negative when money leaves the account. */
+    amount: real('amount').notNull(),
+    currency: text('currency').notNull(),
+    bookingDate: text('booking_date'),
+    valueDate: text('value_date'),
+    /** The day the transaction is listed under (`YYYY-MM-DD`): booking date, else value date, else the day it was fetched. */
+    date: text('date').notNull(),
+    description: text('description').notNull(),
+    entryReference: text('entry_reference'),
+    /** Identifies a booked transaction within its account; see `dedupKey` in the sync service. */
+    dedupKey: text('dedup_key').notNull(),
+    /** The transaction as the bank returned it, as JSON. */
+    raw: text('raw').notNull(),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('transactions_booked_dedup')
+      .on(table.accountId, table.dedupKey)
+      .where(sql`${table.status} = 'booked'`),
+    index('transactions_account_date').on(table.accountId, table.date, table.id),
+  ],
+);

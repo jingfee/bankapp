@@ -6,5 +6,7 @@ export type {
   BankAccounts,
   ConnectedAccount,
   Money,
+  Transaction,
+  TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';

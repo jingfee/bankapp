@@ -61,7 +61,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
               @for (account of group.accounts; track account.name) {
                 <li class="flex items-baseline justify-between gap-3 py-2">
                   <span class="flex flex-col">
-                    <span>{{ account.name }}</span>
+                    <a [routerLink]="['/konto', account.id]" class="underline">{{
+                      account.name
+                    }}</a>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
                       typeLabel(account.type)
                     }}</span>

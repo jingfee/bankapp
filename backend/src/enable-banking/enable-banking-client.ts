@@ -53,6 +53,23 @@ export interface EnableBankingBalance {
   creditDebit: 'credit' | 'debit' | null;
 }
 
+/** One transaction of an account, parsed from the bank's response. */
+export interface EnableBankingTransaction {
+  status: 'booked' | 'pending';
+  /** Negative when money leaves the account. */
+  amount: number;
+  currency: string;
+  /** `YYYY-MM-DD`, when the bank says. Pending transactions often have none. */
+  bookingDate: string | null;
+  /** `YYYY-MM-DD`; falls back to the bank's transaction date when it gives no value date. */
+  valueDate: string | null;
+  description: string;
+  /** The bank's own identifier for a booked transaction, when it gives one. */
+  entryReference: string | null;
+  /** The transaction exactly as the bank returned it, as JSON (ADR 0001). */
+  raw: string;
+}
+
 /**
  * The narrow seam to Enable Banking. Backend tests use a fake implementation; the real one is
  * {@link HttpEnableBankingClient}. Add methods here as features need them.
@@ -65,4 +82,6 @@ export abstract class EnableBankingClient {
   abstract createSession(code: string): Promise<EnableBankingSession>;
   /** Every balance the bank reports for the account with this Enable Banking `uid`. */
   abstract getBalances(accountUid: string): Promise<EnableBankingBalance[]>;
+  /** The longest history the bank returns for the account, with every page already fetched. */
+  abstract getTransactions(accountUid: string): Promise<EnableBankingTransaction[]>;
 }
