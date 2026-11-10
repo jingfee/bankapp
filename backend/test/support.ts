@@ -1,6 +1,7 @@
 import type { AppConfig } from '../src/config/config';
 import type {
   AuthorisationRequest,
+  EnableBankingBalance,
   EnableBankingBank,
   EnableBankingClient,
   EnableBankingSession,
@@ -24,6 +25,13 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   /** What the bank returns when the owner completes BankID; `createSession` fails if unset. */
   session: EnableBankingSession | undefined;
   redeemedCodes: string[] = [];
+  /** Balances by account `uid`; an account without an entry has none. */
+  balances = new Map<string, EnableBankingBalance[]>();
+  /** Account `uid`s whose balances the bank refuses to return. */
+  failingBalances = new Set<string>();
+  /** While set, balance requests wait for it, so a sync can be observed while running. */
+  holdBalances: Promise<void> | undefined;
+  requestedBalances: string[] = [];
 
   listBanks(country: string): Promise<EnableBankingBank[]> {
     this.requestedCountries.push(country);
@@ -40,6 +48,13 @@ export class FakeEnableBankingClient implements EnableBankingClient {
     return this.session
       ? Promise.resolve(this.session)
       : Promise.reject(new Error('Enable Banking refused the code'));
+  }
+
+  async getBalances(accountUid: string): Promise<EnableBankingBalance[]> {
+    this.requestedBalances.push(accountUid);
+    await this.holdBalances;
+    if (this.failingBalances.has(accountUid)) throw new Error('The bank refused the request');
+    return this.balances.get(accountUid) ?? [];
   }
 }
 

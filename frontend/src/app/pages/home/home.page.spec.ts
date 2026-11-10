@@ -2,8 +2,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { AccountsResponse, HealthResponse } from '@bankapp/shared';
-import { HomePage } from './home.page';
+import type { AccountsResponse, ConnectedAccount, HealthResponse } from '@bankapp/shared';
+import { HomePage, SYNC_POLL_INTERVAL_MS } from './home.page';
 
 describe('HomePage', () => {
   beforeEach(() => {
@@ -31,9 +31,17 @@ describe('HomePage', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  const account = (name: string, type: ConnectedAccount['type']): ConnectedAccount => ({
+    name,
+    type,
+    balance: null,
+    lastSyncedAt: null,
+  });
+
   const serverUp: Respond = (request) => request.flush({ status: 'ok' } satisfies HealthResponse);
   const serverDown: Respond = (request) => request.error(new ProgressEvent('error'));
-  const noAccounts: Respond = (request) => request.flush({ banks: [] } satisfies AccountsResponse);
+  const noAccounts: Respond = (request) =>
+    request.flush({ banks: [], syncing: false } satisfies AccountsResponse);
 
   it('greets the owner in Swedish with an empty state and a way to connect a bank', async () => {
     const page = await render(serverUp);
@@ -48,15 +56,13 @@ describe('HomePage', () => {
     const page = await render(serverUp, (request) =>
       request.flush({
         banks: [
-          { bank: 'Coop Mastercard', accounts: [{ name: 'Coop Mastercard', type: 'card' }] },
+          { bank: 'Coop Mastercard', accounts: [{ ...account('Coop Mastercard', 'card') }] },
           {
             bank: 'Swedbank',
-            accounts: [
-              { name: 'Lönekonto', type: 'payment' },
-              { name: 'Sparkonto', type: 'savings' },
-            ],
+            accounts: [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')],
           },
         ],
+        syncing: false,
       } satisfies AccountsResponse),
     );
 
@@ -64,7 +70,9 @@ describe('HomePage', () => {
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
       bank: group.querySelector('h2')?.textContent?.trim(),
       accounts: Array.from(group.querySelectorAll('li')).map((li) =>
-        Array.from(li.querySelectorAll('span')).map((span) => span.textContent?.trim()),
+        Array.from(li.querySelectorAll(':scope > span:first-child span')).map((span) =>
+          span.textContent?.trim(),
+        ),
       ),
     }));
     expect(groups).toEqual([
@@ -78,6 +86,106 @@ describe('HomePage', () => {
       },
     ]);
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
+  });
+
+  describe('balances and syncing', () => {
+    const swedbank = (accounts: ConnectedAccount[], syncing: boolean): AccountsResponse => ({
+      banks: [{ bank: 'Swedbank', accounts }],
+      syncing,
+    });
+
+    it('shows each balance in Swedish format and when the account was last synced', async () => {
+      const page = await render(serverUp, (request) =>
+        request.flush(
+          swedbank(
+            [
+              {
+                ...account('Kort', 'card'),
+                balance: { amount: -1234.5, currency: 'SEK' },
+                lastSyncedAt: '2026-11-10T12:00:00.000Z',
+              },
+              account('Lönekonto', 'payment'),
+            ],
+            false,
+          ),
+        ),
+      );
+
+      const [first, second] = Array.from(page.querySelectorAll('li'));
+      expect(first?.querySelector('[data-balance]')?.textContent?.trim()).toBe(
+        '−1\u00a0234,50\u00a0kr',
+      );
+      expect(first?.querySelector('[data-synced]')?.textContent?.trim()).toBe(
+        'Uppdaterad 10 nov. 13:00',
+      );
+      expect(second?.querySelector('[data-balance]')?.textContent?.trim()).toBe('–');
+      expect(second?.querySelector('[data-synced]')?.textContent?.trim()).toBe(
+        'Inte uppdaterad ännu',
+      );
+      expect(page.querySelector('[role=status]')).toBeNull();
+    });
+
+    it('keeps the accounts and keeps polling when a refresh fails during a sync', async () => {
+      vi.useFakeTimers();
+      try {
+        const fixture = TestBed.createComponent(HomePage);
+        const http = TestBed.inject(HttpTestingController);
+        await vi.advanceTimersByTimeAsync(0);
+        http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
+        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
+        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
+        http.expectOne('/api/accounts').error(new ProgressEvent('error'));
+        await vi.advanceTimersByTimeAsync(0);
+        const page = fixture.nativeElement as HTMLElement;
+        expect(page.querySelector('[role=alert]')).toBeNull();
+        expect(page.textContent).toContain('Lönekonto');
+
+        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
+        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], false));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(page.querySelector('[role=status]')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows that a sync is running and updates when it has finished', async () => {
+      vi.useFakeTimers();
+      try {
+        const fixture = TestBed.createComponent(HomePage);
+        const http = TestBed.inject(HttpTestingController);
+        await vi.advanceTimersByTimeAsync(0);
+        http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
+        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
+        await vi.advanceTimersByTimeAsync(0);
+        const page = fixture.nativeElement as HTMLElement;
+        expect(page.querySelector('[role=status]')?.textContent).toContain('pågår');
+
+        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
+        http.expectOne('/api/accounts').flush(
+          swedbank(
+            [
+              {
+                ...account('Lönekonto', 'payment'),
+                balance: { amount: 89, currency: 'SEK' },
+                lastSyncedAt: '2026-11-10T12:00:00.000Z',
+              },
+            ],
+            false,
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(page.querySelector('[role=status]')).toBeNull();
+        expect(page.querySelector('[data-balance]')?.textContent?.trim()).toBe('89,00\u00a0kr');
+
+        // Done: it stops asking.
+        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS * 3);
+        http.expectNone('/api/accounts');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('shows an error when the accounts cannot be fetched', async () => {

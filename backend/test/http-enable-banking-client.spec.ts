@@ -232,4 +232,56 @@ describe('HttpEnableBankingClient', () => {
       });
     });
   });
+
+  describe('getBalances', () => {
+    it('fetches the balances of the account and maps every one of them', async () => {
+      respond = () =>
+        Response.json({
+          balances: [
+            {
+              name: 'Booked',
+              balance_amount: { currency: 'SEK', amount: '-1234.50' },
+              balance_type: 'CLBD',
+              reference_date: '2026-11-09',
+            },
+            {
+              name: 'Available',
+              balance_amount: { currency: 'SEK', amount: '3200.00' },
+              balance_type: 'ITAV',
+              credit_debit_indicator: 'DBIT',
+            },
+            {
+              balance_amount: { currency: 'SEK', amount: '5' },
+              balance_type: 'ITBD',
+              credit_debit_indicator: 'CRDT',
+            },
+          ],
+        });
+
+      expect(await client().getBalances('u/1')).toEqual([
+        {
+          type: 'CLBD',
+          amount: -1234.5,
+          currency: 'SEK',
+          referenceDate: '2026-11-09',
+          creditDebit: null,
+        },
+        { type: 'ITAV', amount: 3200, currency: 'SEK', referenceDate: null, creditDebit: 'debit' },
+        { type: 'ITBD', amount: 5, currency: 'SEK', referenceDate: null, creditDebit: 'credit' },
+      ]);
+      expect(requests[0]).toMatchObject({
+        url: 'https://enable.test/accounts/u%2F1/balances',
+        method: 'GET',
+      });
+    });
+
+    it('fails on an amount that is not a number', async () => {
+      respond = () =>
+        Response.json({
+          balances: [{ balance_amount: { currency: 'SEK', amount: ' ' }, balance_type: 'CLBD' }],
+        });
+
+      await expect(client().getBalances('u1')).rejects.toThrow('not a number');
+    });
+  });
 });

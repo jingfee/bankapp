@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /** Cached list of banks Enable Banking supports, replaced wholesale on every refresh. */
 export const banks = sqliteTable('banks', {
@@ -35,4 +35,44 @@ export const authorisations = sqliteTable('authorisations', {
   state: text('state').primaryKey(),
   bankName: text('bank_name').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * Every balance the bank reported, kept for each sync (append-only). `amount` is already
+ * normalised so that money owed is negative, also for card accounts.
+ */
+export const balances = sqliteTable('balances', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id')
+    .notNull()
+    .references(() => accounts.id),
+  /** ISO 20022 balance type as the bank reports it, e.g. `CLBD`. */
+  type: text('type').notNull(),
+  amount: real('amount').notNull(),
+  currency: text('currency').notNull(),
+  /** The day the balance applies to (`YYYY-MM-DD`), when the bank says. */
+  referenceDate: text('reference_date'),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** One run of fetching data for the owner's accounts. `finishedAt` is null while it runs. */
+export const syncRuns = sqliteTable('sync_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  trigger: text('trigger', { enum: ['initial', 'scheduled', 'manual'] }).notNull(),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+});
+
+/** How a sync run went for one account. */
+export const syncAccountResults = sqliteTable('sync_account_results', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  syncRunId: integer('sync_run_id')
+    .notNull()
+    .references(() => syncRuns.id),
+  accountId: integer('account_id')
+    .notNull()
+    .references(() => accounts.id),
+  outcome: text('outcome', { enum: ['ok', 'failed'] }).notNull(),
+  error: text('error'),
+  syncedAt: integer('synced_at', { mode: 'timestamp_ms' }).notNull(),
 });
