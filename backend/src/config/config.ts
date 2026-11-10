@@ -1,4 +1,5 @@
-import { accessSync, constants, statSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { createPrivateKey } from 'node:crypto';
 import { z } from 'zod';
 
 export interface AppConfig {
@@ -57,17 +58,25 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const values = parsed.data;
 
   const problems: string[] = [];
+  const keyPath = values.ENABLE_BANKING_PRIVATE_KEY_PATH;
+  let pem: string | undefined;
   try {
-    accessSync(values.ENABLE_BANKING_PRIVATE_KEY_PATH, constants.R_OK);
-    if (!statSync(values.ENABLE_BANKING_PRIVATE_KEY_PATH).isFile()) {
-      problems.push(
-        `ENABLE_BANKING_PRIVATE_KEY_PATH is not a file: ${values.ENABLE_BANKING_PRIVATE_KEY_PATH}`,
-      );
-    }
+    if (statSync(keyPath).isFile()) pem = readFileSync(keyPath, 'utf8');
   } catch {
+    // Reported below.
+  }
+  if (pem === undefined) {
+    problems.push(`ENABLE_BANKING_PRIVATE_KEY_PATH is not a readable file: ${keyPath}`);
+  } else if (!isPrivateKey(pem)) {
     problems.push(
-      `ENABLE_BANKING_PRIVATE_KEY_PATH is not a readable file: ${values.ENABLE_BANKING_PRIVATE_KEY_PATH}`,
+      `ENABLE_BANKING_PRIVATE_KEY_PATH does not contain a valid PEM private key: ${keyPath}`,
     );
+  }
+  try {
+    mkdirSync(values.DATA_DIR, { recursive: true });
+    accessSync(values.DATA_DIR, constants.W_OK);
+  } catch {
+    problems.push(`DATA_DIR cannot be created or written to: ${values.DATA_DIR}`);
   }
   if (problems.length > 0) throw new ConfigError(problems);
 
@@ -78,4 +87,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
   };
+}
+
+function isPrivateKey(pem: string): boolean {
+  try {
+    createPrivateKey(pem);
+    return true;
+  } catch {
+    return false;
+  }
 }

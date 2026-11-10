@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +10,12 @@ describe('loadConfig', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'bankapp-config-'));
-    writeFileSync(join(dir, 'key.pem'), 'pem');
+    writeFileSync(
+      join(dir, 'key.pem'),
+      generateKeyPairSync('rsa', { modulusLength: 2048 })
+        .privateKey.export({ type: 'pkcs8', format: 'pem' })
+        .toString(),
+    );
     validEnv = {
       ENABLE_BANKING_APPLICATION_ID: 'app-id',
       ENABLE_BANKING_PRIVATE_KEY_PATH: join(dir, 'key.pem'),
@@ -67,6 +73,20 @@ describe('loadConfig', () => {
     expect(() => loadConfig(validEnv)).toThrow(
       /ENABLE_BANKING_PRIVATE_KEY_PATH is not a readable file/,
     );
+  });
+
+  it('rejects a key file that is not a PEM private key', () => {
+    writeFileSync(join(dir, 'bad.pem'), 'not a key');
+    validEnv['ENABLE_BANKING_PRIVATE_KEY_PATH'] = join(dir, 'bad.pem');
+
+    expect(() => loadConfig(validEnv)).toThrow(/does not contain a valid PEM private key/);
+  });
+
+  it('rejects a data directory that cannot be created', () => {
+    writeFileSync(join(dir, 'file'), '');
+    validEnv['DATA_DIR'] = join(dir, 'file', 'data');
+
+    expect(() => loadConfig(validEnv)).toThrow(/DATA_DIR cannot be created or written to/);
   });
 
   it('reports every problem at once', () => {
