@@ -47,16 +47,22 @@ export class ConnectionsService {
 
     const state = randomBytes(24).toString('base64url');
     const now = this.now();
-    const { url } = await this.enableBanking.startAuthorisation({
-      bank: bank.name,
-      country: BANK_COUNTRY,
-      validUntil: new Date(now.getTime() + bank.maximumConsentSeconds * 1000 - CONSENT_MARGIN_MS),
-      state,
-      redirectUrl: this.config.redirectUrl,
-      ...(bank.personnummer !== 'none' && this.config.personnummer
-        ? { personnummer: this.config.personnummer }
-        : {}),
-    });
+    let url: string;
+    try {
+      ({ url } = await this.enableBanking.startAuthorisation({
+        bank: bank.name,
+        country: BANK_COUNTRY,
+        validUntil: new Date(now.getTime() + bank.maximumConsentSeconds * 1000 - CONSENT_MARGIN_MS),
+        state,
+        redirectUrl: this.config.redirectUrl,
+        ...(bank.personnummer !== 'none' && this.config.personnummer
+          ? { personnummer: this.config.personnummer }
+          : {}),
+      }));
+    } catch (cause) {
+      this.logger.warn(`Could not start a connection to ${bank.name}: ${String(cause)}`);
+      throw new HttpException('Enable Banking refused to start the login', HttpStatus.BAD_GATEWAY);
+    }
     this.db.insert(authorisations).values({ state, bankName: bank.name, createdAt: now }).run();
     return { url };
   }
