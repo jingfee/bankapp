@@ -266,7 +266,7 @@ export class SyncService implements OnModuleInit {
       .run();
     const fetchedDay = localDay(fetchedAt, this.config.timezone);
     const occurrences = new Map<string, number>();
-    const rows = fetched.map((transaction) => {
+    const rows = withoutBookedTwins(fetched).map((transaction) => {
       const date = transaction.bookingDate ?? transaction.valueDate ?? fetchedDay;
       return {
         accountId: account.id,
@@ -295,6 +295,33 @@ export class SyncService implements OnModuleInit {
     }
     return added;
   }
+}
+
+/**
+ * Banks keep returning a reservation alongside the booked transaction it turned into. Drops each
+ * pending transaction that has a booked twin (same amount, currency and description) in the same
+ * response; every booked transaction is the twin of at most one pending one.
+ */
+function withoutBookedTwins(fetched: EnableBankingTransaction[]): EnableBankingTransaction[] {
+  const twin = (transaction: EnableBankingTransaction) =>
+    JSON.stringify([
+      transaction.amount,
+      transaction.currency,
+      transaction.description.trim().toLowerCase(),
+    ]);
+  const booked = new Map<string, number>();
+  for (const transaction of fetched) {
+    if (transaction.status === 'booked') {
+      booked.set(twin(transaction), (booked.get(twin(transaction)) ?? 0) + 1);
+    }
+  }
+  return fetched.filter((transaction) => {
+    if (transaction.status !== 'pending') return true;
+    const left = booked.get(twin(transaction)) ?? 0;
+    if (left === 0) return true;
+    booked.set(twin(transaction), left - 1);
+    return false;
+  });
 }
 
 /**

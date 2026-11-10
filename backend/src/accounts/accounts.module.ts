@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { AccountsController } from './accounts.controller';
+import { AccountsController, TransactionsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
 import { SyncModule } from '../sync/sync.module';
 
 @Module({
   imports: [SyncModule],
-  controllers: [AccountsController],
+  controllers: [AccountsController, TransactionsController],
   providers: [AccountsService],
 })
 export class AccountsModule {}

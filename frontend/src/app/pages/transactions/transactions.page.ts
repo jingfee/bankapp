@@ -1,13 +1,11 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import type { Transaction, TransactionsResponse } from '@bankapp/shared';
+import { RouterLink } from '@angular/router';
+import type { Transaction } from '@bankapp/shared';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { TransactionsService } from '../../transactions.service';
 
-type Account = TransactionsResponse['account'];
-type Status = 'loading' | 'ready' | 'failed' | 'notFound';
+type Status = 'loading' | 'ready' | 'failed';
 
 interface DayGroup {
   date: string;
@@ -15,7 +13,7 @@ interface DayGroup {
 }
 
 @Component({
-  selector: 'app-account-page',
+  selector: 'app-transactions-page',
   imports: [RouterLink, DateHeadingPipe, MoneyPipe],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
@@ -25,20 +23,14 @@ interface DayGroup {
         @case ('loading') {
           <p aria-live="polite">Hämtar transaktioner…</p>
         }
-        @case ('notFound') {
-          <p role="alert">Kontot finns inte.</p>
-        }
         @case ('failed') {
           <p role="alert">Transaktionerna kunde inte hämtas. Försök igen senare.</p>
         }
         @default {
-          @let shown = account();
-          @if (shown) {
-            <header>
-              <h1 class="text-3xl font-semibold tracking-tight">{{ shown.name }}</h1>
-              <p class="mt-1 text-zinc-600 dark:text-zinc-400">{{ shown.bank }}</p>
-            </header>
-          }
+          <header>
+            <h1 class="text-3xl font-semibold tracking-tight">Transaktioner</h1>
+            <p class="mt-1 text-zinc-600 dark:text-zinc-400">Från alla dina konton.</p>
+          </header>
           @if (groups().length === 0) {
             <p>Inga transaktioner ännu.</p>
           }
@@ -53,6 +45,9 @@ interface DayGroup {
                   <li data-transaction class="flex items-baseline justify-between gap-3 py-2">
                     <span class="flex flex-col">
                       <span data-description>{{ transaction.description }}</span>
+                      <span data-account class="text-sm text-zinc-500 dark:text-zinc-400"
+                        >{{ transaction.account.name }} · {{ transaction.account.bank }}</span
+                      >
                       @if (transaction.status === 'pending') {
                         <span class="text-sm text-zinc-500 dark:text-zinc-400">Reserverad</span>
                       }
@@ -88,12 +83,10 @@ interface DayGroup {
     </main>
   `,
 })
-export class AccountPage {
+export class TransactionsPage {
   private readonly service = inject(TransactionsService);
-  private readonly accountId = Number(inject(ActivatedRoute).snapshot.paramMap.get('id'));
 
   protected readonly status = signal<Status>('loading');
-  protected readonly account = signal<Account | undefined>(undefined);
   protected readonly cursor = signal<string | null>(null);
   protected readonly loadingMore = signal(false);
   protected readonly moreFailed = signal(false);
@@ -111,17 +104,13 @@ export class AccountPage {
   });
 
   constructor() {
-    this.service.list(this.accountId).subscribe({
+    this.service.list().subscribe({
       next: (page) => {
-        this.account.set(page.account);
         this.transactions.set(page.transactions);
         this.cursor.set(page.nextCursor);
         this.status.set('ready');
       },
-      error: (error: unknown) =>
-        this.status.set(
-          error instanceof HttpErrorResponse && error.status === 404 ? 'notFound' : 'failed',
-        ),
+      error: () => this.status.set('failed'),
     });
   }
 
@@ -130,7 +119,7 @@ export class AccountPage {
     if (before === null || this.loadingMore()) return;
     this.loadingMore.set(true);
     this.moreFailed.set(false);
-    this.service.list(this.accountId, before).subscribe({
+    this.service.list(before).subscribe({
       next: (page) => {
         this.transactions.update((shown) => [...shown, ...page.transactions]);
         this.cursor.set(page.nextCursor);

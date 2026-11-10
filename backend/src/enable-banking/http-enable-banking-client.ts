@@ -68,6 +68,7 @@ const sessionResponse = z.object({
       identification_hash: z.string(),
       name: z.string().nullish(),
       details: z.string().nullish(),
+      product: z.string().nullish(),
       account_id: z.object({ iban: z.string().nullish() }).nullish(),
       cash_account_type: z.string().nullish(),
       currency: z.string(),
@@ -179,7 +180,13 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       accounts: session.accounts.map((account) => ({
         uid: account.uid,
         identificationHash: account.identification_hash,
-        name: account.name || account.details || account.account_id?.iban || account.uid,
+        // `name` is the account holder's, so it only comes after what names the account itself.
+        name:
+          account.details?.trim() ||
+          account.product?.trim() ||
+          account.account_id?.iban ||
+          account.name?.trim() ||
+          account.uid,
         type: ACCOUNT_TYPES[account.cash_account_type ?? ''] ?? 'payment',
         currency: account.currency,
       })),

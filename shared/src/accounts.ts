@@ -60,7 +60,15 @@ export interface StartSyncResponse {
   started: boolean;
 }
 
-/** A transaction as listed on the account page. `amount` is negative when money left the account. */
+/** The account a transaction belongs to. */
+export interface TransactionAccount {
+  id: number;
+  name: string;
+  bank: string;
+  type: AccountType;
+}
+
+/** A transaction as listed. `amount` is negative when money left the account. */
 export interface Transaction {
   id: number;
   /** Pending transactions may still change or disappear before they are booked. */
@@ -69,11 +77,11 @@ export interface Transaction {
   /** The day it is listed under (`YYYY-MM-DD`). */
   date: string;
   description: string;
+  account: TransactionAccount;
 }
 
-/** Response body of `GET /api/accounts/:id/transactions`, newest first. */
+/** Response body of `GET /api/transactions`: every account's transactions, newest first. */
 export interface TransactionsResponse {
-  account: { id: number; name: string; bank: string; type: AccountType };
   transactions: Transaction[];
   /** Pass as `?before=` to get the next, older page; null when there are no more. */
   nextCursor: string | null;

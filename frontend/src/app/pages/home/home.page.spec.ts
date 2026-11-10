@@ -121,7 +121,7 @@ describe('HomePage', () => {
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
   });
 
-  it('links each account to its transactions', async () => {
+  it('links to the transactions of all accounts', async () => {
     const page = await render(serverUp, (request) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
@@ -130,7 +130,10 @@ describe('HomePage', () => {
       } satisfies AccountsResponse),
     );
 
-    expect(page.querySelector('a[href="/konto/42"]')?.textContent?.trim()).toBe('Lönekonto');
+    expect(page.querySelector('a[href="/transaktioner"]')?.textContent?.trim()).toBe(
+      'Alla transaktioner',
+    );
+    expect(page.querySelector('a[href^="/konto"]')).toBeNull();
   });
 
   describe('balances and syncing', () => {
@@ -436,7 +439,6 @@ describe('HomePage', () => {
       expect(page.querySelector('li [data-not-syncing]')?.textContent?.trim()).toBe(
         'Uppdateras inte',
       );
-      expect(page.querySelector('a[href="/konto/1"]')).not.toBeNull();
       expect(renewButton(page)).toBeDefined();
     });
 
@@ -466,7 +468,7 @@ describe('HomePage', () => {
       expect(redirects).toEqual([]);
     });
 
-    it('shows closed accounts apart from the others, still linked to their history', async () => {
+    it('shows closed accounts apart from the others', async () => {
       const page = await render(
         serverUp,
         swedbank({ closedAccounts: [account('Sparkonto', 'savings', 9)] }),
@@ -474,8 +476,8 @@ describe('HomePage', () => {
 
       const closed = page.querySelector('[data-closed-accounts]');
       expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
-      expect(closed?.querySelector('a[href="/konto/9"]')?.textContent?.trim()).toBe('Sparkonto');
-      expect(page.querySelector('section[data-bank] > ul a[href="/konto/9"]')).toBeNull();
+      expect(closed?.textContent).toContain('Sparkonto');
+      expect(page.querySelector('section[data-bank] > ul')?.textContent).not.toContain('Sparkonto');
     });
   });
 

@@ -129,9 +129,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
               @for (account of group.accounts; track account.name) {
                 <li class="flex items-baseline justify-between gap-3 py-2">
                   <span class="flex flex-col">
-                    <a [routerLink]="['/konto', account.id]" class="underline">{{
-                      account.name
-                    }}</a>
+                    <span>{{ account.name }}</span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
                       typeLabel(account.type)
                     }}</span>
@@ -164,9 +162,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                 <ul class="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
                   @for (account of group.closedAccounts; track account.id) {
                     <li class="flex flex-col py-2">
-                      <a [routerLink]="['/konto', account.id]" class="underline">{{
-                        account.name
-                      }}</a>
+                      <span>{{ account.name }}</span>
                       <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
                         typeLabel(account.type)
                       }}</span>
@@ -177,6 +173,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             }
           </section>
         }
+        <a routerLink="/transaktioner" data-transactions-link class="font-medium underline"
+          >Alla transaktioner</a
+        >
         <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
       }
 

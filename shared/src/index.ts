@@ -10,6 +10,7 @@ export type {
   StartSyncResponse,
   SyncSummary,
   Transaction,
+  TransactionAccount,
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
