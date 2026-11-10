@@ -43,7 +43,7 @@ The backend refuses to start unless all of these are set and valid. Locally, cop
 | `DATA_DIR`                        | Directory for the SQLite database (`bankapp.db`)           |
 | `TIMEZONE`                        | IANA time zone for scheduled jobs, e.g. `Europe/Stockholm` |
 
-Optional: `PERSONNUMMER` (12 digits, e.g. `199001011234`) is passed to banks that take it when connecting, such as Coop Mastercard. `REDIRECT_URL` must point at the backend callback, `<public address>/api/connections/callback`, and be registered with the Enable Banking application.
+Optional: `SCHEDULED_SYNCS=true` syncs every account at 06:00 and 18:00 in `TIMEZONE`; leave it off in development, which shares the banks' daily request limit with production (ADR 0003). `PERSONNUMMER` (12 digits, e.g. `199001011234`) is passed to banks that take it when connecting, such as Coop Mastercard. `REDIRECT_URL` must point at the backend callback, `<public address>/api/connections/callback`, and be registered with the Enable Banking application.
 
 For local development, use the frontend's address, `REDIRECT_URL=https://localhost:4200/api/connections/callback`, and register that URL in Enable Banking too (it only accepts https). The dev server uses HTTPS with a self-signed certificate, so the browser warns once; accept it to continue. The Angular dev server proxies `/api` to the backend, so the callback reaches the backend and the redirect to the result page stays on port 4200. Pointing it at `localhost:3000` would end on a 404, because the backend serves no frontend under `pnpm dev`.
 

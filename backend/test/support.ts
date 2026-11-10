@@ -18,6 +18,7 @@ export const testConfig: AppConfig = {
   personnummer: undefined,
   dataDir: '/not/used/in/tests',
   timezone: 'Europe/Stockholm',
+  scheduledSyncs: false,
 };
 
 /** Stands in for Enable Banking in backend tests. */
