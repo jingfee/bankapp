@@ -636,6 +636,22 @@ describe('the initial sync', () => {
       expect(stored()).toHaveLength(1);
     });
 
+    it('that are pending are updated in place when they book after the bank stopped returning them', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([{ id: first!.id, status: 'booked' }]);
+    });
+
     it('that are pending are removed when the bank stops returning them without a booked match', async () => {
       enableBanking.transactions.set('u1', [
         transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),

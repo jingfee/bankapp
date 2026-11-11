@@ -374,7 +374,7 @@ export class SyncService implements OnModuleInit {
         )
         .get();
       if (exists) {
-        // The booked transaction is already stored, so the reservation is just a leftover.
+        // The booked transaction is already stored, so the pending transaction is just a leftover.
         tx.delete(transactions).where(eq(transactions.id, merge.stored.id)).run();
       } else {
         tx.update(transactions)
@@ -421,8 +421,8 @@ export class SyncService implements OnModuleInit {
 }
 
 /**
- * Banks keep returning a reservation alongside the booked transaction it turned into, and may
- * reserve a refund with the wrong sign and describe the merchant differently. So two transactions
+ * Banks keep returning a pending transaction alongside the booked transaction it turned into, and may
+ * hold a refund as pending with the wrong sign and describe the merchant differently. So two transactions
  * are twins when currency, size of the amount and the description's letters and digits agree.
  */
 function twinSignature(row: { amount: number; currency: string; description: string }): string {
