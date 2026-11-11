@@ -1,12 +1,19 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Put,
   Query,
 } from '@nestjs/common';
-import type { AccountsResponse, TransactionDetails, TransactionsResponse } from '@bankapp/shared';
+import type {
+  AccountsResponse,
+  TransactionCategoryResponse,
+  TransactionDetails,
+  TransactionsResponse,
+} from '@bankapp/shared';
 import { AccountsService } from './accounts.service';
 
 @Controller('accounts')
@@ -32,8 +39,29 @@ export class TransactionsController {
 
   @Get(':id')
   get(@Param('id') id: string): TransactionDetails {
-    const details = /^\d{1,15}$/.test(id) ? this.accounts.getTransaction(Number(id)) : null;
+    const details = isId(id) ? this.accounts.getTransaction(Number(id)) : null;
     if (details === null) throw new NotFoundException('There is no such transaction');
     return details;
   }
+
+  /** Sets the owner's chosen subcategory as confirmed, or removes it with `subcategoryId: null`. */
+  @Put(':id/category')
+  setCategory(@Param('id') id: string, @Body() body: unknown): TransactionCategoryResponse {
+    if (!isId(id)) throw new NotFoundException('There is no such transaction');
+    const { subcategoryId } = (body ?? {}) as { subcategoryId?: unknown };
+    if (
+      subcategoryId !== null &&
+      !(typeof subcategoryId === 'number' && Number.isInteger(subcategoryId))
+    ) {
+      throw new BadRequestException('subcategoryId must be a subcategory id or null');
+    }
+    const result = this.accounts.setCategory(Number(id), subcategoryId);
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'no-subcategory') throw new BadRequestException('There is no such subcategory');
+    return { category: result };
+  }
+}
+
+function isId(value: string): boolean {
+  return /^\d{1,15}$/.test(value);
 }

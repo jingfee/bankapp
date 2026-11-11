@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { and, eq, gt, isNull, max } from 'drizzle-orm';
+import { CategoryGuesser } from '../categories/guessing/category-guesser';
 import { CLOCK, type Clock } from '../clock';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
@@ -42,6 +43,12 @@ const INSERT_BATCH_SIZE = 50;
 
 type AccountRow = typeof accounts.$inferSelect;
 
+/** A stored transaction's category, as handed from a removed pending row to its replacement. */
+type StoredCategory = Pick<
+  typeof transactions.$inferSelect,
+  'subcategoryId' | 'categoryConfirmed' | 'categoryConfirmedAt'
+>;
+
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
@@ -53,6 +60,7 @@ export class SyncService implements OnModuleInit {
     @Inject(CLOCK) private readonly now: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly enableBanking: EnableBankingClient,
+    private readonly guesser: CategoryGuesser,
   ) {}
 
   /** A run cut short by a restart would otherwise show as in progress forever. */
@@ -280,8 +288,10 @@ export class SyncService implements OnModuleInit {
   /**
    * Booked transactions are added unless already stored. A pending transaction keeps its stored
    * row while the bank returns it, and the booked transaction it turns into updates that same
-   * row (ADR 0005); one the bank stops returning without a booked match is removed. The matching
-   * rules are provisional. Returns how many booked transactions were new.
+   * row (ADR 0005); one the bank stops returning without a booked match is removed. A removed
+   * pending row hands its category to a newly stored twin, if there is one; other new
+   * transactions, and pending ones that book without a category, get a guessed category. The matching rules are provisional. Returns how many
+   * booked transactions were new.
    */
   private storeTransactions(
     tx: Pick<AppDatabase, 'insert' | 'delete' | 'update' | 'select'>,
@@ -361,10 +371,34 @@ export class SyncService implements OnModuleInit {
       }
     }
 
+    // A pending row that is removed hands its category on to the row that replaces it, so a
+    // category the owner set is not lost when the pending row cannot be kept.
+    const handedOn: { signature: string; category: StoredCategory }[] = [];
+    const remove = (row: (typeof stored)[number]) => {
+      // Also when the owner removed the category: their twin must not be guessed either.
+      if (row.subcategoryId !== null || row.categoryConfirmed) {
+        handedOn.push({
+          signature: twinSignature(row),
+          category: {
+            subcategoryId: row.subcategoryId,
+            categoryConfirmed: row.categoryConfirmed,
+            categoryConfirmedAt: row.categoryConfirmedAt,
+          },
+        });
+      }
+      tx.delete(transactions).where(eq(transactions.id, row.id)).run();
+    };
+    const takeHandedOn = (row: { amount: number; currency: string; description: string }) => {
+      const index = handedOn.findIndex((entry) => entry.signature === twinSignature(row));
+      return index === -1 ? undefined : handedOn.splice(index, 1)[0]!.category;
+    };
+
+    /** Rows without a category the owner decided, to be guessed once stored. */
+    const toGuess: number[] = [];
     let added = 0;
     for (const merge of merges) {
       const exists = tx
-        .select({ id: transactions.id })
+        .select({ id: transactions.id, categoryConfirmed: transactions.categoryConfirmed })
         .from(transactions)
         .where(
           and(
@@ -375,13 +409,21 @@ export class SyncService implements OnModuleInit {
         .get();
       if (exists) {
         // The booked transaction is already stored, so the pending transaction is just a leftover.
-        tx.delete(transactions).where(eq(transactions.id, merge.stored.id)).run();
+        remove(merge.stored);
+        const category = takeHandedOn(merge.stored);
+        if (category && !exists.categoryConfirmed) {
+          tx.update(transactions).set(category).where(eq(transactions.id, exists.id)).run();
+        }
       } else {
         tx.update(transactions)
           .set(merge.booked.row)
           .where(eq(transactions.id, merge.stored.id))
           .run();
         added += 1;
+        // The booked description or merchant code may give a guess the pending one did not.
+        if (merge.stored.subcategoryId === null && !merge.stored.categoryConfirmed) {
+          toGuess.push(merge.stored.id);
+        }
       }
     }
 
@@ -390,13 +432,15 @@ export class SyncService implements OnModuleInit {
         !kept.has(row.id) &&
         !(row.entryReference !== null && fetchedPendingKeys.has(row.dedupKey))
       ) {
-        tx.delete(transactions).where(eq(transactions.id, row.id)).run();
+        remove(row);
       }
     }
-    const inserts: (typeof entries)[number]['row'][] = [];
+    const inserts: ((typeof entries)[number]['row'] & Partial<StoredCategory>)[] = [];
     for (const entry of entries) {
       if (entry.row.status === 'booked') {
-        if (!merges.some((merge) => merge.booked === entry)) inserts.push(entry.row);
+        if (!merges.some((merge) => merge.booked === entry)) {
+          inserts.push({ ...entry.row, ...takeHandedOn(entry.row) });
+        }
         continue;
       }
       if (entry.claimed) continue;
@@ -404,7 +448,7 @@ export class SyncService implements OnModuleInit {
       if (existing) {
         tx.update(transactions).set(entry.row).where(eq(transactions.id, existing.id)).run();
       } else {
-        inserts.push(entry.row);
+        inserts.push({ ...entry.row, ...takeHandedOn(entry.row) });
       }
     }
     for (let start = 0; start < inserts.length; start += INSERT_BATCH_SIZE) {
@@ -412,10 +456,21 @@ export class SyncService implements OnModuleInit {
         .insert(transactions)
         .values(inserts.slice(start, start + INSERT_BATCH_SIZE))
         .onConflictDoNothing()
-        .returning({ status: transactions.status })
+        .returning({
+          id: transactions.id,
+          status: transactions.status,
+          subcategoryId: transactions.subcategoryId,
+          categoryConfirmed: transactions.categoryConfirmed,
+        })
         .all();
       added += inserted.filter((row) => row.status === 'booked').length;
+      toGuess.push(
+        ...inserted
+          .filter((row) => row.subcategoryId === null && !row.categoryConfirmed)
+          .map((row) => row.id),
+      );
     }
+    this.guesser.guess(tx, toGuess);
     return added;
   }
 }

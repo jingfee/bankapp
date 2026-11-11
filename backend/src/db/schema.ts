@@ -117,12 +117,22 @@ export const transactions = sqliteTable(
     /** The transaction as the bank returned it, as JSON. */
     raw: text('raw').notNull(),
     fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+    /** What the transaction is categorised as; null when it is uncategorised. */
+    subcategoryId: integer('subcategory_id').references(() => subcategories.id),
+    /**
+     * True when the owner decided the category: chose or accepted a subcategory, or removed it
+     * (`subcategoryId` null). The app never changes or guesses it then.
+     */
+    categoryConfirmed: integer('category_confirmed', { mode: 'boolean' }).notNull().default(false),
+    /** When the owner last chose or accepted the category; history reuses the most recent. */
+    categoryConfirmedAt: integer('category_confirmed_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
       .on(table.accountId, table.dedupKey)
       .where(sql`${table.status} = 'booked'`),
     index('transactions_account_date').on(table.accountId, table.date, table.id),
+    index('transactions_subcategory_id').on(table.subcategoryId),
   ],
 );
 
@@ -163,3 +173,9 @@ export const subcategories = sqliteTable(
   },
   (table) => [index('subcategories_category_id').on(table.categoryId)],
 );
+
+/** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
+export const startupTasks = sqliteTable('startup_tasks', {
+  name: text('name').primaryKey(),
+  completedAt: integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
+});

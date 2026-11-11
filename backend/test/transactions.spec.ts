@@ -190,6 +190,7 @@ describe('GET /api/transactions', () => {
         amount: { amount: -12.5, currency: 'SEK' },
         description: 'Lunch Rome',
         account: { id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
+        category: null,
         transactionDate: '2026-11-08',
         bookingDate: '2026-11-10',
         counterparty: 'Café Roma',

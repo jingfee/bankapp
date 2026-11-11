@@ -1,7 +1,14 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { Transaction, TransactionDetails, TransactionsResponse } from '@bankapp/shared';
-import type { Observable } from 'rxjs';
+import type {
+  SetTransactionCategoryRequest,
+  Transaction,
+  TransactionCategory,
+  TransactionCategoryResponse,
+  TransactionDetails,
+  TransactionsResponse,
+} from '@bankapp/shared';
+import { type Observable, map, tap } from 'rxjs';
 
 /** The part of the list the owner has loaded, kept so going back to it finds it as it was left. */
 export interface ListedTransactions {
@@ -26,5 +33,27 @@ export class TransactionsService {
   /** One transaction in full; errors with a 404 when it no longer exists. */
   get(id: string): Observable<TransactionDetails> {
     return this.http.get<TransactionDetails>(`/api/transactions/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * Sets the owner's chosen subcategory as confirmed, or removes it with null. The list kept for
+   * the way back is updated too, so it does not show the old category.
+   */
+  setCategory(id: number, subcategoryId: number | null): Observable<TransactionCategory | null> {
+    const body: SetTransactionCategoryRequest = { subcategoryId };
+    return this.http
+      .put<TransactionCategoryResponse>(`/api/transactions/${id}/category`, body)
+      .pipe(
+        map((response) => response.category),
+        tap((category) => {
+          if (this.listed === null) return;
+          this.listed = {
+            ...this.listed,
+            transactions: this.listed.transactions.map((t) =>
+              t.id === id ? { ...t, category } : t,
+            ),
+          };
+        }),
+      );
   }
 }

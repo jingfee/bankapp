@@ -4,7 +4,7 @@ status: accepted
 
 # Categories are guessed locally, never by an external AI or cloud service
 
-Transaction descriptions show where and with whom the owner spends money, so they must not leave the owner's server. The app guesses categories with methods that run entirely inside the backend: it reuses the owner's earlier confirmed categories for the same description, falls back to a built-in list of Swedish merchant keywords, and uses a small text classifier trained only on the owner's own confirmed categories. A guess below a confidence threshold is not made at all, and the transaction stays uncategorised.
+Transaction descriptions show where and with whom the owner spends money, so they must not leave the owner's server. The app guesses categories with methods that run entirely inside the backend: it reuses the owner's earlier confirmed categories for the same description, falls back to a built-in list of Swedish merchant keywords, then to a built-in table of card merchant category codes (MCC) read from the raw bank response we already store, and uses a small text classifier trained only on the owner's own confirmed categories. A guess below a confidence threshold is not made at all, and the transaction stays uncategorised.
 
 ## Considered Options
 

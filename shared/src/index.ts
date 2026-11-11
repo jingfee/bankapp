@@ -15,10 +15,13 @@ export type {
   ConnectedAccount,
   ConnectionStatus,
   Money,
+  SetTransactionCategoryRequest,
   StartSyncResponse,
   SyncSummary,
   Transaction,
   TransactionAccount,
+  TransactionCategory,
+  TransactionCategoryResponse,
   TransactionDetails,
   TransactionsResponse,
 } from './accounts';

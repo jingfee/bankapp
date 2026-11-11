@@ -2,7 +2,10 @@ import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { AccountType, Money, TransactionDetails } from '@bankapp/shared';
+import type { AccountType, Category, Money, TransactionDetails } from '@bankapp/shared';
+import { CategoriesService } from '../../categories.service';
+import { CategoryPickerComponent } from '../../category-picker/category-picker';
+import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -35,7 +38,7 @@ function formatOriginal({ amount, currency }: Money): string {
 
 @Component({
   selector: 'app-transaction-details-page',
-  imports: [RouterLink, MoneyPipe],
+  imports: [RouterLink, MoneyPipe, TransactionCategoryBadge, CategoryPickerComponent],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       @switch (state().status) {
@@ -73,6 +76,79 @@ function formatOriginal({ amount, currency }: Money): string {
                 {{ t.amount.amount | money: t.amount.currency }}
               </p>
             </header>
+            <section
+              data-category
+              class="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  data-category-button
+                  class="flex flex-1 items-center gap-3 text-left"
+                  [attr.aria-expanded]="picking()"
+                  [disabled]="saving()"
+                  (click)="togglePicker()"
+                >
+                  <app-transaction-category-badge [category]="t.category" />
+                  <span class="flex flex-1 flex-col">
+                    <span
+                      data-category-name
+                      class="font-medium"
+                      [class.text-zinc-500]="t.category?.confirmed === false"
+                      [class.dark:text-zinc-400]="t.category?.confirmed === false"
+                    >
+                      @if (t.category; as c) {
+                        {{ c.category.name }} / {{ c.subcategory.name }}
+                      } @else {
+                        Okategoriserad
+                      }
+                    </span>
+                    @if (t.category?.confirmed === false) {
+                      <span
+                        data-category-guessed-note
+                        class="text-sm text-zinc-500 dark:text-zinc-400"
+                        >Gissad</span
+                      >
+                    }
+                  </span>
+                  <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                    picking() ? 'Stäng' : 'Ändra'
+                  }}</span>
+                </button>
+              </div>
+              @if (t.category; as c) {
+                @if (!c.confirmed) {
+                  <button
+                    type="button"
+                    data-confirm-category
+                    class="self-start rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    [disabled]="saving()"
+                    (click)="setCategory(c.subcategory.id)"
+                  >
+                    Stämmer
+                  </button>
+                }
+                <button
+                  type="button"
+                  data-remove-category
+                  class="self-start text-sm font-medium underline"
+                  [disabled]="saving()"
+                  (click)="setCategory(null)"
+                >
+                  Ta bort kategori
+                </button>
+              }
+              @if (categoryError(); as error) {
+                <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ error }}</p>
+              }
+              @if (picking()) {
+                @if (categories(); as list) {
+                  <app-category-picker [categories]="list" (picked)="setCategory($event)" />
+                } @else {
+                  <p aria-live="polite">Hämtar kategorier…</p>
+                }
+              }
+            </section>
             <dl
               class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
@@ -101,6 +177,15 @@ function formatOriginal({ amount, currency }: Money): string {
 export class TransactionDetailsPage {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly transactions = inject(TransactionsService);
+  private readonly categoryList = inject(CategoriesService);
+
+  protected readonly picking = signal(false);
+  protected readonly saving = signal(false);
+  protected readonly categoryError = signal<string | null>(null);
+  /** Fetched the first time the picker opens. */
+  protected readonly categories = signal<Category[] | null>(null);
+  private loadingCategories = false;
 
   protected readonly state = signal<State>({ status: 'loading' });
   protected readonly details = computed(() => {
@@ -178,15 +263,50 @@ export class TransactionDetailsPage {
 
   constructor() {
     const id = inject(ActivatedRoute).snapshot.paramMap.get('id') ?? '';
-    inject(TransactionsService)
-      .get(id)
-      .subscribe({
-        next: (details) => this.state.set({ status: 'ready', details }),
-        error: (error: unknown) =>
-          this.state.set({
-            status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
-          }),
-      });
+    this.transactions.get(id).subscribe({
+      next: (details) => this.state.set({ status: 'ready', details }),
+      error: (error: unknown) =>
+        this.state.set({
+          status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
+        }),
+    });
+  }
+
+  protected togglePicker(): void {
+    this.picking.update((open) => !open);
+    this.categoryError.set(null);
+    if (!this.picking() || this.categories() !== null || this.loadingCategories) return;
+    this.loadingCategories = true;
+    this.categoryList.list().subscribe({
+      next: (list) => {
+        this.categories.set(list);
+        this.loadingCategories = false;
+      },
+      error: () => {
+        this.picking.set(false);
+        this.categoryError.set('Kategorierna kunde inte hämtas. Försök igen senare.');
+        this.loadingCategories = false;
+      },
+    });
+  }
+
+  /** Saves the owner's choice as a confirmed category; null makes the transaction uncategorised. */
+  protected setCategory(subcategoryId: number | null): void {
+    const details = this.details();
+    if (details === null || this.saving()) return;
+    this.saving.set(true);
+    this.categoryError.set(null);
+    this.transactions.setCategory(details.id, subcategoryId).subscribe({
+      next: (category) => {
+        this.state.set({ status: 'ready', details: { ...details, category } });
+        this.picking.set(false);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.categoryError.set('Kategorin kunde inte sparas. Försök igen.');
+        this.saving.set(false);
+      },
+    });
   }
 
   /** Steps back in history when the owner came from inside the app, so the list keeps its scroll position. */
