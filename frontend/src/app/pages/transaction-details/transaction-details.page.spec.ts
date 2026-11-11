@@ -117,6 +117,43 @@ describe('TransactionDetailsPage', () => {
       );
     });
 
+    it('shows a guessed category dimmed and confirms it with one tap', async () => {
+      const service = TestBed.inject(TransactionsService);
+      const guess = { ...livsmedel, confirmed: false };
+      service.listed = {
+        transactions: [{ ...details(), date: '2026-11-08', category: guess }],
+        cursor: null,
+      };
+      const rendered = await render(details({ category: guess }));
+      const { page } = rendered;
+
+      expect(page.querySelector('[data-category] [data-guessed]')).not.toBeNull();
+      expect(page.querySelector('[data-category-guessed-note]')?.textContent?.trim()).toBe(
+        'Gissad',
+      );
+
+      (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
+      const request = TestBed.inject(HttpTestingController).expectOne(
+        '/api/transactions/5/category',
+      );
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ subcategoryId: 12 });
+      request.flush({ category: livsmedel });
+      await rendered.fixture.whenStable();
+
+      expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
+      expect(page.querySelector('[data-confirm-category]')).toBeNull();
+      expect(page.querySelector('[data-category-guessed-note]')).toBeNull();
+      expect(service.listed?.transactions[0]?.category).toEqual(livsmedel);
+    });
+
+    it('offers no Stämmer for a confirmed category', async () => {
+      const { page } = await render(details({ category: livsmedel }));
+
+      expect(page.querySelector('[data-confirm-category]')).toBeNull();
+      expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
+    });
+
     it('says Okategoriserad when there is none', async () => {
       const { page } = await render(details());
 

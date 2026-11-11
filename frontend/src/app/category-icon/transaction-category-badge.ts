@@ -4,7 +4,7 @@ import { CategoryIconComponent } from './category-icon';
 
 /**
  * What a transaction is categorised as, at a glance: its subcategory's icon on its category's
- * colour, or a neutral placeholder when it is uncategorised.
+ * colour, dimmed while it is only a guess, or a neutral placeholder when it is uncategorised.
  */
 @Component({
   selector: 'app-transaction-category-badge',
@@ -13,9 +13,11 @@ import { CategoryIconComponent } from './category-icon';
   template: `
     @if (category(); as c) {
       <app-category-icon
+        [class.opacity-45]="!c.confirmed"
+        [attr.data-guessed]="c.confirmed ? null : ''"
         [icon]="c.subcategory.icon"
         [colour]="c.category.colour"
-        [label]="c.subcategory.name"
+        [label]="c.confirmed ? c.subcategory.name : c.subcategory.name + ' (gissad)'"
       />
     } @else {
       <span
