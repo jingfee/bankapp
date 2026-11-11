@@ -402,8 +402,10 @@ describe('the initial sync', () => {
           dedupKey: 'ref:ref-1',
           raw: '{"original":true}',
           fetchedAt: START,
-          subcategoryId: null,
+          // Guessed from the merchant keywords.
+          subcategoryId: expect.any(Number) as number,
           categoryConfirmed: false,
+          categoryConfirmedAt: null,
         },
       ]);
     });

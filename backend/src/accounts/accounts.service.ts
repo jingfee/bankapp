@@ -242,7 +242,7 @@ export class AccountsService {
 
   /**
    * Assigns the owner's chosen subcategory to a transaction as confirmed, or makes it
-   * uncategorised when `subcategoryId` is null. Returns the category the transaction now has.
+   * uncategorised for good when `subcategoryId` is null. Returns the category it now has.
    */
   setCategory(
     id: number,
@@ -260,7 +260,8 @@ export class AccountsService {
     }
     const updated = this.db
       .update(transactions)
-      .set({ subcategoryId, categoryConfirmed: subcategoryId !== null })
+      // Removing is the owner's decision too, so the app does not guess the transaction again.
+      .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
       .where(eq(transactions.id, id))
       .returning({ id: transactions.id })
       .get();

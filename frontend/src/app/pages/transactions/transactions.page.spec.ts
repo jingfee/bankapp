@@ -158,6 +158,27 @@ describe('TransactionsPage', () => {
     );
   });
 
+  it('shows a guessed category dimmed, and a confirmed one not', async () => {
+    const category = (confirmed: boolean) => ({
+      category: { id: 2, name: 'Mat & Dryck', colour: 'green' as const },
+      subcategory: { id: 12, name: 'Livsmedel', icon: 'shopping-basket' as const },
+      confirmed,
+    });
+    const { page } = await render(
+      response([
+        transaction(2, { category: category(false) }),
+        transaction(1, { category: category(true) }),
+      ]),
+    );
+
+    const [guessed, confirmed] = Array.from(page.querySelectorAll('li[data-transaction]'));
+    expect(guessed?.querySelector('[data-guessed]')).not.toBeNull();
+    expect(guessed?.querySelector('[data-badge]')?.getAttribute('aria-label')).toBe(
+      'Livsmedel (gissad)',
+    );
+    expect(confirmed?.querySelector('[data-guessed]')).toBeNull();
+  });
+
   it('links each transaction to its page', async () => {
     const { page } = await render(response([transaction(3), transaction(2)]));
 

@@ -90,11 +90,25 @@ function formatOriginal({ amount, currency }: Money): string {
                   (click)="togglePicker()"
                 >
                   <app-transaction-category-badge [category]="t.category" />
-                  <span data-category-name class="flex-1 font-medium">
-                    @if (t.category; as c) {
-                      {{ c.category.name }} / {{ c.subcategory.name }}
-                    } @else {
-                      Okategoriserad
+                  <span class="flex flex-1 flex-col">
+                    <span
+                      data-category-name
+                      class="font-medium"
+                      [class.text-zinc-500]="t.category?.confirmed === false"
+                      [class.dark:text-zinc-400]="t.category?.confirmed === false"
+                    >
+                      @if (t.category; as c) {
+                        {{ c.category.name }} / {{ c.subcategory.name }}
+                      } @else {
+                        Okategoriserad
+                      }
+                    </span>
+                    @if (t.category?.confirmed === false) {
+                      <span
+                        data-category-guessed-note
+                        class="text-sm text-zinc-500 dark:text-zinc-400"
+                        >Gissad</span
+                      >
                     }
                   </span>
                   <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
@@ -102,7 +116,18 @@ function formatOriginal({ amount, currency }: Money): string {
                   }}</span>
                 </button>
               </div>
-              @if (t.category) {
+              @if (t.category; as c) {
+                @if (!c.confirmed) {
+                  <button
+                    type="button"
+                    data-confirm-category
+                    class="self-start rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    [disabled]="saving()"
+                    (click)="setCategory(c.subcategory.id)"
+                  >
+                    Stämmer
+                  </button>
+                }
                 <button
                   type="button"
                   data-remove-category
