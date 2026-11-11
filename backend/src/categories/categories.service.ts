@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { asc } from 'drizzle-orm';
-import type { CategoriesResponse, Category, CategoryIcon } from '@bankapp/shared';
+import type { CategoriesResponse, Category, CategoryIcon, Subcategory } from '@bankapp/shared';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { categories, subcategories } from '../db/schema';
@@ -11,11 +11,17 @@ export class CategoriesService {
 
   /** Every category with its subcategories, both in the owner's order. */
   list(): CategoriesResponse['categories'] {
-    const subcategoryRows = this.db
+    const byCategory = new Map<number, Subcategory[]>();
+    const rows = this.db
       .select()
       .from(subcategories)
       .orderBy(asc(subcategories.sortOrder), asc(subcategories.id))
       .all();
+    for (const { id, categoryId, name, icon } of rows) {
+      const list = byCategory.get(categoryId) ?? [];
+      list.push({ id, name, icon: icon as CategoryIcon });
+      byCategory.set(categoryId, list);
+    }
 
     return this.db
       .select()
@@ -30,9 +36,7 @@ export class CategoriesService {
         colour: category.colour as Category['colour'],
         icon: category.icon as CategoryIcon,
         fixed: category.fixed,
-        subcategories: subcategoryRows
-          .filter((subcategory) => subcategory.categoryId === category.id)
-          .map(({ id, name, icon }) => ({ id, name, icon: icon as CategoryIcon })),
+        subcategories: byCategory.get(category.id) ?? [],
       }));
   }
 }
