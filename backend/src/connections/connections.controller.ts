@@ -9,9 +9,9 @@ export class ConnectionsController {
 
   @Post()
   start(@Body() body: unknown): Promise<StartConnectionResponse> {
-    const bank = (body as { bank?: unknown } | undefined)?.bank;
+    const { bank, renew } = (body ?? {}) as { bank?: unknown; renew?: unknown };
     if (typeof bank !== 'string' || bank === '') throw new BadRequestException('bank is required');
-    return this.connections.start(bank);
+    return this.connections.start(bank, renew === true);
   }
 
   /** Where Enable Banking sends the owner back after BankID. */

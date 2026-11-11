@@ -37,6 +37,8 @@ export const accounts = sqliteTable('accounts', {
 export const authorisations = sqliteTable('authorisations', {
   state: text('state').primaryKey(),
   bankName: text('bank_name').notNull(),
+  /** The owner asked to renew a connection that was still active. */
+  renewal: integer('renewal', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 

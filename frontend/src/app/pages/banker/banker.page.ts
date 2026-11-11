@@ -7,13 +7,12 @@ import { AccountsService } from '../../accounts.service';
 import { ConnectionsService } from '../../connections.service';
 import { DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
-import { HealthService } from '../../health.service';
 import { Redirector } from '../../redirector';
 import { SyncService } from '../../sync.service';
 
 type Loaded = AccountsResponse | { failed: true };
 
-/** How often the overview asks again while a sync is running. */
+/** How often the page asks again while a sync is running. */
 export const SYNC_POLL_INTERVAL_MS = 2000;
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -25,15 +24,13 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 };
 
 @Component({
-  selector: 'app-home-page',
+  selector: 'app-banker-page',
   imports: [RouterLink, DateTimePipe, MoneyPipe],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       <header>
-        <h1 class="text-3xl font-semibold tracking-tight">Bankapp</h1>
-        <p class="mt-1 text-zinc-600 dark:text-zinc-400">
-          Dina konton och transaktioner på ett ställe.
-        </p>
+        <h1 class="text-3xl font-semibold tracking-tight">Banker</h1>
+        <p class="mt-1 text-zinc-600 dark:text-zinc-400">Dina kopplingar och konton.</p>
       </header>
 
       @let result = loaded();
@@ -103,9 +100,19 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           >
             <h2 class="text-lg font-semibold">{{ group.bank }}</h2>
             @if (group.status === 'active') {
-              <p data-days-left class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Kopplingen går ut om {{ daysLeftText(group) }}.
-              </p>
+              <div class="mt-1 flex flex-wrap items-center gap-3">
+                <p data-days-left class="text-sm text-zinc-500 dark:text-zinc-400">
+                  Kopplingen går ut om {{ daysLeftText(group) }}.
+                </p>
+                <button
+                  type="button"
+                  class="rounded-lg border border-zinc-300 px-3 py-1 text-sm font-medium disabled:opacity-50 dark:border-zinc-700"
+                  [disabled]="renewing()"
+                  (click)="renew(group.bank, true)"
+                >
+                  Förnya
+                </button>
+              </div>
             }
             @if (group.status !== 'active') {
               <div
@@ -121,7 +128,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   [disabled]="renewing()"
                   (click)="renew(group.bank)"
                 >
-                  Anslut igen
+                  Förnya
                 </button>
               </div>
             }
@@ -173,36 +180,12 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             }
           </section>
         }
-        <a routerLink="/transaktioner" data-transactions-link class="font-medium underline"
-          >Alla transaktioner</a
-        >
         <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
       }
-
-      <p
-        class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400"
-        aria-live="polite"
-      >
-        @switch (serverReachable()) {
-          @case (true) {
-            <span class="size-2 rounded-full bg-emerald-500" aria-hidden="true"></span> Servern
-            svarar
-          }
-          @case (false) {
-            <span class="size-2 rounded-full bg-red-500" aria-hidden="true"></span> Servern svarar
-            inte
-          }
-          @default {
-            <span class="size-2 rounded-full bg-zinc-400" aria-hidden="true"></span> Kontaktar
-            servern…
-          }
-        }
-      </p>
     </main>
   `,
 })
-export class HomePage {
-  protected readonly serverReachable = toSignal(inject(HealthService).isServerReachable());
+export class BankerPage {
   private readonly accounts = inject(AccountsService);
   private readonly sync = inject(SyncService);
   private readonly connections = inject(ConnectionsService);
@@ -211,9 +194,9 @@ export class HomePage {
   protected readonly renewFailed = signal(false);
   /** Emits to start (or restart) fetching the accounts. */
   private readonly refresh = new BehaviorSubject<void>(undefined);
-  /** What the overview currently shows, kept across refreshes. */
+  /** What the page currently shows, kept across refreshes. */
   private shown: Loaded | undefined;
-  /** True from the owner pressing Uppdatera until the overview shows that sync has finished. */
+  /** True from the owner pressing Uppdatera until the page shows that sync has finished. */
   protected readonly manualSyncPending = signal(false);
   /** How the sync the owner started went, once it has finished. */
   protected readonly summary = signal<SyncSummary | null>(null);
@@ -249,7 +232,7 @@ export class HomePage {
     { initialValue: undefined },
   );
 
-  /** Starts a manual sync and follows it on the overview. */
+  /** Starts a manual sync and follows it on the page. */
   protected updateNow(): void {
     this.startFailed.set(false);
     this.summary.set(null);
@@ -264,10 +247,10 @@ export class HomePage {
   }
 
   /** Sends the owner to BankID to renew the bank's connection. */
-  protected renew(bank: string): void {
+  protected renew(bank: string, stillActive = false): void {
     this.renewing.set(true);
     this.renewFailed.set(false);
-    this.connections.start(bank).subscribe({
+    this.connections.start(bank, stillActive).subscribe({
       next: (url) => this.redirector.goTo(url),
       error: () => {
         this.renewing.set(false);

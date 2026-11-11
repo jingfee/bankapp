@@ -134,11 +134,35 @@ describe('connection expiry and renewal', () => {
   describe('renewing', () => {
     const FUTURE = new Date(START.getTime() + 90 * DAY);
 
-    it('is refused while the connection is neither expiring nor expired', async () => {
+    it('is refused for an active connection unless it is asked for as a renewal', async () => {
       await start();
       await connect(session(new Date(START.getTime() + 30 * DAY)));
 
       await startRenewal().expect(409);
+    });
+
+    it('is allowed for an active connection when asked for as a renewal', async () => {
+      await start();
+      await connect(session(new Date(START.getTime() + 30 * DAY)));
+
+      await request(app.getHttpServer())
+        .post('/api/connections')
+        .send({ bank: 'Swedbank', renew: true })
+        .expect(201);
+      const state = enableBanking.authorisations.at(-1)!.state;
+      enableBanking.session = session(FUTURE, [lonekonto, sparkonto], 'session-2');
+      const response = await request(app.getHttpServer())
+        .get('/api/connections/callback')
+        .query({ code: 'renew-code', state })
+        .expect(302);
+      await settle();
+
+      expect(response.headers['location']).toBe('/anslut-bank/resultat?status=ok&bank=Swedbank');
+      expect(db().select().from(connections).all()).toHaveLength(1);
+      expect(db().select().from(connections).all()[0]).toMatchObject({
+        sessionId: 'session-2',
+        validUntil: FUTURE,
+      });
     });
 
     it.each([
