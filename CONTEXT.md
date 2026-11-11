@@ -117,7 +117,7 @@ The total of transactions in income categories.
 _Avoid_: Deposits, credits, money in
 
 **Transfer** (sv: _Överföring_):
-A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income. 
+A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income.
 _Avoid_: Internal transaction, excluded transaction, transfer flag
 
 **Uncategorised transaction** (sv: _Okategoriserad_):
