@@ -79,7 +79,7 @@ _Avoid_: Settlement date, posting date
 ### Syncing
 
 **Sync** (sv: _Uppdatering_):
-One run of fetching balances and transactions for every account on active connections and storing them.
+One run of fetching details, balances and transactions for every account on active connections and storing them. Account details refresh the account's name.
 _Avoid_: Fetch, refresh, import
 
 **Initial sync** (sv: _Första uppdatering_):

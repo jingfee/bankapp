@@ -193,38 +193,40 @@ describe('HttpEnableBankingClient', () => {
   });
 
   describe('createSession', () => {
+    const sessionAccounts = [
+      {
+        uid: 'u1',
+        identification_hash: 'h1',
+        name: 'Anna Andersson',
+        details: 'Lönekonto',
+        product: 'Privatkonto',
+        cash_account_type: 'CACC',
+        currency: 'SEK',
+      },
+      {
+        uid: 'u2',
+        identification_hash: 'h2',
+        name: 'Anna Andersson',
+        product: 'Sparkonto',
+        cash_account_type: 'SVGS',
+        currency: 'SEK',
+      },
+      {
+        uid: 'u3',
+        identification_hash: 'h3',
+        name: 'Anna Andersson',
+        account_id: { iban: 'SE123' },
+        cash_account_type: 'CARD',
+        currency: 'SEK',
+      },
+    ];
+
     it('exchanges the code and maps the session and its accounts', async () => {
       respond = () =>
         Response.json({
           session_id: 'session-1',
           access: { valid_until: '2027-02-08T12:00:00.000Z' },
-          accounts: [
-            {
-              uid: 'u1',
-              identification_hash: 'h1',
-              name: 'Anna Andersson',
-              details: 'Lönekonto',
-              product: 'Privatkonto',
-              cash_account_type: 'CACC',
-              currency: 'SEK',
-            },
-            {
-              uid: 'u2',
-              identification_hash: 'h2',
-              name: 'Anna Andersson',
-              product: 'Sparkonto',
-              cash_account_type: 'SVGS',
-              currency: 'SEK',
-            },
-            {
-              uid: 'u3',
-              identification_hash: 'h3',
-              name: 'Anna Andersson',
-              account_id: { iban: 'SE123' },
-              cash_account_type: 'CARD',
-              currency: 'SEK',
-            },
-          ],
+          accounts: sessionAccounts,
         });
 
       expect(await client().createSession('the-code')).toEqual({
@@ -237,6 +239,7 @@ describe('HttpEnableBankingClient', () => {
             name: 'Lönekonto',
             type: 'payment',
             currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[0]),
           },
           {
             uid: 'u2',
@@ -244,8 +247,16 @@ describe('HttpEnableBankingClient', () => {
             name: 'Sparkonto',
             type: 'savings',
             currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[1]),
           },
-          { uid: 'u3', identificationHash: 'h3', name: 'SE123', type: 'card', currency: 'SEK' },
+          {
+            uid: 'u3',
+            identificationHash: 'h3',
+            name: 'SE123',
+            type: 'card',
+            currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[2]),
+          },
         ],
       });
       expect(requests[0]).toMatchObject({
@@ -253,6 +264,40 @@ describe('HttpEnableBankingClient', () => {
         method: 'POST',
         body: { code: 'the-code' },
       });
+    });
+  });
+
+  describe('getAccountDetails', () => {
+    it('fetches the account details and maps them like a session account', async () => {
+      const resource = {
+        uid: 'u1',
+        identification_hash: 'h1',
+        name: 'Anna Andersson',
+        product: 'Privatkonto',
+        cash_account_type: 'CACC',
+        currency: 'SEK',
+        extra: 'kept',
+      };
+      respond = () => Response.json(resource);
+
+      expect(await client().getAccountDetails('u 1')).toEqual({
+        uid: 'u1',
+        identificationHash: 'h1',
+        name: 'Privatkonto',
+        type: 'payment',
+        currency: 'SEK',
+        raw: JSON.stringify(resource),
+      });
+      expect(requests[0]).toMatchObject({
+        url: 'https://enable.test/accounts/u%201/details',
+        method: 'GET',
+      });
+    });
+
+    it('rejects with a RateLimitError when the bank is asked too often', async () => {
+      respond = () => new Response('', { status: 429 });
+
+      await expect(client().getAccountDetails('u1')).rejects.toBeInstanceOf(RateLimitError);
     });
   });
 

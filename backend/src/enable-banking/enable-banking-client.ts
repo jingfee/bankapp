@@ -31,6 +31,8 @@ export interface EnableBankingAccount {
   name: string;
   type: EnableBankingAccountType;
   currency: string;
+  /** The account as Enable Banking returned it (unknown fields kept), as JSON, so naming can improve later. */
+  raw: string;
 }
 
 /** What a successful BankID login yields. */
@@ -111,6 +113,14 @@ export abstract class EnableBankingClient {
     accountUid: string,
     options?: RequestOptions,
   ): Promise<EnableBankingBalance[]>;
+  /**
+   * The account as Enable Banking describes it now, for refreshing its name. Rejects with
+   * {@link RateLimitError} when the bank says the account was asked for too often.
+   */
+  abstract getAccountDetails(
+    accountUid: string,
+    options?: RequestOptions,
+  ): Promise<EnableBankingAccount>;
   /**
    * The transactions of the account from `dateFrom`, or the longest history the bank returns,
    * with every page already fetched. Both fetches reject with {@link RateLimitError} when the

@@ -2,6 +2,7 @@ import type { AppConfig } from '../src/config/config';
 import {
   RateLimitError,
   type AuthorisationRequest,
+  type EnableBankingAccount,
   type EnableBankingBalance,
   type EnableBankingBank,
   type EnableBankingClient,
@@ -43,6 +44,11 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   requestedBalances: string[] = [];
   /** The options of every balance request, in order. */
   balanceOptions: (RequestOptions | undefined)[] = [];
+  /** What the bank describes each account as, by `uid`; an account without an entry fails. */
+  accountDetails = new Map<string, EnableBankingAccount>();
+  /** Account `uid`s whose details the bank answers with a rate limit. */
+  rateLimitedDetails = new Set<string>();
+  requestedDetails: string[] = [];
   /** Transactions by account `uid`; an account without an entry has none. */
   transactions = new Map<string, EnableBankingTransaction[]>();
   /** Account `uid`s whose transactions the bank refuses to return. */
@@ -76,6 +82,15 @@ export class FakeEnableBankingClient implements EnableBankingClient {
     if (this.rateLimited.has(accountUid)) throw new RateLimitError('Too many requests');
     if (this.failingBalances.has(accountUid)) throw new Error('The bank refused the request');
     return this.balances.get(accountUid) ?? [];
+  }
+
+  getAccountDetails(accountUid: string): Promise<EnableBankingAccount> {
+    this.requestedDetails.push(accountUid);
+    if (this.rateLimitedDetails.has(accountUid)) {
+      return Promise.reject(new RateLimitError('Too many requests'));
+    }
+    const details = this.accountDetails.get(accountUid);
+    return details ? Promise.resolve(details) : Promise.reject(new Error('No details'));
   }
 
   getTransactions(

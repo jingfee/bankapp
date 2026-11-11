@@ -20,6 +20,7 @@ const lonekonto: EnableBankingAccount = {
   name: 'Lönekonto',
   type: 'payment',
   currency: 'SEK',
+  raw: '{}',
 };
 const sparkonto: EnableBankingAccount = {
   uid: 'uid-2',
@@ -27,6 +28,7 @@ const sparkonto: EnableBankingAccount = {
   name: 'Sparkonto',
   type: 'savings',
   currency: 'SEK',
+  raw: '{}',
 };
 
 describe('connection expiry and renewal', () => {
@@ -245,6 +247,15 @@ describe('connection expiry and renewal', () => {
       await renew(session(FUTURE, [{ ...lonekonto, uid: 'new-uid-1' }, sparkonto]));
 
       expect(db().select().from(transactions).all()).toHaveLength(1);
+    });
+
+    it('stores the raw account the renewal returns', async () => {
+      await start();
+      await connect(session(new Date(START.getTime() + 5 * DAY), [lonekonto]));
+
+      await renew(session(FUTURE, [{ ...lonekonto, raw: '{"renewed":true}' }]));
+
+      expect(db().select().from(accounts).all()).toMatchObject([{ raw: '{"renewed":true}' }]);
     });
 
     it('adds accounts the renewal returns that were not there before', async () => {

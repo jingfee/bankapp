@@ -1,9 +1,9 @@
-import type { INestApplication } from '@nestjs/common';
+import { Logger, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { AccountsResponse, ConnectedAccount } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
-import { balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
+import { accounts, balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
 import type {
   EnableBankingAccount,
   EnableBankingBalance,
@@ -21,7 +21,7 @@ function account(
   name: string,
   type: EnableBankingAccount['type'] = 'payment',
 ): EnableBankingAccount {
-  return { uid, identificationHash: `hash-${uid}`, name, type, currency: 'SEK' };
+  return { uid, identificationHash: `hash-${uid}`, name, type, currency: 'SEK', raw: '{}' };
 }
 
 function balance(
@@ -282,6 +282,56 @@ describe('the initial sync', () => {
         { accountId: 1, outcome: 'failed', failed: true },
         { accountId: 2, outcome: 'ok', failed: false },
       ]);
+    });
+  });
+
+  describe('account details', () => {
+    const details = (uid: string, name: string): EnableBankingAccount => ({
+      ...account(uid, name),
+      raw: JSON.stringify({ uid, product: name }),
+    });
+    const storedAccounts = () => db().select().from(accounts).orderBy(accounts.id).all();
+
+    it('renames the account and stores the raw account from the bank', async () => {
+      enableBanking.accountDetails.set('u1', details('u1', 'Lönekonto'));
+
+      await connect('Swedbank', [account('u1', 'Anna Andersson')]);
+      await settled();
+
+      expect(storedAccounts()).toMatchObject([
+        { name: 'Lönekonto', raw: JSON.stringify({ uid: 'u1', product: 'Lönekonto' }) },
+      ]);
+    });
+
+    it('keeps the old name and still syncs when the details cannot be fetched', async () => {
+      enableBanking.balances.set('u1', [balance('CLBD', 5)]);
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      await connect('Swedbank', [account('u1', 'Anna Andersson')]);
+      await settled();
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not fetch details'));
+      warn.mockRestore();
+
+      expect(storedAccounts()).toMatchObject([{ name: 'Anna Andersson', raw: '{}' }]);
+      expect(await accountNamed('Anna Andersson')).toMatchObject({ balance: { amount: 5 } });
+      expect(db().select().from(syncAccountResults).all()).toMatchObject([{ outcome: 'ok' }]);
+    });
+
+    it('treats a rate limit on the details as a rate limit for the connection', async () => {
+      enableBanking.rateLimitedDetails.add('u1');
+
+      await connect('Swedbank', [
+        account('u1', 'Lönekonto'),
+        account('u2', 'Sparkonto', 'savings'),
+      ]);
+      await settled();
+
+      expect(db().select().from(syncAccountResults).all()).toMatchObject([
+        { accountId: 1, outcome: 'rate-limited' },
+        { accountId: 2, outcome: 'rate-limited' },
+      ]);
+      expect(enableBanking.requestedDetails).toEqual(['u1']);
     });
   });
 

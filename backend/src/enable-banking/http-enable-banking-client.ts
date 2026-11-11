@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   RateLimitError,
   type AuthorisationRequest,
+  EnableBankingAccount,
   EnableBankingAccountType,
   EnableBankingBalance,
   EnableBankingBank,
@@ -59,18 +60,25 @@ const aspspsResponse = z.object({
 
 const authResponse = z.object({ url: z.string() });
 
+/** Accounts are kept as Enable Banking returned them, so only the fields we read are described. */
+const accountResource = z.looseObject({
+  uid: z.string().nullish(),
+  identification_hash: z.string().nullish(),
+  name: z.string().nullish(),
+  details: z.string().nullish(),
+  product: z.string().nullish(),
+  account_id: z.object({ iban: z.string().nullish() }).nullish(),
+  cash_account_type: z.string().nullish(),
+  currency: z.string().nullish(),
+});
+
 const sessionResponse = z.object({
   session_id: z.string(),
   access: z.object({ valid_until: z.string() }),
   accounts: z.array(
-    z.object({
+    accountResource.extend({
       uid: z.string(),
       identification_hash: z.string(),
-      name: z.string().nullish(),
-      details: z.string().nullish(),
-      product: z.string().nullish(),
-      account_id: z.object({ iban: z.string().nullish() }).nullish(),
-      cash_account_type: z.string().nullish(),
       currency: z.string(),
     }),
   ),
@@ -177,20 +185,24 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     return {
       sessionId: session.session_id,
       validUntil: new Date(session.access.valid_until),
-      accounts: session.accounts.map((account) => ({
-        uid: account.uid,
-        identificationHash: account.identification_hash,
-        // `name` is the account holder's, so it only comes after what names the account itself.
-        name:
-          account.details?.trim() ||
-          account.product?.trim() ||
-          account.account_id?.iban ||
-          account.name?.trim() ||
-          account.uid,
-        type: ACCOUNT_TYPES[account.cash_account_type ?? ''] ?? 'payment',
-        currency: account.currency,
-      })),
+      accounts: session.accounts.map((account) =>
+        toAccount(account, account.uid, account.identification_hash),
+      ),
     };
+  }
+
+  async getAccountDetails(
+    accountUid: string,
+    options: RequestOptions = {},
+  ): Promise<EnableBankingAccount> {
+    const response = await this.send(
+      'GET',
+      `/accounts/${encodeURIComponent(accountUid)}/details`,
+      undefined,
+      options.psu,
+    );
+    const account = accountResource.parse(response);
+    return toAccount(account, account.uid ?? accountUid, account.identification_hash ?? '');
   }
 
   async getBalances(
@@ -285,6 +297,27 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       .setExpirationTime(issuedAt + TOKEN_LIFETIME_SECONDS)
       .sign(this.key);
   }
+}
+
+function toAccount(
+  account: z.infer<typeof accountResource>,
+  uid: string,
+  identificationHash: string,
+): EnableBankingAccount {
+  return {
+    uid,
+    identificationHash,
+    // `name` is the account holder's, so it only comes after what names the account itself.
+    name:
+      account.details?.trim() ||
+      account.product?.trim() ||
+      account.account_id?.iban ||
+      account.name?.trim() ||
+      uid,
+    type: ACCOUNT_TYPES[account.cash_account_type ?? ''] ?? 'payment',
+    currency: account.currency ?? '',
+    raw: JSON.stringify(account),
+  };
 }
 
 function toTransaction(
