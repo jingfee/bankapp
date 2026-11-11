@@ -125,3 +125,41 @@ export const transactions = sqliteTable(
     index('transactions_account_date').on(table.accountId, table.date, table.id),
   ],
 );
+
+/**
+ * What a transaction is categorised as, at the top level. `colour` is a name from the shared
+ * palette and `icon` a name from the shared curated icon set. There is exactly one income and
+ * one transfer category, both fixed.
+ */
+export const categories = sqliteTable(
+  'categories',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    kind: text('kind', { enum: ['expense', 'income', 'transfer'] }).notNull(),
+    colour: text('colour').notNull(),
+    icon: text('icon').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    fixed: integer('fixed', { mode: 'boolean' }).notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex('categories_one_income_or_transfer')
+      .on(table.kind)
+      .where(sql`kind <> 'expense'`),
+  ],
+);
+
+/** A second-level grouping; it has its category's colour and kind. */
+export const subcategories = sqliteTable(
+  'subcategories',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    categoryId: integer('category_id')
+      .notNull()
+      .references(() => categories.id),
+    name: text('name').notNull(),
+    icon: text('icon').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+  },
+  (table) => [index('subcategories_category_id').on(table.categoryId)],
+);

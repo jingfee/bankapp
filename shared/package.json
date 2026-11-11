@@ -2,7 +2,7 @@
   "name": "@bankapp/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "API types shared by the frontend and the backend. Type-only for now: import with `import type`.",
+  "description": "API types shared by the frontend and the backend, plus the category palette, icon set and default list. Backend production code imports types only (the shared package is not in the runtime image).",
   "exports": {
     ".": {
       "types": "./src/index.ts",
