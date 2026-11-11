@@ -1,6 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
-import type { AccountsResponse, Money, SyncSummary, TransactionsResponse } from '@bankapp/shared';
+import type {
+  AccountsResponse,
+  Money,
+  SyncSummary,
+  TransactionDetails,
+  TransactionsResponse,
+} from '@bankapp/shared';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import {
@@ -14,6 +20,7 @@ import {
 import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
+import { parseTransactionDetails } from './transaction-details';
 
 /**
  * Which balance the overview shows, most preferred first: booked closing, then booked
@@ -148,6 +155,35 @@ export class AccountsService {
         account: { id: row.accountId, name: accountName, bank, type: accountType },
       })),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
+    };
+  }
+
+  /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */
+  getTransaction(id: number): TransactionDetails | null {
+    const found = this.db
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .where(eq(transactions.id, id))
+      .get();
+    if (found === undefined) return null;
+    const { transaction: row, accountName, accountType, bank } = found;
+    return {
+      id: row.id,
+      status: row.status,
+      amount: { amount: row.amount, currency: row.currency },
+      description: row.description,
+      account: { id: row.accountId, name: accountName, bank, type: accountType },
+      transactionDate: row.transactionDate,
+      bookingDate: row.bookingDate,
+      ...parseTransactionDetails(row.raw, row.amount),
+      raw: row.raw,
     };
   }
 

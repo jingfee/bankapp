@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import type {
   AccountsResponse,
   BankAccounts,
@@ -9,6 +9,7 @@ import type {
   Transaction,
   TransactionsResponse,
 } from '@bankapp/shared';
+import { TransactionsService } from '../../transactions.service';
 import { TransactionsPage } from './transactions.page';
 
 describe('TransactionsPage', () => {
@@ -125,6 +126,42 @@ describe('TransactionsPage', () => {
     expect(incoming?.classList.contains('text-emerald-600')).toBe(true);
     expect(outgoing?.textContent?.trim()).toBe('−1 234,50 kr');
     expect(outgoing?.classList.contains('text-emerald-600')).toBe(false);
+  });
+
+  it('links each transaction to its page', async () => {
+    const { page } = await render(response([transaction(3), transaction(2)]));
+
+    const links = Array.from(page.querySelectorAll('li[data-transaction] a'));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/transaktioner/3',
+      '/transaktioner/2',
+    ]);
+  });
+
+  it('shows the list as it was left, without fetching, when coming back with the back button', async () => {
+    const service = TestBed.inject(TransactionsService);
+    service.listed = { transactions: [transaction(9)], cursor: '2026-11-10:9' };
+    vi.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
+      trigger: 'popstate',
+    } as ReturnType<Router['currentNavigation']>);
+
+    const fixture = TestBed.createComponent(TransactionsPage);
+    await fixture.whenStable();
+    TestBed.inject(HttpTestingController).expectOne('/api/accounts').flush(accountsOf([]));
+    await fixture.whenStable();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(rows(page).map((row) => row.text)).toEqual(['Köp 9']);
+    expect(page.querySelector('[data-more]')).not.toBeNull();
+  });
+
+  it('remembers what it loaded for the way back', async () => {
+    await render(response([transaction(1)], '2026-11-10:1'));
+
+    expect(TestBed.inject(TransactionsService).listed).toEqual({
+      transactions: [transaction(1)],
+      cursor: '2026-11-10:1',
+    });
   });
 
   it('marks pending transactions as Reserverad and no others', async () => {

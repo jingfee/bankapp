@@ -86,3 +86,28 @@ export interface TransactionsResponse {
   /** Pass as `?before=` to get the next, older page; null when there are no more. */
   nextCursor: string | null;
 }
+
+/** A transaction in full, for its own page. Fields the bank did not send are null or empty. */
+export interface TransactionDetails {
+  id: number;
+  status: 'booked' | 'pending';
+  amount: Money;
+  description: string;
+  account: TransactionAccount;
+  /** `YYYY-MM-DD`: the day the owner made the transaction. */
+  transactionDate: string | null;
+  /** `YYYY-MM-DD`: the day the bank booked it; pending transactions have none. */
+  bookingDate: string | null;
+  /** The other party: the creditor when money left the account, the debtor when it arrived. */
+  counterparty: string | null;
+  /** What was paid in a foreign currency, signed like `amount`; null for domestic purchases. */
+  originalAmount: Money | null;
+  /** Units of the account's currency per unit of the original currency, when the bank says. */
+  exchangeRate: number | null;
+  /** Free-text lines the payer gave (message, OCR); empty when none. */
+  remittanceInformation: string[];
+  referenceNumber: string | null;
+  note: string | null;
+  /** The transaction as the bank returned it, as stored (JSON). */
+  raw: string;
+}

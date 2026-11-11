@@ -11,6 +11,7 @@ export type {
   SyncSummary,
   Transaction,
   TransactionAccount,
+  TransactionDetails,
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
