@@ -56,9 +56,6 @@ export class ConnectionsService {
         validUntil: new Date(now.getTime() + bank.maximumConsentSeconds * 1000 - CONSENT_MARGIN_MS),
         state,
         redirectUrl: this.config.redirectUrl,
-        ...(bank.personnummer !== 'none' && this.config.personnummer
-          ? { personnummer: this.config.personnummer }
-          : {}),
       }));
     } catch (cause) {
       this.logger.warn(`Could not start a connection to ${bank.name}: ${String(cause)}`);

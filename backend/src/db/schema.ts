@@ -8,7 +8,6 @@ export const banks = sqliteTable('banks', {
   logoUrl: text('logo_url'),
   beta: integer('beta', { mode: 'boolean' }).notNull().default(false),
   maximumConsentSeconds: integer('maximum_consent_seconds').notNull(),
-  personnummer: text('personnummer', { enum: ['none', 'optional', 'required'] }).notNull(),
 });
 
 /** The owner's permission to read one bank. A bank has at most one. */
