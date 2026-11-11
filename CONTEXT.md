@@ -93,3 +93,41 @@ _Avoid_: Background job, cron sync, automatic refresh
 **Manual sync** (sv: _Manuell uppdatering_):
 A sync the owner starts from the app, made on the owner's behalf while they are present.
 _Avoid_: Refresh, force sync
+
+### Categorising
+
+**Category** (sv: _Kategori_):
+A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The app starts with a default set; the owner can add, rename, reorder and remove expense categories, while the single income category and the single Överföring category are fixed and only gain or lose subcategories.
+_Avoid_: Group, main category, tag
+
+**Subcategory** (sv: _Underkategori_):
+A second-level grouping within one category, such as Bolån ränta & amortering under Boende & Hushåll. A transaction is always assigned a subcategory, never a bare category; every category has an Övrigt subcategory for when nothing more specific fits.
+_Avoid_: Category (when the second level is meant), tag, label
+
+**Category kind** (sv: _Kategorityp_):
+Whether a category is Utgift (expense), Inkomst (income) or Överföring (transfer). There is exactly one Inkomst category and one Överföring category; every other category is an expense category. Every subcategory has its category's kind. The kind, not the sign of the amount, decides how a transaction counts: a refund under an expense category reduces spending rather than counting as income.
+_Avoid_: Type, direction, account type
+
+**Spending** (sv: _Utgifter_):
+The total of transactions in expense categories, with money leaving the account counted as spending and refunds reducing it.
+_Avoid_: Costs, outgoings, debits
+
+**Income** (sv: _Inkomster_):
+The total of transactions in income categories.
+_Avoid_: Deposits, credits, money in
+
+**Transfer** (sv: _Överföring_):
+A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income. 
+_Avoid_: Internal transaction, excluded transaction, transfer flag
+
+**Uncategorised transaction** (sv: _Okategoriserad_):
+A transaction that has no subcategory assigned, neither guessed nor confirmed.
+_Avoid_: Unknown, other, Övrigt
+
+**Guessed category** (sv: _Gissad kategori_):
+A subcategory the app assigned to a transaction on its own. It counts in totals like any other but is shown as a guess until the owner confirms or changes it.
+_Avoid_: Suggestion, auto-category, prediction
+
+**Confirmed category** (sv: _Bekräftad kategori_):
+A subcategory the owner chose or accepted for a transaction. The app never changes a confirmed category on its own.
+_Avoid_: Manual category, locked category
