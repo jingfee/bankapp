@@ -43,6 +43,13 @@
       "when": 1794342087308,
       "tag": "0005_account_closed",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794422043751,
+      "tag": "0006_authorisation_renewal",
+      "breakpoints": true
     }
   ]
 }

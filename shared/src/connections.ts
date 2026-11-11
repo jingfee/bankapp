@@ -2,6 +2,8 @@
 export interface StartConnectionRequest {
   /** Name of the bank to connect, as listed by `GET /api/banks`. */
   bank: string;
+  /** Renew the bank's connection even though it is still active. */
+  renew?: boolean;
 }
 
 /** Response body of `POST /api/connections`: where to send the owner to log in with BankID. */

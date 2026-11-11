@@ -1,6 +1,9 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type { Transaction } from '@bankapp/shared';
+import type { ConnectedAccount, Transaction } from '@bankapp/shared';
+import { catchError, map, of } from 'rxjs';
+import { AccountsService } from '../../accounts.service';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { TransactionsService } from '../../transactions.service';
@@ -17,7 +20,32 @@ interface DayGroup {
   imports: [RouterLink, DateHeadingPipe, MoneyPipe],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <a routerLink="/" class="text-sm font-medium underline">Till översikten</a>
+      @if (expiringConnection()) {
+        <p
+          data-connection-banner
+          class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+        >
+          En koppling går ut eller har gått ut.
+          <a routerLink="/banker" class="font-medium underline">Gå till Banker</a>
+        </p>
+      }
+
+      @if (openAccounts(); as open) {
+        <ul data-balance-strip class="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+          @for (account of open; track account.id) {
+            <li
+              class="flex shrink-0 flex-col rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <span data-account-name class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                account.name
+              }}</span>
+              <span data-balance class="font-medium tabular-nums">{{
+                account.balance ? (account.balance.amount | money: account.balance.currency) : '–'
+              }}</span>
+            </li>
+          }
+        </ul>
+      }
 
       @switch (status()) {
         @case ('loading') {
@@ -33,6 +61,9 @@ interface DayGroup {
           </header>
           @if (groups().length === 0) {
             <p>Inga transaktioner ännu.</p>
+            @if (!openAccounts()) {
+              <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
+            }
           }
           @for (group of groups(); track group.date) {
             <section
@@ -85,6 +116,26 @@ interface DayGroup {
 })
 export class TransactionsPage {
   private readonly service = inject(TransactionsService);
+  /** Fetched once; the strip is a convenience, so a failure just leaves it out. */
+  private readonly accounts = toSignal(
+    inject(AccountsService)
+      .list()
+      .pipe(
+        map((response) => response),
+        catchError(() => of(undefined)),
+      ),
+    { initialValue: undefined },
+  );
+
+  /** The accounts that are still open, or null when there are none to show. */
+  protected readonly openAccounts = computed<ConnectedAccount[] | null>(() => {
+    const open = this.accounts()?.banks.flatMap((group) => group.accounts) ?? [];
+    return open.length === 0 ? null : open;
+  });
+
+  protected readonly expiringConnection = computed(
+    () => this.accounts()?.banks.some((group) => group.status !== 'active') ?? false,
+  );
 
   protected readonly status = signal<Status>('loading');
   protected readonly cursor = signal<string | null>(null);

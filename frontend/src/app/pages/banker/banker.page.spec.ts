@@ -11,19 +11,18 @@ import type {
   AccountsResponse,
   BankAccounts,
   ConnectedAccount,
-  HealthResponse,
   SyncSummary,
 } from '@bankapp/shared';
 import { Redirector } from '../../redirector';
-import { HomePage, SYNC_POLL_INTERVAL_MS } from './home.page';
+import { BankerPage, SYNC_POLL_INTERVAL_MS } from './banker.page';
 
-describe('HomePage', () => {
+describe('BankerPage', () => {
   let redirects: string[];
 
   beforeEach(() => {
     redirects = [];
     TestBed.configureTestingModule({
-      imports: [HomePage],
+      imports: [BankerPage],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -37,15 +36,11 @@ describe('HomePage', () => {
 
   type Respond = (request: ReturnType<HttpTestingController['expectOne']>) => void;
 
-  /** Renders the page and answers its health check and accounts request. */
-  async function render(
-    respondToHealth: Respond,
-    respondToAccounts: Respond = noAccounts,
-  ): Promise<HTMLElement> {
-    const fixture = TestBed.createComponent(HomePage);
+  /** Renders the page and answers its accounts request. */
+  async function render(respondToAccounts: Respond = noAccounts): Promise<HTMLElement> {
+    const fixture = TestBed.createComponent(BankerPage);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
-    respondToHealth(http.expectOne('/api/health'));
     respondToAccounts(http.expectOne('/api/accounts'));
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
@@ -73,22 +68,21 @@ describe('HomePage', () => {
     ...overrides,
   });
 
-  const serverUp: Respond = (request) => request.flush({ status: 'ok' } satisfies HealthResponse);
-  const serverDown: Respond = (request) => request.error(new ProgressEvent('error'));
+  const failed: Respond = (request) => request.error(new ProgressEvent('error'));
   const noAccounts: Respond = (request) =>
     request.flush({ banks: [], syncing: false, lastSync: null } satisfies AccountsResponse);
 
-  it('greets the owner in Swedish with an empty state and a way to connect a bank', async () => {
-    const page = await render(serverUp);
+  it('has an empty state with a way to connect a bank', async () => {
+    const page = await render();
 
-    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Bankapp');
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Banker');
     expect(page.textContent).toContain('Inga banker är anslutna ännu.');
     const link = page.querySelector('a[href="/anslut-bank"]');
     expect(link?.textContent?.trim()).toBe('Anslut bank');
   });
 
   it('lists the accounts grouped by bank with their type', async () => {
-    const page = await render(serverUp, (request) =>
+    const page = await render((request) =>
       request.flush({
         banks: [
           group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
@@ -121,8 +115,8 @@ describe('HomePage', () => {
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
   });
 
-  it('links to the transactions of all accounts', async () => {
-    const page = await render(serverUp, (request) =>
+  it('does not show the Servern svarar indicator or a transactions link', async () => {
+    const page = await render((request) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
         syncing: false,
@@ -130,10 +124,8 @@ describe('HomePage', () => {
       } satisfies AccountsResponse),
     );
 
-    expect(page.querySelector('a[href="/transaktioner"]')?.textContent?.trim()).toBe(
-      'Alla transaktioner',
-    );
-    expect(page.querySelector('a[href^="/konto"]')).toBeNull();
+    expect(page.textContent).not.toContain('Servern svarar');
+    expect(page.querySelector('a[href="/transaktioner"]')).toBeNull();
   });
 
   describe('balances and syncing', () => {
@@ -148,7 +140,7 @@ describe('HomePage', () => {
     });
 
     it('shows each balance in Swedish format and when the account was last synced', async () => {
-      const page = await render(serverUp, (request) =>
+      const page = await render((request) =>
         request.flush(
           swedbank(
             [
@@ -181,10 +173,9 @@ describe('HomePage', () => {
     it('keeps the accounts and keeps polling when a refresh fails during a sync', async () => {
       vi.useFakeTimers();
       try {
-        const fixture = TestBed.createComponent(HomePage);
+        const fixture = TestBed.createComponent(BankerPage);
         const http = TestBed.inject(HttpTestingController);
         await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
         http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
         await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
         http.expectOne('/api/accounts').error(new ProgressEvent('error'));
@@ -205,10 +196,9 @@ describe('HomePage', () => {
     it('shows that a sync is running and updates when it has finished', async () => {
       vi.useFakeTimers();
       try {
-        const fixture = TestBed.createComponent(HomePage);
+        const fixture = TestBed.createComponent(BankerPage);
         const http = TestBed.inject(HttpTestingController);
         await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
         http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
         await vi.advanceTimersByTimeAsync(0);
         const page = fixture.nativeElement as HTMLElement;
@@ -262,10 +252,9 @@ describe('HomePage', () => {
     /** Renders the page showing an idle overview, with fake timers so polling can be stepped. */
     async function renderIdle(accounts: AccountsResponse = swedbank(false)) {
       vi.useFakeTimers();
-      const fixture = TestBed.createComponent(HomePage);
+      const fixture = TestBed.createComponent(BankerPage);
       const http = TestBed.inject(HttpTestingController);
       await vi.advanceTimersByTimeAsync(0);
-      http.expectOne('/api/health').flush({ status: 'ok' } satisfies HealthResponse);
       http.expectOne('/api/accounts').flush(accounts);
       await vi.advanceTimersByTimeAsync(0);
       const page = fixture.nativeElement as HTMLElement;
@@ -400,21 +389,32 @@ describe('HomePage', () => {
       } satisfies AccountsResponse);
     const renewButton = (page: HTMLElement) =>
       Array.from(page.querySelectorAll('button')).find(
-        (button) => button.textContent?.trim() === 'Anslut igen',
+        (button) => button.textContent?.trim() === 'Förnya',
       );
 
     it('shows the days left on a connection that is good for a while, without a warning', async () => {
-      const page = await render(serverUp, swedbank({ status: 'active', validUntil: inDays(60) }));
+      const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
 
       expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe(
         'Kopplingen går ut om 60 dagar.',
       );
       expect(page.querySelector('[data-expiry]')).toBeNull();
-      expect(renewButton(page)).toBeUndefined();
+    });
+
+    it('lets the owner renew a connection that is still active', async () => {
+      const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
+      const http = TestBed.inject(HttpTestingController);
+
+      renewButton(page)!.click();
+      const request = http.expectOne({ method: 'POST', url: '/api/connections' });
+      expect(request.request.body).toEqual({ bank: 'Swedbank', renew: true });
+      request.flush({ url: 'https://bankid.example/auth' });
+
+      expect(redirects).toEqual(['https://bankid.example/auth']);
     });
 
     it('warns in Swedish when a connection is about to expire and offers to renew it', async () => {
-      const page = await render(serverUp, swedbank({ status: 'expiring', validUntil: inDays(10) }));
+      const page = await render(swedbank({ status: 'expiring', validUntil: inDays(10) }));
 
       const banner = page.querySelector('[data-expiry]');
       expect(banner?.textContent).toContain('Kopplingen till Swedbank går ut om 10 dagar.');
@@ -422,16 +422,13 @@ describe('HomePage', () => {
     });
 
     it('says "1 dag" when a day is left', async () => {
-      const page = await render(
-        serverUp,
-        swedbank({ status: 'expiring', validUntil: inDays(0.5) }),
-      );
+      const page = await render(swedbank({ status: 'expiring', validUntil: inDays(0.5) }));
 
       expect(page.querySelector('[data-expiry]')?.textContent).toContain('går ut om 1 dag.');
     });
 
     it('tells the owner a connection has expired and marks its accounts as not syncing', async () => {
-      const page = await render(serverUp, swedbank({ status: 'expired', validUntil: inDays(-2) }));
+      const page = await render(swedbank({ status: 'expired', validUntil: inDays(-2) }));
 
       expect(page.querySelector('[data-expiry]')?.textContent).toContain(
         'Kopplingen till Swedbank har gått ut. Kontona uppdateras inte längre.',
@@ -443,7 +440,7 @@ describe('HomePage', () => {
     });
 
     it('sends the owner to BankID to renew the same bank', async () => {
-      const page = await render(serverUp, swedbank({ status: 'expired' }));
+      const page = await render(swedbank({ status: 'expired' }));
       const http = TestBed.inject(HttpTestingController);
 
       renewButton(page)!.click();
@@ -455,7 +452,7 @@ describe('HomePage', () => {
     });
 
     it('says so when the renewal cannot be started', async () => {
-      const page = await render(serverUp, swedbank({ status: 'expired' }));
+      const page = await render(swedbank({ status: 'expired' }));
       const http = TestBed.inject(HttpTestingController);
 
       renewButton(page)!.click();
@@ -469,10 +466,7 @@ describe('HomePage', () => {
     });
 
     it('shows closed accounts apart from the others', async () => {
-      const page = await render(
-        serverUp,
-        swedbank({ closedAccounts: [account('Sparkonto', 'savings', 9)] }),
-      );
+      const page = await render(swedbank({ closedAccounts: [account('Sparkonto', 'savings', 9)] }));
 
       const closed = page.querySelector('[data-closed-accounts]');
       expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
@@ -482,22 +476,9 @@ describe('HomePage', () => {
   });
 
   it('shows an error when the accounts cannot be fetched', async () => {
-    const page = await render(serverUp, serverDown);
+    const page = await render(failed);
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
     expect(page.textContent).not.toContain('Inga banker är anslutna ännu.');
-  });
-
-  it('shows that the server is reachable', async () => {
-    const page = await render(serverUp);
-
-    expect(page.textContent).toContain('Servern svarar');
-    expect(page.textContent).not.toContain('Servern svarar inte');
-  });
-
-  it('shows that the server is unreachable', async () => {
-    const page = await render(serverDown);
-
-    expect(page.textContent).toContain('Servern svarar inte');
   });
 });

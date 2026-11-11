@@ -2,7 +2,13 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { Transaction, TransactionsResponse } from '@bankapp/shared';
+import type {
+  AccountsResponse,
+  BankAccounts,
+  ConnectedAccount,
+  Transaction,
+  TransactionsResponse,
+} from '@bankapp/shared';
 import { TransactionsPage } from './transactions.page';
 
 describe('TransactionsPage', () => {
@@ -33,10 +39,43 @@ describe('TransactionsPage', () => {
     nextCursor,
   });
 
-  async function render(body: TransactionsResponse | 'error') {
+  const account = (name: string, balance: number | null, id = 1): ConnectedAccount => ({
+    id,
+    name,
+    type: 'payment',
+    balance: balance === null ? null : { amount: balance, currency: 'SEK' },
+    lastSyncedAt: null,
+  });
+
+  const bankGroup = (
+    bank: string,
+    accounts: ConnectedAccount[],
+    overrides: Partial<BankAccounts> = {},
+  ): BankAccounts => ({
+    bank,
+    status: 'active',
+    validUntil: '2099-01-01T00:00:00.000Z',
+    accounts,
+    closedAccounts: [],
+    ...overrides,
+  });
+
+  const accountsOf = (banks: BankAccounts[]): AccountsResponse => ({
+    banks,
+    syncing: false,
+    lastSync: null,
+  });
+
+  async function render(
+    body: TransactionsResponse | 'error',
+    accounts: AccountsResponse | 'error' = accountsOf([]),
+  ) {
     const fixture = TestBed.createComponent(TransactionsPage);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
+    const accountsRequest = http.expectOne('/api/accounts');
+    if (accounts === 'error') accountsRequest.error(new ProgressEvent('error'));
+    else accountsRequest.flush(accounts);
     const request = http.expectOne((r) => r.url === '/api/transactions');
     expect(request.request.params.has('before')).toBe(false);
     if (body === 'error') request.error(new ProgressEvent('error'));
@@ -119,16 +158,105 @@ describe('TransactionsPage', () => {
     expect(page.textContent).toContain('Inga transaktioner');
   });
 
+  it('offers to connect a bank when there are no accounts yet', async () => {
+    const { page } = await render(response([]));
+
+    expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
+  });
+
   it('shows an error when the transactions cannot be fetched', async () => {
     const { page } = await render('error');
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
   });
 
-  it('links back to the overview', async () => {
-    const { page } = await render(response([]));
+  describe('the balance strip', () => {
+    const strip = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll('[data-balance-strip] li')).map((li) => ({
+        name: li.querySelector('[data-account-name]')?.textContent?.trim(),
+        balance: li.querySelector('[data-balance]')?.textContent?.trim(),
+      }));
 
-    expect(page.querySelector('a[href="/"]')).not.toBeNull();
+    it('shows the name and balance of each open account, without any tap action', async () => {
+      const { page } = await render(
+        response([]),
+        accountsOf([
+          bankGroup('Swedbank', [account('Lönekonto', 1234.5, 1), account('Sparkonto', 10, 2)]),
+          bankGroup('Coop Mastercard', [account('Kort', -99, 3)]),
+        ]),
+      );
+
+      expect(strip(page)).toEqual([
+        { name: 'Lönekonto', balance: '1\u00a0234,50\u00a0kr' },
+        { name: 'Sparkonto', balance: '10,00\u00a0kr' },
+        { name: 'Kort', balance: '−99,00\u00a0kr' },
+      ]);
+      expect(page.querySelector('[data-balance-strip] a, [data-balance-strip] button')).toBeNull();
+    });
+
+    it('leaves out closed accounts', async () => {
+      const { page } = await render(
+        response([]),
+        accountsOf([
+          bankGroup('Swedbank', [account('Lönekonto', 5)], {
+            closedAccounts: [account('Gammalt', 7, 9)],
+          }),
+        ]),
+      );
+
+      expect(strip(page).map((a) => a.name)).toEqual(['Lönekonto']);
+    });
+
+    it('shows a dash for an account without a balance yet', async () => {
+      const { page } = await render(
+        response([]),
+        accountsOf([bankGroup('Swedbank', [account('Lönekonto', null)])]),
+      );
+
+      expect(strip(page)).toEqual([{ name: 'Lönekonto', balance: '–' }]);
+    });
+
+    it('is absent when there are no accounts, or they cannot be fetched', async () => {
+      const none = await render(response([]));
+      expect(none.page.querySelector('[data-balance-strip]')).toBeNull();
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [TransactionsPage],
+        providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      });
+
+      const failed = await render(response([transaction(1)]), 'error');
+      expect(failed.page.querySelector('[data-balance-strip]')).toBeNull();
+      expect(rows(failed.page)).toHaveLength(1);
+    });
+  });
+
+  describe('the connection banner', () => {
+    const banner = (page: HTMLElement) => page.querySelector('[data-connection-banner]');
+
+    it.each(['expiring', 'expired'] as const)(
+      'links to the Banker page when a connection is %s',
+      async (status) => {
+        const { page } = await render(
+          response([]),
+          accountsOf([
+            bankGroup('Swedbank', [account('Lönekonto', 5)]),
+            bankGroup('Skandia', [account('Spar', 5, 2)], { status }),
+          ]),
+        );
+
+        expect(banner(page)?.querySelector('a[href="/banker"]')).not.toBeNull();
+      },
+    );
+
+    it('is absent when every connection is active', async () => {
+      const { page } = await render(
+        response([]),
+        accountsOf([bankGroup('Swedbank', [account('Lönekonto', 5)])]),
+      );
+
+      expect(banner(page)).toBeNull();
+    });
   });
 
   describe('a long history', () => {
