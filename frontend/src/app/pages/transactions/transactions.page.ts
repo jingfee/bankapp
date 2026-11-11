@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import type { ConnectedAccount, Transaction } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
@@ -73,23 +73,28 @@ interface DayGroup {
               <h2 class="text-lg font-semibold">{{ group.date | dateHeading }}</h2>
               <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
                 @for (transaction of group.transactions; track transaction.id) {
-                  <li data-transaction class="flex items-baseline justify-between gap-3 py-2">
-                    <span class="flex flex-col">
-                      <span data-description>{{ transaction.description }}</span>
-                      <span data-account class="text-sm text-zinc-500 dark:text-zinc-400"
-                        >{{ transaction.account.name }} · {{ transaction.account.bank }}</span
-                      >
-                      @if (transaction.status === 'pending') {
-                        <span class="text-sm text-zinc-500 dark:text-zinc-400">Reserverad</span>
-                      }
-                    </span>
-                    <span
-                      data-amount
-                      class="font-medium tabular-nums"
-                      [class.text-emerald-600]="transaction.amount.amount > 0"
-                      [class.dark:text-emerald-400]="transaction.amount.amount > 0"
-                      >{{ transaction.amount.amount | money: transaction.amount.currency }}</span
+                  <li data-transaction>
+                    <a
+                      [routerLink]="['/transaktioner', transaction.id]"
+                      class="flex items-baseline justify-between gap-3 py-2"
                     >
+                      <span class="flex flex-col">
+                        <span data-description>{{ transaction.description }}</span>
+                        <span data-account class="text-sm text-zinc-500 dark:text-zinc-400"
+                          >{{ transaction.account.name }} · {{ transaction.account.bank }}</span
+                        >
+                        @if (transaction.status === 'pending') {
+                          <span class="text-sm text-zinc-500 dark:text-zinc-400">Reserverad</span>
+                        }
+                      </span>
+                      <span
+                        data-amount
+                        class="font-medium tabular-nums"
+                        [class.text-emerald-600]="transaction.amount.amount > 0"
+                        [class.dark:text-emerald-400]="transaction.amount.amount > 0"
+                        >{{ transaction.amount.amount | money: transaction.amount.currency }}</span
+                      >
+                    </a>
                   </li>
                 }
               </ul>
@@ -116,6 +121,7 @@ interface DayGroup {
 })
 export class TransactionsPage {
   private readonly service = inject(TransactionsService);
+  private readonly router = inject(Router);
   /** Fetched once; the strip is a convenience, so a failure just leaves it out. */
   private readonly accounts = toSignal(
     inject(AccountsService)
@@ -155,10 +161,20 @@ export class TransactionsPage {
   });
 
   constructor() {
+    // Coming back with the browser's back button, show the list as it was left so the router
+    // can restore the scroll position; any other visit loads it afresh.
+    const left = this.service.listed;
+    if (left !== null && this.router.currentNavigation()?.trigger === 'popstate') {
+      this.transactions.set(left.transactions);
+      this.cursor.set(left.cursor);
+      this.status.set('ready');
+      return;
+    }
     this.service.list().subscribe({
       next: (page) => {
         this.transactions.set(page.transactions);
         this.cursor.set(page.nextCursor);
+        this.remember();
         this.status.set('ready');
       },
       error: () => this.status.set('failed'),
@@ -174,6 +190,7 @@ export class TransactionsPage {
       next: (page) => {
         this.transactions.update((shown) => [...shown, ...page.transactions]);
         this.cursor.set(page.nextCursor);
+        this.remember();
         this.loadingMore.set(false);
       },
       error: () => {
@@ -181,5 +198,9 @@ export class TransactionsPage {
         this.loadingMore.set(false);
       },
     });
+  }
+
+  private remember(): void {
+    this.service.listed = { transactions: this.transactions(), cursor: this.cursor() };
   }
 }

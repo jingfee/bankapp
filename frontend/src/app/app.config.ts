@@ -7,7 +7,7 @@ import {
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { AppUpdateService } from './app-update.service';
 import { routes } from './app.routes';
@@ -16,7 +16,7 @@ import { APP_LOCALE } from './formatting/locale';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),
     provideHttpClient(withFetch()),
     { provide: LOCALE_ID, useValue: APP_LOCALE },
     // Only production builds run the service worker, so `ng serve` never serves stale files.
