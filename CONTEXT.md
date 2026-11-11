@@ -65,8 +65,16 @@ A transaction the bank has finalised; it does not change afterwards.
 _Avoid_: Completed, settled, cleared
 
 **Pending transaction** (sv: _Reserverad_):
-A transaction the bank has registered but not yet booked; it may change or disappear before booking.
-_Avoid_: Reserved, waiting, authorised
+A transaction the bank has registered but not yet booked; it may change or disappear before booking. A pending transaction that books is the same transaction, not a second one: the owner sees it once, first as pending and then as booked.
+_Avoid_: Reserved, waiting, authorised, reservation (as a separate thing from its booked transaction)
+
+**Transaction date** (sv: _Transaktionsdatum_):
+The day the owner made the transaction, e.g. paid in a shop. Transactions are listed under this day.
+_Avoid_: Purchase date, date (unqualified)
+
+**Booking date** (sv: _Bokföringsdatum_):
+The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
+_Avoid_: Settlement date, posting date
 
 ### Syncing
 
