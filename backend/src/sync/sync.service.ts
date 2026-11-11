@@ -267,7 +267,18 @@ export class SyncService implements OnModuleInit {
     const fetchedDay = localDay(fetchedAt, this.config.timezone);
     const occurrences = new Map<string, number>();
     const rows = withoutBookedTwins(fetched).map((transaction) => {
-      const date = transaction.bookingDate ?? transaction.valueDate ?? fetchedDay;
+      const date =
+        transaction.transactionDate ??
+        transaction.valueDate ??
+        transaction.bookingDate ??
+        fetchedDay;
+      // Fingerprints must keep using the date they were first made from, or stored transactions
+      // would be stored again.
+      const dedupDate =
+        transaction.bookingDate ??
+        transaction.valueDate ??
+        transaction.transactionDate ??
+        fetchedDay;
       return {
         accountId: account.id,
         status: transaction.status,
@@ -275,10 +286,11 @@ export class SyncService implements OnModuleInit {
         currency: transaction.currency,
         bookingDate: transaction.bookingDate,
         valueDate: transaction.valueDate,
+        transactionDate: transaction.transactionDate,
         date,
         description: transaction.description,
         entryReference: transaction.entryReference,
-        dedupKey: dedupKey(transaction, date, occurrences),
+        dedupKey: dedupKey(transaction, dedupDate, occurrences),
         raw: transaction.raw,
         fetchedAt,
       };

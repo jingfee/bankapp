@@ -29,6 +29,7 @@ function transaction(
     currency: 'SEK',
     bookingDate: '2026-11-09',
     valueDate: '2026-11-09',
+    transactionDate: null,
     description: 'ICA',
     entryReference: `ref-${amount}`,
     raw: JSON.stringify({ amount }),

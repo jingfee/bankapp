@@ -61,8 +61,10 @@ export interface EnableBankingTransaction {
   currency: string;
   /** `YYYY-MM-DD`, when the bank says. Pending transactions often have none. */
   bookingDate: string | null;
-  /** `YYYY-MM-DD`; falls back to the bank's transaction date when it gives no value date. */
+  /** `YYYY-MM-DD`, when the bank says. */
   valueDate: string | null;
+  /** `YYYY-MM-DD`: the day the owner made the transaction, when the bank says. */
+  transactionDate: string | null;
   description: string;
   /** The bank's own identifier for a booked transaction, when it gives one. */
   entryReference: string | null;
