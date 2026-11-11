@@ -75,9 +75,7 @@
       "indexes": {
         "accounts_identification_hash_unique": {
           "name": "accounts_identification_hash_unique",
-          "columns": [
-            "identification_hash"
-          ],
+          "columns": ["identification_hash"],
           "isUnique": true
         }
       },
@@ -86,12 +84,8 @@
           "name": "accounts_connection_id_connections_id_fk",
           "tableFrom": "accounts",
           "tableTo": "connections",
-          "columnsFrom": [
-            "connection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["connection_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -198,12 +192,8 @@
           "name": "balances_account_id_accounts_id_fk",
           "tableFrom": "balances",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -293,9 +283,7 @@
       "indexes": {
         "connections_bank_name_unique": {
           "name": "connections_bank_name_unique",
-          "columns": [
-            "bank_name"
-          ],
+          "columns": ["bank_name"],
           "isUnique": true
         }
       },
@@ -364,12 +352,8 @@
           "name": "sync_account_results_sync_run_id_sync_runs_id_fk",
           "tableFrom": "sync_account_results",
           "tableTo": "sync_runs",
-          "columnsFrom": [
-            "sync_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sync_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -377,12 +361,8 @@
           "name": "sync_account_results_account_id_accounts_id_fk",
           "tableFrom": "sync_account_results",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -534,20 +514,13 @@
       "indexes": {
         "transactions_booked_dedup": {
           "name": "transactions_booked_dedup",
-          "columns": [
-            "account_id",
-            "dedup_key"
-          ],
+          "columns": ["account_id", "dedup_key"],
           "isUnique": true,
           "where": "\"transactions\".\"status\" = 'booked'"
         },
         "transactions_account_date": {
           "name": "transactions_account_date",
-          "columns": [
-            "account_id",
-            "date",
-            "id"
-          ],
+          "columns": ["account_id", "date", "id"],
           "isUnique": false
         }
       },
@@ -556,12 +529,8 @@
           "name": "transactions_account_id_accounts_id_fk",
           "tableFrom": "transactions",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

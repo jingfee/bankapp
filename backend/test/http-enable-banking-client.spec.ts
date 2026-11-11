@@ -151,7 +151,6 @@ describe('HttpEnableBankingClient', () => {
       });
       expect(requests[0]!.headers['Authorization']).toMatch(/^Bearer /);
     });
-
   });
 
   describe('createSession', () => {
