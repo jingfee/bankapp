@@ -102,7 +102,12 @@ export const transactions = sqliteTable(
     currency: text('currency').notNull(),
     bookingDate: text('booking_date'),
     valueDate: text('value_date'),
-    /** The day the transaction is listed under (`YYYY-MM-DD`): booking date, else value date, else the day it was fetched. */
+    /** The day the owner made the transaction (`YYYY-MM-DD`), when the bank says. */
+    transactionDate: text('transaction_date'),
+    /**
+     * The day the transaction is listed under (`YYYY-MM-DD`): transaction date, else value date,
+     * else booking date, else the day it was fetched.
+     */
     date: text('date').notNull(),
     description: text('description').notNull(),
     entryReference: text('entry_reference'),

@@ -49,6 +49,7 @@ function transaction(
     currency: 'SEK',
     bookingDate: '2026-11-09',
     valueDate: '2026-11-09',
+    transactionDate: null,
     description: 'ICA',
     entryReference: null,
     raw: JSON.stringify({ amount }),
@@ -325,6 +326,7 @@ describe('the initial sync', () => {
         transaction(-125.5, {
           bookingDate: '2026-11-09',
           valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
           description: 'ICA Maxi',
           entryReference: 'ref-1',
           raw: '{"original":true}',
@@ -343,7 +345,8 @@ describe('the initial sync', () => {
           currency: 'SEK',
           bookingDate: '2026-11-09',
           valueDate: '2026-11-08',
-          date: '2026-11-09',
+          transactionDate: '2026-11-07',
+          date: '2026-11-07',
           description: 'ICA Maxi',
           entryReference: 'ref-1',
           dedupKey: 'ref:ref-1',
@@ -353,16 +356,95 @@ describe('the initial sync', () => {
       ]);
     });
 
-    it('are listed under the value date, or else the day they were fetched, when not booked', async () => {
+    it('are listed under the transaction date, else value date, else booking date, else the day they were fetched', async () => {
+      const undated = { bookingDate: null, valueDate: null, transactionDate: null };
       enableBanking.transactions.set('u1', [
-        transaction(-1, { status: 'pending', bookingDate: null, valueDate: '2026-11-10' }),
-        transaction(-2, { status: 'pending', bookingDate: null, valueDate: null }),
+        transaction(-1, {
+          ...undated,
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
+        }),
+        transaction(-2, { ...undated, bookingDate: '2026-11-09', valueDate: '2026-11-08' }),
+        transaction(-3, { ...undated, bookingDate: '2026-11-09' }),
+        transaction(-4, { ...undated, status: 'pending', valueDate: '2026-11-06' }),
+        transaction(-5, { ...undated, status: 'pending' }),
       ]);
 
       await connect('Swedbank', [account('u1', 'Lönekonto')]);
       await settled();
 
-      expect(stored().map((row) => row.date)).toEqual(['2026-11-10', '2026-11-10']);
+      expect(stored().map((row) => row.date)).toEqual([
+        '2026-11-07',
+        '2026-11-08',
+        '2026-11-09',
+        '2026-11-06',
+        '2026-11-10',
+      ]);
+    });
+
+    it('are listed newest first by their transaction date, not their booking date', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-1, {
+          description: 'Bought earlier',
+          bookingDate: '2026-11-09',
+          transactionDate: '2026-11-03',
+        }),
+        transaction(-2, {
+          description: 'Bought later',
+          bookingDate: '2026-11-08',
+          transactionDate: '2026-11-06',
+        }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      const body = (await request(app.getHttpServer()).get('/api/transactions').expect(200)).body;
+      expect(
+        body.transactions.map((t: { description: string; date: string }) => [
+          t.description,
+          t.date,
+        ]),
+      ).toEqual([
+        ['Bought later', '2026-11-06'],
+        ['Bought earlier', '2026-11-03'],
+      ]);
+    });
+
+    it('stored before transaction dates were used are not stored again by the next sync', async () => {
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      // Written by the earlier version: no transaction date, fingerprint made from the booking date.
+      db()
+        .insert(transactions)
+        .values({
+          accountId: 1,
+          status: 'booked',
+          amount: -35,
+          currency: 'SEK',
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          date: '2026-11-09',
+          description: 'Espresso House',
+          entryReference: null,
+          dedupKey: 'fp:["2026-11-09",-35,"Espresso House"]:0',
+          raw: '{}',
+          fetchedAt: START,
+        })
+        .run();
+      enableBanking.transactions.set('u1', [
+        transaction(-35, {
+          description: 'Espresso House',
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
+        }),
+      ]);
+
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toHaveLength(1);
     });
 
     it('are not stored twice when the next sync returns them again', async () => {

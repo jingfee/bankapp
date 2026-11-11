@@ -442,6 +442,7 @@ describe('HttpEnableBankingClient', () => {
         currency: 'SEK',
         bookingDate: '2026-11-09',
         valueDate: '2026-11-08',
+        transactionDate: null,
         description: 'ICA Maxi Stockholm',
         entryReference: 'ref-1',
       });
@@ -469,9 +470,22 @@ describe('HttpEnableBankingClient', () => {
         status: 'pending',
         amount: 125.5,
         bookingDate: null,
-        valueDate: '2026-11-10',
+        valueDate: null,
+        transactionDate: '2026-11-10',
         description: 'Anna Andersson',
         entryReference: null,
+      });
+    });
+
+    it('keeps the transaction date apart from the value date', async () => {
+      pages({ transactions: [raw({ transaction_date: '2026-11-07' })] });
+
+      const [transaction] = await client().getTransactions('u1');
+
+      expect(transaction).toMatchObject({
+        bookingDate: '2026-11-09',
+        valueDate: '2026-11-08',
+        transactionDate: '2026-11-07',
       });
     });
 

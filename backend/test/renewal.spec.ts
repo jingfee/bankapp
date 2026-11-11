@@ -233,6 +233,7 @@ describe('connection expiry and renewal', () => {
           currency: 'SEK',
           bookingDate: '2026-11-01',
           valueDate: null,
+          transactionDate: null,
           description: 'ICA',
           entryReference: 'ref-1',
           raw: '{}',
