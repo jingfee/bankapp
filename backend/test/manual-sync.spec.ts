@@ -16,7 +16,14 @@ const START = new Date('2026-11-10T12:00:00.000Z');
 const USER_AGENT = 'Mozilla/5.0 (Pixel)';
 
 function account(uid: string, name: string): EnableBankingAccount {
-  return { uid, identificationHash: `hash-${uid}`, name, type: 'payment', currency: 'SEK' };
+  return {
+    uid,
+    identificationHash: `hash-${uid}`,
+    name,
+    type: 'payment',
+    currency: 'SEK',
+    raw: '{}',
+  };
 }
 
 function transaction(

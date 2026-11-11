@@ -116,6 +116,7 @@ describe('connecting a bank', () => {
         name: 'Sparkonto',
         type: 'savings',
         currency: 'SEK',
+        raw: '{"uid":"uid-2"}',
       },
       {
         uid: 'uid-1',
@@ -123,6 +124,7 @@ describe('connecting a bank', () => {
         name: 'Lönekonto',
         type: 'payment',
         currency: 'SEK',
+        raw: '{"uid":"uid-1"}',
       },
     ],
   };
@@ -186,6 +188,7 @@ describe('connecting a bank', () => {
         name: 'Lönekonto',
         type: 'payment',
         currency: 'SEK',
+        raw: '{"uid":"uid-1"}',
         closed: false,
       });
     });
@@ -318,6 +321,7 @@ describe('connecting a bank', () => {
             name: 'Coop Mastercard',
             type: 'card',
             currency: 'SEK',
+            raw: '{}',
           },
         ],
       };

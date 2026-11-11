@@ -163,6 +163,7 @@ export class ConnectionsService {
             name: account.name,
             type: account.type,
             currency: account.currency,
+            raw: account.raw,
             closed: false,
           })
           .where(

@@ -16,6 +16,7 @@ import {
 import {
   EnableBankingClient,
   RateLimitError,
+  type EnableBankingAccount,
   type EnableBankingBalance,
   type EnableBankingTransaction,
   type PsuContext,
@@ -204,10 +205,12 @@ export class SyncService implements OnModuleInit {
     initial: boolean,
     psu: PsuContext | undefined,
   ): Promise<'ok' | 'failed' | 'rate-limited'> {
+    let details: EnableBankingAccount | undefined;
     let fetched: EnableBankingBalance[];
     let fetchedTransactions: EnableBankingTransaction[];
     try {
       const dateFrom = this.dateFrom(account, initial);
+      details = await this.fetchDetails(account, psu);
       fetched = await this.enableBanking.getBalances(account.uid, psu ? { psu } : undefined);
       fetchedTransactions = await this.enableBanking.getTransactions(account.uid, {
         ...(dateFrom ? { dateFrom } : {}),
@@ -221,6 +224,12 @@ export class SyncService implements OnModuleInit {
     }
     const fetchedAt = this.now();
     this.db.transaction((tx) => {
+      if (details) {
+        tx.update(accounts)
+          .set({ name: details.name, raw: details.raw })
+          .where(eq(accounts.id, account.id))
+          .run();
+      }
       if (fetched.length > 0) {
         tx.insert(balances)
           .values(
@@ -248,6 +257,24 @@ export class SyncService implements OnModuleInit {
         .run();
     });
     return 'ok';
+  }
+
+  /**
+   * The account's current details, or undefined when they could not be fetched: the account then
+   * keeps its name, since a name is not worth failing a sync for. A rate limit is rethrown, as
+   * asking the bank again would not help.
+   */
+  private async fetchDetails(
+    account: AccountRow,
+    psu: PsuContext | undefined,
+  ): Promise<EnableBankingAccount | undefined> {
+    try {
+      return await this.enableBanking.getAccountDetails(account.uid, psu ? { psu } : undefined);
+    } catch (cause) {
+      if (cause instanceof RateLimitError) throw cause;
+      this.logger.warn(`Could not fetch details for account ${account.id}: ${String(cause)}`);
+      return undefined;
+    }
   }
 
   /**
