@@ -218,7 +218,11 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     do {
       const url = key ? `${path}&continuation_key=${encodeURIComponent(key)}` : path;
       const page = transactionsResponse.parse(await this.send('GET', url, undefined, options.psu));
-      for (const raw of page.transactions) transactions.push(toTransaction(raw));
+      for (const raw of page.transactions) {
+        // A rejected or cancelled attempt never happened, so the owner should not see it.
+        if (raw.status === 'RJCT' || raw.status === 'CNCL') continue;
+        transactions.push(toTransaction(raw));
+      }
       key = page.continuation_key;
       if (key) {
         // An empty page can still carry a key, so only a missing key ends the history.

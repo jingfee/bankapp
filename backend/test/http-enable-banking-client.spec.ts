@@ -483,6 +483,26 @@ describe('HttpEnableBankingClient', () => {
       });
     });
 
+    it('leaves out rejected and cancelled transactions, which never happened', async () => {
+      pages({
+        transactions: [
+          raw({ entry_reference: 'a', status: 'RJCT' }),
+          raw({ entry_reference: 'b', status: 'CNCL' }),
+          raw({ entry_reference: 'c', status: 'OTHR' }),
+          raw({ entry_reference: 'd', status: 'PDNG' }),
+          raw({ entry_reference: 'e' }),
+        ],
+      });
+
+      const transactions = await client().getTransactions('u1');
+
+      expect(transactions.map((t) => [t.entryReference, t.status])).toEqual([
+        ['c', 'pending'],
+        ['d', 'pending'],
+        ['e', 'booked'],
+      ]);
+    });
+
     it('keeps the transaction date apart from the value date', async () => {
       pages({ transactions: [raw({ transaction_date: '2026-11-07' })] });
 

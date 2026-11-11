@@ -574,6 +574,100 @@ describe('the initial sync', () => {
       ]);
     });
 
+    it('that are pending match their booked twin whatever the case or punctuation of the description', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-129, { status: 'pending', description: 'Foo Bar Store' }),
+        transaction(-129, { description: 'FOO.BAR STORE' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => row.status)).toEqual(['booked']);
+    });
+
+    it('that are pending match their booked twin when the bank reserved it with the opposite sign', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-350, { status: 'pending', description: 'Fake.com' }),
+        transaction(350, { description: 'FAKE.COM' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => [row.status, row.amount])).toEqual([['booked', 350]]);
+    });
+
+    it('that are pending keep their stored row across syncs while they stay pending', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-12, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([{ id: first!.id, status: 'pending', amount: -12 }]);
+    });
+
+    it('that are pending are updated in place when they book', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'CAFE', entryReference: 'b1', bookingDate: '2026-11-11' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([
+        { id: first!.id, status: 'booked', description: 'CAFE', bookingDate: '2026-11-11' },
+      ]);
+
+      // Booked now, so it is not stored again by a later sync.
+      await app.get(SyncService).start('manual').finished;
+      expect(stored()).toHaveLength(1);
+    });
+
+    it('that are pending are updated in place when they book after the bank stopped returning them', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([{ id: first!.id, status: 'booked' }]);
+    });
+
+    it('that are pending are removed when the bank stops returning them without a booked match', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        transaction(-20, { status: 'pending', description: 'Kiosk', entryReference: 'p2' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-20, { status: 'pending', description: 'Kiosk', entryReference: 'p2' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored().map((row) => row.description)).toEqual(['Kiosk']);
+    });
+
     it('that are booked are never deleted when the bank stops returning them', async () => {
       enableBanking.transactions.set('u1', [transaction(-10, { entryReference: 'a' })]);
       await connect('Swedbank', [account('u1', 'Lönekonto')]);
