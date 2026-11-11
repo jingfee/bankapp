@@ -16,7 +16,6 @@ export const testConfig: AppConfig = {
   applicationId: 'test-application-id',
   privateKeyPath: '/not/used/in/tests.pem',
   redirectUrl: 'http://localhost:3000/api/connections/callback',
-  personnummer: undefined,
   dataDir: '/not/used/in/tests',
   timezone: 'Europe/Stockholm',
   scheduledSyncs: false,
@@ -113,7 +112,6 @@ export function bank(name: string, overrides: Partial<EnableBankingBank> = {}): 
     logoUrl: null,
     beta: false,
     maximumConsentSeconds: 90 * 24 * 3600,
-    personnummer: 'none',
     ...overrides,
   };
 }

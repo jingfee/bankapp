@@ -64,6 +64,13 @@
       "when": 1794423125175,
       "tag": "0008_account_raw",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794423482503,
+      "tag": "0009_drop_bank_personnummer",
+      "breakpoints": true
     }
   ]
 }

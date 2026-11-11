@@ -27,7 +27,7 @@ describe('openDatabase', () => {
     const first = openDatabase({ dataDir: dir });
     first.db
       .insert(banks)
-      .values({ name: 'Skandia', country: 'SE', maximumConsentSeconds: 3600, personnummer: 'none' })
+      .values({ name: 'Skandia', country: 'SE', maximumConsentSeconds: 3600 })
       .run();
     first.close();
 

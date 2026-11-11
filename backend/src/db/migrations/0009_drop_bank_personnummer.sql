@@ -1,0 +1,1 @@
+ALTER TABLE `banks` DROP COLUMN `personnummer`;

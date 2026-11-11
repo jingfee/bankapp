@@ -1,6 +1,3 @@
-/** Whether a bank takes the owner's personnummer when starting the BankID login. */
-export type PersonnummerSupport = 'none' | 'optional' | 'required';
-
 /** A bank as Enable Banking describes it (an "ASPSP"). */
 export interface EnableBankingBank {
   name: string;
@@ -9,7 +6,6 @@ export interface EnableBankingBank {
   beta: boolean;
   /** The longest permission the bank grants, in seconds. */
   maximumConsentSeconds: number;
-  personnummer: PersonnummerSupport;
 }
 
 export interface AuthorisationRequest {
@@ -19,8 +15,6 @@ export interface AuthorisationRequest {
   /** Echoed back to the redirect URL; ties the return to this request. */
   state: string;
   redirectUrl: string;
-  /** Only set for banks that take it. 12 digits, e.g. `199001011234`. */
-  personnummer?: string;
 }
 
 export type EnableBankingAccountType = 'payment' | 'savings' | 'card';

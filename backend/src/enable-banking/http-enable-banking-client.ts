@@ -11,7 +11,6 @@ import {
   EnableBankingClient,
   EnableBankingSession,
   EnableBankingTransaction,
-  PersonnummerSupport,
   PsuContext,
   RequestOptions,
   TransactionsRequestOptions,
@@ -44,16 +43,6 @@ const aspspsResponse = z.object({
       logo: z.string().nullish(),
       beta: z.boolean().nullish(),
       maximum_consent_validity: z.number().nullish(),
-      auth_methods: z
-        .array(
-          z.object({
-            psu_type: z.string().nullish(),
-            credentials: z
-              .array(z.object({ name: z.string(), required: z.boolean().nullish() }))
-              .nullish(),
-          }),
-        )
-        .nullish(),
     }),
   ),
 });
@@ -127,21 +116,6 @@ const ACCOUNT_TYPES: Record<string, EnableBankingAccountType> = {
   CARD: 'card',
 };
 
-/**
- * Banks that take the personnummer list a `userId` credential on their personal auth method.
- * Anything else (including business-only methods) means we should not send it.
- */
-function personnummerSupport(
-  methods: z.infer<typeof aspspsResponse>['aspsps'][number]['auth_methods'],
-): PersonnummerSupport {
-  const credentials = (methods ?? [])
-    .filter((method) => method.psu_type === 'personal')
-    .flatMap((method) => method.credentials ?? [])
-    .filter((credential) => credential.name === 'userId');
-  if (credentials.length === 0) return 'none';
-  return credentials.some((credential) => credential.required) ? 'required' : 'optional';
-}
-
 export class HttpEnableBankingClient implements EnableBankingClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -164,7 +138,6 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       logoUrl: bank.logo ?? null,
       beta: bank.beta ?? false,
       maximumConsentSeconds: bank.maximum_consent_validity ?? DEFAULT_CONSENT_SECONDS,
-      personnummer: personnummerSupport(bank.auth_methods),
     }));
   }
 
@@ -175,7 +148,6 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       state: request.state,
       redirect_url: request.redirectUrl,
       psu_type: 'personal',
-      ...(request.personnummer ? { psu_id: request.personnummer } : {}),
     });
     return { url: authResponse.parse(response).url };
   }

@@ -88,7 +88,6 @@ describe('HttpEnableBankingClient', () => {
         logoUrl: 'https://logos.example/n.png',
         beta: true,
         maximumConsentSeconds: 7776000,
-        personnummer: 'none',
       },
       {
         name: 'Skandia',
@@ -96,7 +95,6 @@ describe('HttpEnableBankingClient', () => {
         logoUrl: null,
         beta: false,
         maximumConsentSeconds: 30 * 24 * 3600,
-        personnummer: 'none',
       },
     ]);
   });
@@ -125,34 +123,6 @@ describe('HttpEnableBankingClient', () => {
     await expect(client().listBanks('SE')).rejects.toThrow(/^.{1,600}$/);
   });
 
-  it.each([
-    [true, 'required'],
-    [false, 'optional'],
-  ])(
-    'reads a personal user id credential (required: %s) as %s personnummer',
-    async (isRequired, expected) => {
-      respond = () =>
-        Response.json({
-          aspsps: [
-            {
-              name: 'Coop Mastercard',
-              country: 'SE',
-              auth_methods: [
-                { name: 'BankID', psu_type: 'business', credentials: [] },
-                {
-                  name: 'BankID',
-                  psu_type: 'personal',
-                  credentials: [{ name: 'userId', title: 'Personnummer', required: isRequired }],
-                },
-              ],
-            },
-          ],
-        });
-
-      expect((await client().listBanks('SE'))[0]!.personnummer).toBe(expected);
-    },
-  );
-
   describe('startAuthorisation', () => {
     const authorisation = {
       bank: 'Swedbank',
@@ -179,16 +149,7 @@ describe('HttpEnableBankingClient', () => {
           psu_type: 'personal',
         },
       });
-      expect(requests[0]!.body).not.toHaveProperty('psu_id');
       expect(requests[0]!.headers['Authorization']).toMatch(/^Bearer /);
-    });
-
-    it('passes the personnummer as psu_id', async () => {
-      respond = () => Response.json({ url: 'https://bankid.example/go' });
-
-      await client().startAuthorisation({ ...authorisation, personnummer: '199001011234' });
-
-      expect(requests[0]!.body).toMatchObject({ psu_id: '199001011234' });
     });
   });
 
