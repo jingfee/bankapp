@@ -97,7 +97,7 @@ _Avoid_: Refresh, force sync
 ### Categorising
 
 **Category** (sv: _Kategori_):
-A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The owner can add, rename, reorder and remove categories; the app starts with a default set.
+A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The app starts with a default set; the owner can add, rename, reorder and remove expense categories, while the single income category and the single Överföring category are fixed and only gain or lose subcategories.
 _Avoid_: Group, main category, tag
 
 **Subcategory** (sv: _Underkategori_):
@@ -105,7 +105,7 @@ A second-level grouping within one category, such as Bolån ränta & amortering 
 _Avoid_: Category (when the second level is meant), tag, label
 
 **Category kind** (sv: _Kategorityp_):
-Whether a category is Utgift (expense), Inkomst (income) or Överföring (transfer). Every subcategory has its category's kind. The kind, not the sign of the amount, decides how a transaction counts: a refund under an expense category reduces spending rather than counting as income.
+Whether a category is Utgift (expense), Inkomst (income) or Överföring (transfer). There is exactly one Inkomst category and one Överföring category; every other category is an expense category. Every subcategory has its category's kind. The kind, not the sign of the amount, decides how a transaction counts: a refund under an expense category reduces spending rather than counting as income.
 _Avoid_: Type, direction, account type
 
 **Spending** (sv: _Utgifter_):
@@ -117,7 +117,7 @@ The total of transactions in income categories.
 _Avoid_: Deposits, credits, money in
 
 **Transfer** (sv: _Överföring_):
-A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income. The Överföring category always exists and cannot be removed.
+A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income. 
 _Avoid_: Internal transaction, excluded transaction, transfer flag
 
 **Uncategorised transaction** (sv: _Okategoriserad_):
