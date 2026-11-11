@@ -104,6 +104,22 @@ _Avoid_: Group, main category, tag
 A second-level grouping within one category, such as Bolån ränta & amortering under Boende & Hushåll. A transaction is always assigned a subcategory, never a bare category; every category has an Övrigt subcategory for when nothing more specific fits.
 _Avoid_: Category (when the second level is meant), tag, label
 
+**Category kind** (sv: _Kategorityp_):
+Whether a category is Utgift (expense), Inkomst (income) or Överföring (transfer). Every subcategory has its category's kind. The kind, not the sign of the amount, decides how a transaction counts: a refund under an expense category reduces spending rather than counting as income.
+_Avoid_: Type, direction, account type
+
+**Spending** (sv: _Utgifter_):
+The total of transactions in expense categories, with money leaving the account counted as spending and refunds reducing it.
+_Avoid_: Costs, outgoings, debits
+
+**Income** (sv: _Inkomster_):
+The total of transactions in income categories.
+_Avoid_: Deposits, credits, money in
+
+**Transfer** (sv: _Överföring_):
+A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income. The Överföring category always exists and cannot be removed.
+_Avoid_: Internal transaction, excluded transaction, transfer flag
+
 **Uncategorised transaction** (sv: _Okategoriserad_):
 A transaction that has no subcategory assigned, neither guessed nor confirmed.
 _Avoid_: Unknown, other, Övrigt
