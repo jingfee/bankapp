@@ -93,3 +93,25 @@ _Avoid_: Background job, cron sync, automatic refresh
 **Manual sync** (sv: _Manuell uppdatering_):
 A sync the owner starts from the app, made on the owner's behalf while they are present.
 _Avoid_: Refresh, force sync
+
+### Categorising
+
+**Category** (sv: _Kategori_):
+A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The owner can add, rename, reorder and remove categories; the app starts with a default set.
+_Avoid_: Group, main category, tag
+
+**Subcategory** (sv: _Underkategori_):
+A second-level grouping within one category, such as Bolån ränta & amortering under Boende & Hushåll. A transaction is always assigned a subcategory, never a bare category; every category has an Övrigt subcategory for when nothing more specific fits.
+_Avoid_: Category (when the second level is meant), tag, label
+
+**Uncategorised transaction** (sv: _Okategoriserad_):
+A transaction that has no subcategory assigned, neither guessed nor confirmed.
+_Avoid_: Unknown, other, Övrigt
+
+**Guessed category** (sv: _Gissad kategori_):
+A subcategory the app assigned to a transaction on its own. It counts in totals like any other but is shown as a guess until the owner confirms or changes it.
+_Avoid_: Suggestion, auto-category, prediction
+
+**Confirmed category** (sv: _Bekräftad kategori_):
+A subcategory the owner chose or accepted for a transaction. The app never changes a confirmed category on its own.
+_Avoid_: Manual category, locked category
