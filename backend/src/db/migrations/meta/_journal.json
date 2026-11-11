@@ -71,6 +71,13 @@
       "when": 1794423482503,
       "tag": "0009_drop_bank_personnummer",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794427769528,
+      "tag": "0010_categories",
+      "breakpoints": true
     }
   ]
 }
