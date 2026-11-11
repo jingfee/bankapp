@@ -117,12 +117,17 @@ export const transactions = sqliteTable(
     /** The transaction as the bank returned it, as JSON. */
     raw: text('raw').notNull(),
     fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+    /** What the transaction is categorised as; null when it is uncategorised. */
+    subcategoryId: integer('subcategory_id').references(() => subcategories.id),
+    /** True when the owner chose or accepted the subcategory; the app never changes it then. */
+    categoryConfirmed: integer('category_confirmed', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
       .on(table.accountId, table.dedupKey)
       .where(sql`${table.status} = 'booked'`),
     index('transactions_account_date').on(table.accountId, table.date, table.id),
+    index('transactions_subcategory_id').on(table.subcategoryId),
   ],
 );
 

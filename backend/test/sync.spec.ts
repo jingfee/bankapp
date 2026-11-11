@@ -1,6 +1,6 @@
 import { Logger, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import type { AccountsResponse, ConnectedAccount } from '@bankapp/shared';
+import type { AccountsResponse, ConnectedAccount, TransactionDetails } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
@@ -402,6 +402,8 @@ describe('the initial sync', () => {
           dedupKey: 'ref:ref-1',
           raw: '{"original":true}',
           fetchedAt: START,
+          subcategoryId: null,
+          categoryConfirmed: false,
         },
       ]);
     });
@@ -634,6 +636,116 @@ describe('the initial sync', () => {
       // Booked now, so it is not stored again by a later sync.
       await app.get(SyncService).start('manual').finished;
       expect(stored()).toHaveLength(1);
+    });
+
+    describe('that are pending with a category set by hand', () => {
+      /** Sets Mat & Dryck / Café & fika on a transaction, as the owner would; returns its id. */
+      async function categoriseByHand(id: number): Promise<number> {
+        const body = (await request(app.getHttpServer()).get('/api/categories')).body as {
+          categories: { name: string; subcategories: { id: number; name: string }[] }[];
+        };
+        const cafe = body.categories
+          .find((c) => c.name === 'Mat & Dryck')!
+          .subcategories.find((s) => s.name === 'Café & fika')!;
+        await request(app.getHttpServer())
+          .put(`/api/transactions/${id}/category`)
+          .send({ subcategoryId: cafe.id })
+          .expect(200);
+        return cafe.id;
+      }
+
+      const categoryOf = async (id: number) =>
+        (
+          (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200))
+            .body as TransactionDetails
+        ).category;
+
+      it('keep it across a sync and when they book', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const [first] = stored();
+        const cafe = await categoriseByHand(first!.id);
+
+        await app.get(SyncService).start('manual').finished;
+        expect(await categoryOf(first!.id)).toMatchObject({
+          subcategory: { id: cafe },
+          confirmed: true,
+        });
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, {
+            description: 'CAFE',
+            entryReference: 'b1',
+            bookingDate: '2026-11-11',
+          }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+        expect(stored()).toMatchObject([{ id: first!.id, status: 'booked' }]);
+        expect(await categoryOf(first!.id)).toMatchObject({
+          subcategory: { id: cafe },
+          confirmed: true,
+        });
+      });
+
+      it('keep it when the bank gives them no entry reference, across a sync and when they book', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: null }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const cafe = await categoriseByHand(stored()[0]!.id);
+
+        await app.get(SyncService).start('manual').finished;
+        const [pending] = stored();
+        expect(pending).toMatchObject({ status: 'pending', subcategoryId: cafe });
+        expect(await categoryOf(pending!.id)).toMatchObject({ confirmed: true });
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { description: 'CAFE', entryReference: 'b1' }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+        const [booked] = stored();
+        expect(stored()).toHaveLength(1);
+        expect(booked).toMatchObject({ status: 'booked', subcategoryId: cafe });
+        expect(await categoryOf(booked!.id)).toMatchObject({ confirmed: true });
+      });
+
+      it('hand it to their booked twin when that is already stored', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const cafe = await categoriseByHand(stored()[0]!.id);
+        // The booked twin got stored on its own, e.g. by a sync that did not recognise the pair.
+        db()
+          .insert(transactions)
+          .values({
+            accountId: stored()[0]!.accountId,
+            status: 'booked',
+            amount: -10,
+            currency: 'SEK',
+            date: '2026-11-09',
+            description: 'Cafe',
+            entryReference: 'b1',
+            dedupKey: 'ref:b1',
+            raw: '{}',
+            fetchedAt: START,
+          })
+          .run();
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+
+        expect(stored()).toMatchObject([
+          { status: 'booked', subcategoryId: cafe, categoryConfirmed: true },
+        ]);
+      });
     });
 
     it('that are pending are updated in place when they book after the bank stopped returning them', async () => {

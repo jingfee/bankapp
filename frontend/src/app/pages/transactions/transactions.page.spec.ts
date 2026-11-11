@@ -2,13 +2,15 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import type {
-  AccountsResponse,
-  BankAccounts,
-  ConnectedAccount,
-  Transaction,
-  TransactionsResponse,
+import {
+  CATEGORY_PALETTE,
+  type AccountsResponse,
+  type BankAccounts,
+  type ConnectedAccount,
+  type Transaction,
+  type TransactionsResponse,
 } from '@bankapp/shared';
+import { LUCIDE_ICONS } from '../../category-icon/lucide-icons';
 import { TransactionsService } from '../../transactions.service';
 import { TransactionsPage } from './transactions.page';
 
@@ -29,6 +31,7 @@ describe('TransactionsPage', () => {
     date: '2026-11-10',
     description: `Köp ${id}`,
     account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
+    category: null,
     ...overrides,
   });
 
@@ -126,6 +129,33 @@ describe('TransactionsPage', () => {
     expect(incoming?.classList.contains('text-emerald-600')).toBe(true);
     expect(outgoing?.textContent?.trim()).toBe('−1 234,50 kr');
     expect(outgoing?.classList.contains('text-emerald-600')).toBe(false);
+  });
+
+  it('shows the subcategory icon on the category colour, and a placeholder when uncategorised', async () => {
+    const { page } = await render(
+      response([
+        transaction(2, {
+          category: {
+            category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
+            subcategory: { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+            confirmed: true,
+          },
+        }),
+        transaction(1),
+      ]),
+    );
+
+    const [categorised, uncategorised] = Array.from(page.querySelectorAll('li[data-transaction]'));
+    const badge = categorised?.querySelector('[data-badge]') as HTMLElement;
+    expect(badge.getAttribute('aria-label')).toBe('Livsmedel');
+    expect(badge.style.getPropertyValue('--category-light')).toBe(CATEGORY_PALETTE.green.light);
+    expect(badge.querySelector('path')?.getAttribute('d')).toBe(
+      LUCIDE_ICONS['shopping-basket'].find(([tag]) => tag === 'path')?.[1]['d'],
+    );
+    expect(uncategorised?.querySelector('[data-badge]')).toBeNull();
+    expect(uncategorised?.querySelector('[data-uncategorised]')?.getAttribute('aria-label')).toBe(
+      'Okategoriserad',
+    );
   });
 
   it('links each transaction to its page', async () => {

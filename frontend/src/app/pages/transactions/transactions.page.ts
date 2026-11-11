@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import type { ConnectedAccount, Transaction } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { TransactionsService } from '../../transactions.service';
@@ -17,7 +18,7 @@ interface DayGroup {
 
 @Component({
   selector: 'app-transactions-page',
-  imports: [RouterLink, DateHeadingPipe, MoneyPipe],
+  imports: [RouterLink, DateHeadingPipe, MoneyPipe, TransactionCategoryBadge],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       @if (expiringConnection()) {
@@ -76,9 +77,10 @@ interface DayGroup {
                   <li data-transaction>
                     <a
                       [routerLink]="['/transaktioner', transaction.id]"
-                      class="flex items-baseline justify-between gap-3 py-2"
+                      class="flex items-center gap-3 py-2"
                     >
-                      <span class="flex flex-col">
+                      <app-transaction-category-badge [category]="transaction.category" />
+                      <span class="flex min-w-0 flex-1 flex-col">
                         <span data-description>{{ transaction.description }}</span>
                         <span data-account class="text-sm text-zinc-500 dark:text-zinc-400"
                           >{{ transaction.account.name }} · {{ transaction.account.bank }}</span

@@ -3,7 +3,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import type { TransactionDetails } from '@bankapp/shared';
+import type { CategoriesResponse, TransactionCategory, TransactionDetails } from '@bankapp/shared';
+import { TransactionsService } from '../../transactions.service';
 import { TransactionDetailsPage } from './transaction-details.page';
 
 describe('TransactionDetailsPage', () => {
@@ -30,6 +31,7 @@ describe('TransactionDetailsPage', () => {
     amount: { amount: -12.5, currency: 'SEK' },
     description: 'Lunch Rom',
     account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
+    category: null,
     transactionDate: null,
     bookingDate: null,
     counterparty: null,
@@ -94,6 +96,203 @@ describe('TransactionDetailsPage', () => {
       d.getAttribute('data-field'),
     );
     expect(shown).toEqual(['status', 'bank', 'account']);
+  });
+
+  describe('category', () => {
+    const livsmedel: TransactionCategory = {
+      category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
+      subcategory: { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+      confirmed: true,
+    };
+
+    const categoryText = (page: HTMLElement) =>
+      page.querySelector('[data-category-name]')?.textContent?.replace(/\s+/g, ' ').trim();
+
+    it('shows the category and subcategory with its icon', async () => {
+      const { page } = await render(details({ category: livsmedel }));
+
+      expect(categoryText(page)).toBe('Mat & Dryck / Livsmedel');
+      expect(page.querySelector('[data-category] [data-badge]')?.getAttribute('aria-label')).toBe(
+        'Livsmedel',
+      );
+    });
+
+    it('says Okategoriserad when there is none', async () => {
+      const { page } = await render(details());
+
+      expect(categoryText(page)).toBe('Okategoriserad');
+      expect(page.querySelector('[data-category] [data-uncategorised]')).not.toBeNull();
+    });
+
+    const restaurang: TransactionCategory = {
+      category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
+      subcategory: { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
+      confirmed: true,
+    };
+
+    const categories: CategoriesResponse = {
+      categories: [
+        {
+          id: 2,
+          name: 'Mat & Dryck',
+          kind: 'expense',
+          colour: 'green',
+          icon: 'utensils',
+          fixed: false,
+          subcategories: [
+            { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+            { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
+            { id: 16, name: 'Övrigt', icon: 'circle-ellipsis' },
+          ],
+        },
+        {
+          id: 3,
+          name: 'Transport',
+          kind: 'expense',
+          colour: 'blue',
+          icon: 'bus',
+          fixed: false,
+          subcategories: [
+            { id: 20, name: 'Kollektivtrafik', icon: 'train-front' },
+            { id: 21, name: 'Taxi', icon: 'car-taxi-front' },
+          ],
+        },
+      ],
+    };
+
+    async function openPicker(rendered: Awaited<ReturnType<typeof render>>) {
+      (rendered.page.querySelector('[data-category-button]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      TestBed.inject(HttpTestingController).expectOne('/api/categories').flush(categories);
+      await rendered.fixture.whenStable();
+    }
+
+    const pickerGroups = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll('[data-picker-category]')).map((group) => ({
+        name: group.querySelector('[data-picker-category-name]')?.textContent?.trim(),
+        subcategories: Array.from(group.querySelectorAll('[data-subcategory]')).map((button) =>
+          button.textContent?.trim(),
+        ),
+      }));
+
+    async function search(rendered: Awaited<ReturnType<typeof render>>, text: string) {
+      const input = rendered.page.querySelector('[data-category-search]') as HTMLInputElement;
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      await rendered.fixture.whenStable();
+    }
+
+    it('opens a picker with the subcategories grouped under their categories, in order, with icons', async () => {
+      const rendered = await render(details());
+      expect(rendered.page.querySelector('[data-picker]')).toBeNull();
+
+      await openPicker(rendered);
+
+      expect(pickerGroups(rendered.page)).toEqual([
+        { name: 'Mat & Dryck', subcategories: ['Livsmedel', 'Restaurang', 'Övrigt'] },
+        { name: 'Transport', subcategories: ['Kollektivtrafik', 'Taxi'] },
+      ]);
+      const taxi = rendered.page.querySelector('[data-subcategory="21"]');
+      expect(taxi?.querySelector('[data-badge]')?.getAttribute('style')).toContain('--category');
+    });
+
+    it('searches category and subcategory names, ignoring case', async () => {
+      const rendered = await render(details());
+      await openPicker(rendered);
+
+      await search(rendered, 'TAXI');
+      expect(pickerGroups(rendered.page)).toEqual([{ name: 'Transport', subcategories: ['Taxi'] }]);
+
+      await search(rendered, 'mat &');
+      expect(pickerGroups(rendered.page)).toEqual([
+        { name: 'Mat & Dryck', subcategories: ['Livsmedel', 'Restaurang', 'Övrigt'] },
+      ]);
+
+      await search(rendered, 'övr');
+      expect(pickerGroups(rendered.page)).toEqual([
+        { name: 'Mat & Dryck', subcategories: ['Övrigt'] },
+      ]);
+
+      await search(rendered, 'xyz');
+      expect(pickerGroups(rendered.page)).toEqual([]);
+      expect(rendered.page.querySelector('[data-picker-empty]')?.textContent?.trim()).toBe(
+        'Inga träffar',
+      );
+    });
+
+    it('saves the chosen subcategory as confirmed and shows it, also in the list kept for the way back', async () => {
+      const service = TestBed.inject(TransactionsService);
+      const listed = { ...details(), date: '2026-11-08', category: livsmedel };
+      service.listed = { transactions: [listed], cursor: null };
+      const rendered = await render(details({ category: livsmedel }));
+      await openPicker(rendered);
+
+      (rendered.page.querySelector('[data-subcategory="13"]') as HTMLButtonElement).click();
+      const request = TestBed.inject(HttpTestingController).expectOne(
+        '/api/transactions/5/category',
+      );
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ subcategoryId: 13 });
+      request.flush({ category: restaurang });
+      await rendered.fixture.whenStable();
+
+      expect(categoryText(rendered.page)).toBe('Mat & Dryck / Restaurang');
+      expect(rendered.page.querySelector('[data-picker]')).toBeNull();
+      expect(service.listed?.transactions[0]?.category).toEqual(restaurang);
+    });
+
+    it('removes the category, making the transaction uncategorised', async () => {
+      const rendered = await render(details({ category: livsmedel }));
+
+      (rendered.page.querySelector('[data-remove-category]') as HTMLButtonElement).click();
+      const request = TestBed.inject(HttpTestingController).expectOne(
+        '/api/transactions/5/category',
+      );
+      expect(request.request.body).toEqual({ subcategoryId: null });
+      request.flush({ category: null });
+      await rendered.fixture.whenStable();
+
+      expect(categoryText(rendered.page)).toBe('Okategoriserad');
+      expect(rendered.page.querySelector('[data-remove-category]')).toBeNull();
+    });
+
+    it('says so when the categories cannot be fetched, and tries again on the next tap', async () => {
+      const rendered = await render(details());
+      const button = rendered.page.querySelector('[data-category-button]') as HTMLButtonElement;
+      const http = TestBed.inject(HttpTestingController);
+
+      button.click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/categories').flush('', { status: 500, statusText: 'x' });
+      await rendered.fixture.whenStable();
+      expect(rendered.page.querySelector('[role="alert"]')?.textContent).toContain(
+        'Kategorierna kunde inte hämtas',
+      );
+      expect(rendered.page.querySelector('[data-picker]')).toBeNull();
+
+      button.click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/categories').flush(categories);
+      await rendered.fixture.whenStable();
+      expect(rendered.page.querySelector('[role="alert"]')).toBeNull();
+      expect(rendered.page.querySelector('[data-picker]')).not.toBeNull();
+    });
+
+    it('keeps the category and says so when it cannot be saved', async () => {
+      const rendered = await render(details({ category: livsmedel }));
+      await openPicker(rendered);
+
+      (rendered.page.querySelector('[data-subcategory="13"]') as HTMLButtonElement).click();
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/transactions/5/category')
+        .flush('', { status: 500, statusText: 'x' });
+      await rendered.fixture.whenStable();
+
+      expect(categoryText(rendered.page)).toBe('Mat & Dryck / Livsmedel');
+      expect(rendered.page.querySelector('[role="alert"]')?.textContent).toContain(
+        'Kategorin kunde inte sparas',
+      );
+    });
   });
 
   it('has a collapsed Rådata section with pretty-printed JSON', async () => {
