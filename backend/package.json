@@ -7,7 +7,8 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tune:classifier": "vitest run --config tools/vitest.config.mts"
   },
   "dependencies": {
     "@nestjs/common": "~12.3.3",

@@ -39,6 +39,12 @@ export const CONFIDENCE_THRESHOLD = 0.8;
  */
 const SMOOTHING = 0.5;
 
+export interface ClassifierOptions {
+  smoothing?: number;
+  minExamples?: number;
+  threshold?: number;
+}
+
 /**
  * A multinomial naive Bayes classifier over the words of the normalised description, the account
  * and the sign of the amount. It runs entirely in memory and is cheap enough to retrain from the
@@ -48,6 +54,9 @@ const SMOOTHING = 0.5;
  * produce a guess: with no known word the owner's most common subcategory would win every time.
  */
 export class TextClassifier<Label extends string | number> {
+  /** The defaults are what the app runs with; tuning (`tools/tune-classifier.tune.ts`) overrides them. */
+  constructor(private readonly options: ClassifierOptions = {}) {}
+
   private readonly examples = new Map<Label, number>();
   private readonly featureCounts = new Map<Label, Map<string, number>>();
   private readonly featureTotals = new Map<Label, number>();
@@ -68,22 +77,34 @@ export class TextClassifier<Label extends string | number> {
 
   /** The most likely label, when there is enough training data and the confidence is high enough. */
   predict(input: ClassifierInput): Label | undefined {
-    if (this.total < MIN_TRAINING_EXAMPLES) return undefined;
+    if (this.total < (this.options.minExamples ?? MIN_TRAINING_EXAMPLES)) return undefined;
+    const best = this.score(input);
+    return best && best.confidence >= (this.options.threshold ?? CONFIDENCE_THRESHOLD)
+      ? best.label
+      : undefined;
+  }
+
+  /**
+   * The most likely label and its posterior probability, before any threshold or minimum of
+   * training data is applied. Undefined when the description has no word seen in training.
+   */
+  score(input: ClassifierInput): { label: Label; confidence: number } | undefined {
+    const smoothing = this.options.smoothing ?? SMOOTHING;
     const known = features(input).filter((feature) => this.vocabulary.has(feature));
-    if (!known.some((feature) => feature.startsWith(WORD))) return undefined;
+    if (this.total === 0 || !known.some((feature) => feature.startsWith(WORD))) return undefined;
 
     const scores = [...this.examples].map(([label, count]) => {
       const counts = this.featureCounts.get(label)!;
-      const denominator = this.featureTotals.get(label)! + SMOOTHING * this.vocabulary.size;
+      const denominator = this.featureTotals.get(label)! + smoothing * this.vocabulary.size;
       let score = Math.log(count / this.total);
       for (const feature of known) {
-        score += Math.log(((counts.get(feature) ?? 0) + SMOOTHING) / denominator);
+        score += Math.log(((counts.get(feature) ?? 0) + smoothing) / denominator);
       }
       return { label, score };
     });
     const best = scores.reduce((a, b) => (b.score > a.score ? b : a));
     const sum = scores.reduce((acc, { score }) => acc + Math.exp(score - best.score), 0);
-    return 1 / sum >= CONFIDENCE_THRESHOLD ? best.label : undefined;
+    return { label: best.label, confidence: 1 / sum };
   }
 }
 

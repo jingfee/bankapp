@@ -174,13 +174,13 @@ function lookUp(ids: Map<string, number>, target: DefaultSubcategory | undefined
   return target === undefined ? undefined : ids.get(key(target));
 }
 
-function fromKeywords(description: string): DefaultSubcategory | undefined {
+export function fromKeywords(description: string): DefaultSubcategory | undefined {
   const folded = fold(description);
   return KEYWORDS.find(({ pattern }) => pattern.test(folded))?.subcategory ?? undefined;
 }
 
 /** Swish, autogiro and transfers carry no code, and a raw response may not even be JSON. */
-function fromCode(rawJson: string): DefaultSubcategory | undefined {
+export function fromCode(rawJson: string): DefaultSubcategory | undefined {
   try {
     const raw: unknown = JSON.parse(rawJson);
     const code =
