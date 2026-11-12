@@ -73,7 +73,10 @@ function formatOriginal({ amount, currency }: Money): string {
               ← Transaktioner
             </button>
             <header>
-              <h1 data-description class="text-3xl font-semibold tracking-tight">
+              <h1
+                data-description
+                class="text-3xl [overflow-wrap:anywhere] font-semibold tracking-tight"
+              >
                 {{ t.description || 'Transaktion' }}
               </h1>
               <p
@@ -182,8 +185,8 @@ function formatOriginal({ amount, currency }: Money): string {
                   [routerLink]="['/transaktioner', purchase.id]"
                   class="flex justify-between gap-3 underline"
                 >
-                  <span>{{ purchase.description }}</span>
-                  <span class="tabular-nums">{{
+                  <span class="min-w-0 [overflow-wrap:anywhere]">{{ purchase.description }}</span>
+                  <span class="shrink-0 tabular-nums">{{
                     purchase.amount.amount | money: purchase.amount.currency
                   }}</span>
                 </a>
@@ -244,13 +247,13 @@ function formatOriginal({ amount, currency }: Money): string {
                             [disabled]="saving()"
                             (click)="setOffset(candidate.id)"
                           >
-                            <span class="flex flex-col">
+                            <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
                               <span>{{ candidate.description }}</span>
                               <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
                                 candidate.date
                               }}</span>
                             </span>
-                            <span class="tabular-nums">{{
+                            <span class="shrink-0 tabular-nums">{{
                               candidate.amount.amount | money: candidate.amount.currency
                             }}</span>
                           </button>
@@ -277,8 +280,10 @@ function formatOriginal({ amount, currency }: Money): string {
                         [routerLink]="['/transaktioner', refund.id]"
                         class="flex justify-between gap-3 underline"
                       >
-                        <span>{{ refund.description }}</span>
-                        <span class="tabular-nums">{{
+                        <span class="min-w-0 [overflow-wrap:anywhere]">{{
+                          refund.description
+                        }}</span>
+                        <span class="shrink-0 tabular-nums">{{
                           refund.amount.amount | money: refund.amount.currency
                         }}</span>
                       </a>
@@ -294,11 +299,11 @@ function formatOriginal({ amount, currency }: Money): string {
               </section>
             }
             <dl
-              class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 sm:gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
               @for (field of fields(); track field.key) {
                 <dt class="text-zinc-500 dark:text-zinc-400">{{ field.label }}</dt>
-                <dd [attr.data-field]="field.key" class="text-right break-words">
+                <dd [attr.data-field]="field.key" class="text-right [overflow-wrap:anywhere]">
                   {{ field.value }}
                 </dd>
               }
