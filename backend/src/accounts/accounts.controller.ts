@@ -28,6 +28,16 @@ export class AccountsController {
   list(): AccountsResponse {
     return this.accounts.listByBank();
   }
+
+  /** Hides or shows an account with `hidden: true` or `false`. */
+  @Put(':id/hidden')
+  setHidden(@Param('id') id: string, @Body() body: unknown): void {
+    const { hidden } = (body ?? {}) as { hidden?: unknown };
+    if (typeof hidden !== 'boolean') throw new BadRequestException('hidden must be true or false');
+    if (!isId(id) || this.accounts.setHidden(Number(id), hidden) === 'no-account') {
+      throw new NotFoundException('There is no such account');
+    }
+  }
 }
 
 @Controller('transactions')

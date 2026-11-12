@@ -44,6 +44,10 @@ _Avoid_: Bank account (when a card is meant), login, connection
 An account that a renewal no longer returns. It keeps its history and is never deleted, but is no longer synced.
 _Avoid_: Deleted, removed, inactive
 
+**Hidden account** (sv: _Dolt konto_):
+An account the owner chose to hide on Banker. It is left off the start page and none of its transactions are shown anywhere (lists, review, overview, details). It is still synced, so showing it again brings everything back.
+_Avoid_: Deleted, archived, closed account (that is a different thing)
+
 **Account type** (sv: _Kontotyp_):
 Whether an account is a payment, savings or card account.
 _Avoid_: Product, category
@@ -68,6 +72,10 @@ _Avoid_: Completed, settled, cleared
 A transaction the bank has registered but not yet booked; it may change or disappear before booking. A pending transaction that books is the same transaction, not a second one: the owner sees it once, first as pending and then as booked.
 The bank may reserve a refund with the wrong sign and describe the merchant slightly differently once booked, so the two are recognised as the same by amount size, currency and the description's letters and digits. Rejected and cancelled attempts (`RJCT`, `CNCL`) are not transactions and are never stored. The bank does not say which card made a purchase, so there is no cardholder.
 _Avoid_: Reserved, waiting, authorised, reservation (as a separate thing from its booked transaction)
+
+**Upcoming transaction** (sv: _Kommande_):
+A payment the bank has scheduled but that has not happened yet, such as an invoice due or a standing order. The bank reports it as pending, with a booking date to come and no transaction date, unlike a pending card purchase, which has already happened. It is not stored and never shown until the bank books it.
+_Avoid_: Pending transaction, reserved
 
 **Transaction date** (sv: _Transaktionsdatum_):
 The day the owner made the transaction, e.g. paid in a shop. Transactions are listed under this day.

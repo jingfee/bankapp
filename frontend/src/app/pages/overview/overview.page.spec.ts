@@ -72,6 +72,7 @@ describe('OverviewPage', () => {
     name,
     type: 'payment',
     balance: balance === null ? null : { amount: balance, currency: 'SEK' },
+    hidden: false,
     lastSyncedAt: null,
   });
 
@@ -378,6 +379,20 @@ describe('OverviewPage', () => {
         { name: 'Kort', balance: '−99,00 kr' },
       ]);
       expect(page.querySelector('[data-balance-strip] a, [data-balance-strip] button')).toBeNull();
+    });
+
+    it('leaves out hidden accounts', async () => {
+      const { page } = await render(
+        overview(),
+        accountsOf([
+          bankGroup('Swedbank', [
+            account('Lönekonto', 100, 1),
+            { ...account('Gömt', 5, 2), hidden: true },
+          ]),
+        ]),
+      );
+
+      expect(strip(page)).toEqual([{ name: 'Lönekonto', balance: '100,00\u00a0kr' }]);
     });
 
     it('leaves out closed accounts', async () => {

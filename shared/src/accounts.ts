@@ -13,6 +13,8 @@ export interface ConnectedAccount {
   id: number;
   name: string;
   type: AccountType;
+  /** The owner hid it: it is left off the overview and its transactions are not shown. */
+  hidden: boolean;
   /** The balance shown on the overview, or null when none has been fetched yet. */
   balance: Money | null;
   /** When the account was last synced successfully (ISO 8601), or null if it never was. */

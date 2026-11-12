@@ -45,7 +45,7 @@ import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
-import { categoryColumns, toCategory, toTransaction } from './transaction-rows';
+import { categoryColumns, onVisibleAccount, toCategory, toTransaction } from './transaction-rows';
 import { parseTransactionDetails } from './transaction-details';
 import {
   SEARCH_LIMIT,
@@ -100,6 +100,7 @@ export class AccountsService {
         name: accounts.name,
         type: accounts.type,
         closed: accounts.closed,
+        hidden: accounts.hidden,
         validUntil: connections.validUntil,
       })
       .from(accounts)
@@ -118,7 +119,7 @@ export class AccountsService {
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
     const now = this.now();
-    for (const { id, bank, name, type, closed, validUntil } of rows) {
+    for (const { id, bank, name, type, closed, hidden, validUntil } of rows) {
       const group = byBank.get(bank) ?? {
         bank,
         status: connectionStatus(validUntil, now),
@@ -131,6 +132,7 @@ export class AccountsService {
         name,
         type,
         balance: shown.get(id) ?? null,
+        hidden,
         lastSyncedAt: lastSynced.get(id)?.toISOString() ?? null,
       });
       byBank.set(bank, group);
@@ -140,6 +142,17 @@ export class AccountsService {
       syncing: this.sync.isSyncing(),
       lastSync: this.lastSync(),
     };
+  }
+
+  /** Hides or shows an account; `'no-account'` when there is none with this id. */
+  setHidden(id: number, hidden: boolean): 'ok' | 'no-account' {
+    const updated = this.db
+      .update(accounts)
+      .set({ hidden })
+      .where(eq(accounts.id, id))
+      .returning({ id: accounts.id })
+      .get();
+    return updated === undefined ? 'no-account' : 'ok';
   }
 
   /** How the most recent finished sync went, or null if none has finished. */
@@ -194,7 +207,7 @@ export class AccountsService {
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(after)
+      .where(and(onVisibleAccount(this.db), after))
       .orderBy(desc(transactions.date), desc(transactions.id))
       .limit(TRANSACTIONS_PAGE_SIZE + 1)
       .all();
@@ -212,6 +225,7 @@ export class AccountsService {
    */
   private get needsReview() {
     return and(
+      onVisibleAccount(this.db),
       eq(transactions.categoryConfirmed, false),
       gte(transactions.date, REVIEW_FROM),
       // A refund follows its purchase, so there is nothing to ask about it.
@@ -272,7 +286,7 @@ export class AccountsService {
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(eq(transactions.id, id))
+      .where(and(eq(transactions.id, id), onVisibleAccount(this.db)))
       .get();
     if (found === undefined) return null;
     const { transaction: row, accountName, accountType, bank, category } = found;
@@ -371,6 +385,7 @@ export class AccountsService {
     if (refund === undefined) return 'no-transaction';
     const text = search?.trim() ?? '';
     const base = and(
+      onVisibleAccount(this.db),
       lt(transactions.amount, 0),
       eq(transactions.status, 'booked'),
       eq(transactions.currency, refund.currency),

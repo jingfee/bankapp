@@ -38,6 +38,8 @@ export const accounts = sqliteTable('accounts', {
   currency: text('currency').notNull(),
   /** Set when a renewal no longer returns the account; it keeps its history but is not synced. */
   closed: integer('closed', { mode: 'boolean' }).notNull().default(false),
+  /** The owner hid the account: it is left off the overview and its transactions are not shown. */
+  hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
   /** The account as Enable Banking last returned it, as JSON; empty until first seen (ADR 0001). */
   raw: text('raw'),
 });

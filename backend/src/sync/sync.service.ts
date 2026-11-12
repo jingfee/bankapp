@@ -299,6 +299,7 @@ export class SyncService implements OnModuleInit {
     fetched: EnableBankingTransaction[],
     fetchedAt: Date,
   ): number {
+    fetched = fetched.filter((transaction) => !isUpcoming(transaction));
     const fetchedDay = localDay(fetchedAt, this.config.timezone);
     const occurrences = new Map<string, number>();
     const pendings = { count: 0 };
@@ -473,6 +474,20 @@ export class SyncService implements OnModuleInit {
     this.guesser.guess(tx, toGuess);
     return added;
   }
+}
+
+/**
+ * A payment the bank has scheduled but that has not happened yet, e.g. an invoice due or a
+ * standing order: pending with a booking date to come and no transaction date. Unlike a card
+ * reservation, which has a transaction date and no booking date, it is not stored until the
+ * bank books it.
+ */
+function isUpcoming(transaction: EnableBankingTransaction): boolean {
+  return (
+    transaction.status === 'pending' &&
+    transaction.transactionDate === null &&
+    transaction.bookingDate !== null
+  );
 }
 
 /**

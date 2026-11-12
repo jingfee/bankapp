@@ -31,7 +31,7 @@ function transaction(
     status: 'booked',
     amount: -100,
     currency: 'SEK',
-    bookingDate: '2026-11-09',
+    bookingDate: overrides.status === 'pending' ? null : '2026-11-09',
     valueDate: '2026-11-09',
     transactionDate: null,
     description,

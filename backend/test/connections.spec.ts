@@ -156,6 +156,7 @@ describe('connecting a bank', () => {
         currency: 'SEK',
         raw: '{"uid":"uid-1"}',
         closed: false,
+        hidden: false,
       });
     });
 

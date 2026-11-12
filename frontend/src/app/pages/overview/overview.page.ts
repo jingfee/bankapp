@@ -246,7 +246,8 @@ export class OverviewPage {
   );
 
   protected readonly openAccounts = computed<ConnectedAccount[] | null>(() => {
-    const open = this.accounts()?.banks.flatMap((group) => group.accounts) ?? [];
+    const open =
+      this.accounts()?.banks.flatMap((group) => group.accounts.filter((a) => !a.hidden)) ?? [];
     return open.length === 0 ? null : open;
   });
 
