@@ -83,7 +83,7 @@ _Avoid_: Purchase date, date (unqualified)
 
 **Booking date** (sv: _Bokföringsdatum_):
 The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
-_Avoid_: Settlement date, posting date
+_Avoid_: Value date, posting date
 
 ### Syncing
 
@@ -146,5 +146,19 @@ A subcategory the owner chose or accepted for a transaction. The app never chang
 _Avoid_: Manual category, locked category
 
 **Offset** (sv: _Kvittning_, verb _kvitta_):
-Linking a money-in transaction, a refund, to the one purchase it pays back, such as a returned item or a friend's Swish for their share of a bill. A refund offsets exactly one purchase; a purchase can have several refunds. The refund takes the purchase's subcategory as a confirmed category and follows it when it changes, so the owner changes the purchase, not the refund. In totals the refund counts in the purchase's month (ADR 0006). A purchase that has refunds and a category is not asked about in Review. Removing the link leaves the refund with that category, counting in its own month again.
+Linking a money-in transaction, a refund, to the one purchase it pays back, such as a returned item or a friend's Swish for their share of a bill. A refund offsets exactly one purchase; a purchase can have several refunds. The refund takes the purchase's subcategory as a confirmed category and follows it when it changes, so the owner changes the purchase, not the refund. In totals the refund counts in the purchase's month (ADR 0006). A purchase that has refunds and a category is not asked about in Review. It likewise takes the purchase's share. Removing the link leaves the refund with that category, counting in its own month again with its own share.
 _Avoid_: Match, link (in the UI), reconcile, refund category
+
+### Sharing
+
+**Share** (sv: _Andel_):
+The part of a transaction the owner bears, as a percentage; the rest is borne by the other party the owner splits costs with, who is not modelled. 100% means not shared. A share is a whole percentage from 0 to 100. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise 100%; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
+_Avoid_: Split, ratio, portion, my part
+
+**Shared transaction** (sv: _Delad_):
+A transaction whose share is below 100%.
+_Avoid_: Split transaction, joint transaction
+
+**Settlement** (sv: _Avräkning_):
+A transfer from the other party paying back their part of a month's shared transactions. It is a transfer, so it counts in no total; otherwise the owner's share would be reduced twice.
+_Avoid_: Repayment, refund, income, offset
