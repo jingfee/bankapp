@@ -101,7 +101,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           type="button"
           data-previous-month
           aria-label="Föregående månad"
-          class="rounded-lg px-3 py-2 text-xl hover:bg-zinc-200/60"
+          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-zinc-200/60"
           (click)="go(-1)"
         >
           ‹
@@ -111,7 +111,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           type="button"
           data-next-month
           aria-label="Nästa månad"
-          class="rounded-lg px-3 py-2 text-xl hover:bg-zinc-200/60 disabled:opacity-30"
+          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-zinc-200/60 disabled:opacity-30"
           [disabled]="!canGoForward()"
           (click)="go(1)"
         >
@@ -128,15 +128,15 @@ function bars<T extends { id: number; name: string; total: number }>(
         }
         @default {
           @if (overview(); as o) {
-            <dl class="grid grid-cols-3 gap-3">
+            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
               @for (total of totalRows(); track total.kind) {
                 <div
                   [attr.data-total]="total.kind"
-                  class="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                  class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm sm:block dark:border-zinc-800 dark:bg-zinc-900"
                 >
                   <dt class="text-sm text-zinc-500 dark:text-zinc-400">{{ total.label }}</dt>
                   <dd data-amount class="font-semibold tabular-nums">{{ total.amount }}</dd>
-                  <dd data-change class="text-xs text-zinc-500 dark:text-zinc-400">
+                  <dd data-change class="basis-full text-xs text-zinc-500 dark:text-zinc-400">
                     {{ total.change }}
                   </dd>
                 </div>
@@ -156,7 +156,7 @@ function bars<T extends { id: number; name: string; total: number }>(
               @if (section.bars.length > 0) {
                 <section
                   [attr.data-section]="section.key"
-                  class="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                  class="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:p-4 dark:border-zinc-800 dark:bg-zinc-900"
                 >
                   <h2 class="px-2 text-lg font-semibold">{{ section.title }}</h2>
                   <ul class="mt-2 flex flex-col">
@@ -170,15 +170,19 @@ function bars<T extends { id: number; name: string; total: number }>(
                         >
                           <span class="flex items-center gap-3">
                             <app-category-icon [icon]="bar.item.icon" [colour]="bar.item.colour" />
-                            <span data-name class="min-w-0 flex-1 truncate">{{ bar.name }}</span>
-                            <span data-amount class="font-medium tabular-nums">{{
-                              bar.total | money
+                            <span data-name class="min-w-0 flex-1 wrap-break-word">{{
+                              bar.name
                             }}</span>
-                            <span
-                              data-share
-                              class="w-12 text-right text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-                              >{{ bar.share }} %</span
-                            >
+                            <span class="flex shrink-0 flex-col items-end">
+                              <span data-amount class="font-medium tabular-nums">{{
+                                bar.total | money
+                              }}</span>
+                              <span
+                                data-share
+                                class="text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+                                >{{ bar.share }} %</span
+                              >
+                            </span>
                           </span>
                           <span
                             class="mt-1 block h-2 rounded-full bg-zinc-100 dark:bg-zinc-800"
@@ -196,7 +200,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 
                         @if (openCategory() === bar.id) {
                           <ul
-                            class="mt-1 mb-2 ml-6 flex flex-col border-l border-zinc-200 pl-3 dark:border-zinc-700"
+                            class="mt-1 mb-2 ml-3 flex flex-col border-l border-zinc-200 pl-1 dark:border-zinc-700"
                           >
                             @for (sub of subBars(bar.item); track sub.id) {
                               <li [attr.data-subcategory-row]="sub.name">
@@ -211,17 +215,19 @@ function bars<T extends { id: number; name: string; total: number }>(
                                       [icon]="sub.item.icon"
                                       [colour]="bar.item.colour"
                                     />
-                                    <span data-name class="min-w-0 flex-1 truncate">{{
+                                    <span data-name class="min-w-0 flex-1 wrap-break-word">{{
                                       sub.name
                                     }}</span>
-                                    <span data-amount class="font-medium tabular-nums">{{
-                                      sub.total | money
-                                    }}</span>
-                                    <span
-                                      data-share
-                                      class="w-12 text-right text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-                                      >{{ sub.share }} %</span
-                                    >
+                                    <span class="flex shrink-0 flex-col items-end">
+                                      <span data-amount class="font-medium tabular-nums">{{
+                                        sub.total | money
+                                      }}</span>
+                                      <span
+                                        data-share
+                                        class="text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+                                        >{{ sub.share }} %</span
+                                      >
+                                    </span>
                                   </span>
                                   <span
                                     class="mt-1 block h-2 rounded-full bg-zinc-100 dark:bg-zinc-800"
@@ -247,7 +253,10 @@ function bars<T extends { id: number; name: string; total: number }>(
                                     </p>
                                   } @else {
                                     <div class="mt-2 mb-3">
-                                      <app-transaction-list [transactions]="subTransactions()" />
+                                      <app-transaction-list
+                                        [transactions]="subTransactions()"
+                                        [compact]="true"
+                                      />
                                     </div>
                                   }
                                 }

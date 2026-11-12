@@ -19,9 +19,11 @@ interface DayGroup {
     @for (group of groups(); track group.date) {
       <section
         [attr.data-date]="group.date"
-        class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        class="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        [class.p-6]="!compact()"
+        [class.p-3]="compact()"
       >
-        <h2 class="text-lg font-semibold">{{ group.date | dateHeading }}</h2>
+        <h2 class="font-semibold" [class.text-lg]="!compact()">{{ group.date | dateHeading }}</h2>
         <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
           @for (transaction of group.transactions; track transaction.id) {
             <li data-transaction>
@@ -56,6 +58,8 @@ interface DayGroup {
 })
 export class TransactionList {
   readonly transactions = input.required<Transaction[]>();
+  /** Tighter cards, for a list nested inside another card. */
+  readonly compact = input(false);
 
   /** The transactions, already newest first, split into one group per day. */
   protected readonly groups = computed<DayGroup[]>(() => {
