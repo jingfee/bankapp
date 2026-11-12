@@ -80,12 +80,12 @@ function bars<T extends { id: number; name: string; total: number }>(
       }
 
       @if (openAccounts(); as open) {
-        <ul data-balance-strip class="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+        <ul data-balance-strip class="grid grid-cols-2 gap-3 sm:grid-cols-3">
           @for (account of open; track account.id) {
             <li
-              class="flex shrink-0 flex-col rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              class="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <span data-account-name class="text-sm text-zinc-500 dark:text-zinc-400">{{
+              <span data-account-name class="truncate text-sm text-zinc-500 dark:text-zinc-400">{{
                 account.name
               }}</span>
               <span data-balance class="font-medium tabular-nums">{{
