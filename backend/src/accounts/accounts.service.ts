@@ -1,6 +1,23 @@
 import { Inject, Injectable } from '@nestjs/common';
+<<<<<<< Updated upstream
 import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
 import type { AccountsResponse, Money, SyncSummary, TransactionsResponse } from '@bankapp/shared';
+=======
+import { and, asc, count, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
+import type {
+  AccountType,
+  AccountsResponse,
+  Category,
+  CategoryIcon,
+  Money,
+  SyncSummary,
+  TransactionCategory,
+  Transaction,
+  TransactionDetails,
+  TransactionReviewResponse,
+  TransactionsResponse,
+} from '@bankapp/shared';
+>>>>>>> Stashed changes
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import {
@@ -21,6 +38,75 @@ import { SyncService } from '../sync/sync.service';
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
 
+<<<<<<< Updated upstream
+=======
+/** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
+const categoryColumns = {
+  confirmed: transactions.categoryConfirmed,
+  subcategoryId: subcategories.id,
+  subcategoryName: subcategories.name,
+  subcategoryIcon: subcategories.icon,
+  categoryId: categories.id,
+  categoryName: categories.name,
+  categoryColour: categories.colour,
+};
+
+interface CategoryColumns {
+  confirmed: boolean;
+  subcategoryId: number | null;
+  subcategoryName: string | null;
+  subcategoryIcon: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  categoryColour: string | null;
+}
+
+/** A transaction's category as the API shows it, or null when it is uncategorised. */
+function toCategory(row: CategoryColumns): TransactionCategory | null {
+  if (row.subcategoryId === null || row.categoryId === null) return null;
+  return {
+    // Stored as text; only palette and icon names are ever written.
+    category: {
+      id: row.categoryId,
+      name: row.categoryName ?? '',
+      colour: row.categoryColour as Category['colour'],
+    },
+    subcategory: {
+      id: row.subcategoryId,
+      name: row.subcategoryName ?? '',
+      icon: row.subcategoryIcon as CategoryIcon,
+    },
+    confirmed: row.confirmed,
+  };
+}
+
+interface ListedRow {
+  transaction: typeof transactions.$inferSelect;
+  accountName: string;
+  accountType: AccountType;
+  bank: string;
+  category: CategoryColumns;
+}
+
+function toTransaction({
+  transaction: row,
+  accountName,
+  accountType,
+  bank,
+  category,
+}: ListedRow): Transaction {
+  return {
+    id: row.id,
+    status: row.status,
+    amount: { amount: row.amount, currency: row.currency },
+    date: row.date,
+    description: row.description,
+    account: { id: row.accountId, name: accountName, bank, type: accountType },
+    category: toCategory(category),
+  };
+}
+
+>>>>>>> Stashed changes
 /** How many transactions one page of the transaction list holds. */
 export const TRANSACTIONS_PAGE_SIZE = 50;
 
@@ -139,6 +225,7 @@ export class AccountsService {
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1)?.transaction;
     return {
+<<<<<<< Updated upstream
       transactions: page.map(({ transaction: row, accountName, accountType, bank }) => ({
         id: row.id,
         status: row.status,
@@ -147,10 +234,114 @@ export class AccountsService {
         description: row.description,
         account: { id: row.accountId, name: accountName, bank, type: accountType },
       })),
+=======
+      transactions: page.map(toTransaction),
+>>>>>>> Stashed changes
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
     };
   }
 
+<<<<<<< Updated upstream
+=======
+  /** The transactions waiting for review: guessed or uncategorised, not yet decided by the owner. */
+  private readonly needsReview = eq(transactions.categoryConfirmed, false);
+
+  /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
+  listForReview(): TransactionReviewResponse {
+    const rows = this.db
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+        category: categoryColumns,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(this.needsReview)
+      .orderBy(desc(transactions.date), desc(transactions.id))
+      .all();
+    return { transactions: rows.map(toTransaction), count: rows.length };
+  }
+
+  /** How many transactions are waiting for review. */
+  countForReview(): number {
+    return this.db.select({ n: count() }).from(transactions).where(this.needsReview).get()?.n ?? 0;
+  }
+
+  /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */
+  getTransaction(id: number): TransactionDetails | null {
+    const found = this.db
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+        category: categoryColumns,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(eq(transactions.id, id))
+      .get();
+    if (found === undefined) return null;
+    const { transaction: row, accountName, accountType, bank, category } = found;
+    return {
+      id: row.id,
+      status: row.status,
+      amount: { amount: row.amount, currency: row.currency },
+      description: row.description,
+      account: { id: row.accountId, name: accountName, bank, type: accountType },
+      category: toCategory(category),
+      transactionDate: row.transactionDate,
+      bookingDate: row.bookingDate,
+      ...parseTransactionDetails(row.raw, row.amount),
+      raw: row.raw,
+    };
+  }
+
+  /**
+   * Assigns the owner's chosen subcategory to a transaction as confirmed, or makes it
+   * uncategorised for good when `subcategoryId` is null. Returns the category it now has.
+   */
+  setCategory(
+    id: number,
+    subcategoryId: number | null,
+  ): TransactionCategory | null | 'no-transaction' | 'no-subcategory' {
+    if (
+      subcategoryId !== null &&
+      this.db
+        .select({ id: subcategories.id })
+        .from(subcategories)
+        .where(eq(subcategories.id, subcategoryId))
+        .get() === undefined
+    ) {
+      return 'no-subcategory';
+    }
+    const updated = this.db
+      .update(transactions)
+      // Removing is the owner's decision too, so the app does not guess the transaction again.
+      .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
+      .where(eq(transactions.id, id))
+      .returning({ id: transactions.id })
+      .get();
+    if (updated === undefined) return 'no-transaction';
+    const row = this.db
+      .select(categoryColumns)
+      .from(transactions)
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(eq(transactions.id, id))
+      .get();
+    return row ? toCategory(row) : null;
+  }
+
+>>>>>>> Stashed changes
   /** The balance of the preferred type from each account's most recent fetch. */
   private shownBalances(): Map<number, Money> {
     const latestFetch = this.db

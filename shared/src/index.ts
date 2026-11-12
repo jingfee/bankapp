@@ -11,6 +11,14 @@ export type {
   SyncSummary,
   Transaction,
   TransactionAccount,
+<<<<<<< Updated upstream
+=======
+  TransactionCategory,
+  TransactionCategoryResponse,
+  TransactionDetails,
+  TransactionReviewCountResponse,
+  TransactionReviewResponse,
+>>>>>>> Stashed changes
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
