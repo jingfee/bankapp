@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../../clock';
 import type { AppDatabase } from '../../db/database';
 import { DATABASE } from '../../db/database.module';
@@ -8,6 +8,7 @@ import type { DefaultSubcategory } from './default-subcategory';
 import { subcategoryForCode } from './merchant-category-codes';
 import { MERCHANT_KEYWORDS } from './merchant-keywords';
 import { normaliseDescription } from './normalise-description';
+import { type ClassifierInput, TextClassifier } from './text-classifier';
 
 /** Marks that the transactions stored before guessing existed have had their one guess. */
 const GUESS_EXISTING = 'guess-existing-categories';
@@ -37,12 +38,13 @@ const KEYWORDS = [...MERCHANT_KEYWORDS]
   }));
 
 /**
- * Assigns guessed categories, locally and without any network call (ADR 0004). Three layers are
+ * Assigns guessed categories, locally and without any network call (ADR 0004). Four layers are
  * tried in order: the subcategory most recently confirmed for the same normalised description;
  * the built-in Swedish merchant keywords; the card's merchant category code from the raw bank
- * response. When none gives a match the transaction stays uncategorised. A transaction that
- * already has a category, or whose category the owner decided (also to have none), is never
- * touched.
+ * response; and a naive Bayes classifier trained only on the owner's confirmed categories
+ * (`text-classifier.ts`). When none gives a match the transaction stays uncategorised. A
+ * transaction that already has a category, or whose category the owner decided (also to have
+ * none), is never touched.
  */
 @Injectable()
 export class CategoryGuesser implements OnApplicationBootstrap {
@@ -79,12 +81,17 @@ export class CategoryGuesser implements OnApplicationBootstrap {
     if (ids.length === 0) return 0;
     const subcategoryIds = this.subcategoryIds(db);
     const history = this.history(db);
+    // Trained from the confirmed categories as they are now, and only if a transaction needs it.
+    let classifier: TextClassifier<number> | undefined;
+    const classify = (row: ClassifierInput) => (classifier ??= this.classifier(db)).predict(row);
     let guessed = 0;
     for (let start = 0; start < ids.length; start += BATCH_SIZE) {
       const rows = db
         .select({
           id: transactions.id,
           description: transactions.description,
+          accountId: transactions.accountId,
+          amount: transactions.amount,
           raw: transactions.raw,
         })
         .from(transactions)
@@ -100,7 +107,8 @@ export class CategoryGuesser implements OnApplicationBootstrap {
         const subcategoryId =
           history.get(normaliseDescription(row.description)) ??
           lookUp(subcategoryIds, fromKeywords(row.description)) ??
-          lookUp(subcategoryIds, fromCode(row.raw));
+          lookUp(subcategoryIds, fromCode(row.raw)) ??
+          classify(row);
         if (subcategoryId === undefined) continue;
         db.update(transactions)
           .set({ subcategoryId, categoryConfirmed: false })
@@ -132,6 +140,23 @@ export class CategoryGuesser implements OnApplicationBootstrap {
     return history;
   }
 
+  /** A classifier trained on every confirmed category, so it follows each new confirmation. */
+  private classifier(db: Database): TextClassifier<number> {
+    const classifier = new TextClassifier<number>();
+    const rows = db
+      .select({
+        description: transactions.description,
+        accountId: transactions.accountId,
+        amount: transactions.amount,
+        subcategoryId: transactions.subcategoryId,
+      })
+      .from(transactions)
+      .where(and(eq(transactions.categoryConfirmed, true), isNotNull(transactions.subcategoryId)))
+      .all();
+    for (const { subcategoryId, ...input } of rows) classifier.train(input, subcategoryId!);
+    return classifier;
+  }
+
   /** Subcategory ids by category and subcategory name, as the owner currently has them. */
   private subcategoryIds(db: Database): Map<string, number> {
     const rows = db
@@ -149,13 +174,13 @@ function lookUp(ids: Map<string, number>, target: DefaultSubcategory | undefined
   return target === undefined ? undefined : ids.get(key(target));
 }
 
-function fromKeywords(description: string): DefaultSubcategory | undefined {
+export function fromKeywords(description: string): DefaultSubcategory | undefined {
   const folded = fold(description);
   return KEYWORDS.find(({ pattern }) => pattern.test(folded))?.subcategory ?? undefined;
 }
 
 /** Swish, autogiro and transfers carry no code, and a raw response may not even be JSON. */
-function fromCode(rawJson: string): DefaultSubcategory | undefined {
+export function fromCode(rawJson: string): DefaultSubcategory | undefined {
   try {
     const raw: unknown = JSON.parse(rawJson);
     const code =

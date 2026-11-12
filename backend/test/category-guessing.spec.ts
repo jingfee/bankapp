@@ -14,6 +14,7 @@ import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import type { EnableBankingTransaction } from '../src/enable-banking/enable-banking-client';
+import { MIN_TRAINING_EXAMPLES } from '../src/categories/guessing/text-classifier';
 import { SyncService } from '../src/sync/sync.service';
 import { bank, FakeEnableBankingClient, testConfig } from './support';
 
@@ -311,6 +312,111 @@ describe('guessing categories', () => {
     expect(details.category).toMatchObject({
       subcategory: { name: 'Livsmedel' },
       confirmed: false,
+    });
+  });
+
+  describe('from the owner’s confirmed categories', () => {
+    /** How many confirmed categories the classifier needs before it guesses (`MIN_TRAINING_EXAMPLES`). */
+    const HISTORY_SIZE = MIN_TRAINING_EXAMPLES;
+
+    /**
+     * Confirms enough different restaurants, cafés and salons for the classifier to have something
+     * to learn from: the ten named ones, then salons with distinct names up to the minimum.
+     */
+    async function confirmHistory() {
+      const history: [string, string, string][] = [
+        ['Pizzeria Napoli Solna', 'Mat & Dryck', 'Restaurang'],
+        ['Trattoria Bella Vista', 'Mat & Dryck', 'Restaurang'],
+        ['Sushi Yama Kungsgatan', 'Mat & Dryck', 'Restaurang'],
+        ['Thai Orkidé Södermalm', 'Mat & Dryck', 'Restaurang'],
+        ['Pizzeria Roma Haninge', 'Mat & Dryck', 'Restaurang'],
+        ['Bageriet Vete Götgatan', 'Mat & Dryck', 'Café & fika'],
+        ['Kafferosteriet Bönan', 'Mat & Dryck', 'Café & fika'],
+        ['Bageriet Surdeg Solna', 'Mat & Dryck', 'Café & fika'],
+        ['Fikarummet Kanel', 'Mat & Dryck', 'Café & fika'],
+        ['Kafferosteriet Mörkrost', 'Mat & Dryck', 'Café & fika'],
+      ];
+      for (let i = history.length; i < HISTORY_SIZE; i++) {
+        const name = String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + (i >> 1));
+        history.push([`Salong ${name}ka`, 'Hälsa & Skönhet', 'Frisör & skönhet']);
+      }
+      await syncWith(...history.map(([description]) => transaction(description)));
+      for (const [description, category, subcategory] of history) {
+        await confirm(description, category, subcategory);
+      }
+    }
+
+    it('guesses a variant of a merchant the owner has confirmed, but not an unrelated description', async () => {
+      await confirmHistory();
+
+      await syncWith(
+        transaction('Pizzeria Napoli Haninge'),
+        transaction('Kafferosteriet Bönan Vega'),
+        transaction('Mekaniker Lindqvist Verkstad'),
+      );
+
+      expect((await listed()).slice(-3)).toEqual([
+        ['Pizzeria Napoli Haninge', 'Mat & Dryck / Restaurang ?'],
+        ['Kafferosteriet Bönan Vega', 'Mat & Dryck / Café & fika ?'],
+        ['Mekaniker Lindqvist Verkstad', null],
+      ]);
+    });
+
+    it('makes no guess with too few confirmed categories to learn from', async () => {
+      await syncWith(
+        transaction('Pizzeria Napoli Solna'),
+        transaction('Kafferosteriet Bönan'),
+        transaction('Pizzeria Napoli Haninge'),
+      );
+      await confirm('Pizzeria Napoli Solna', 'Mat & Dryck', 'Restaurang');
+      await confirm('Kafferosteriet Bönan', 'Mat & Dryck', 'Café & fika');
+
+      await syncWith(transaction('Pizzeria Napoli Vega'));
+
+      expect((await listed()).slice(3)).toEqual([['Pizzeria Napoli Vega', null]]);
+    });
+
+    it('makes no guess when the words point to several subcategories', async () => {
+      await confirmHistory();
+      await syncWith(transaction('Pizzeria Kafferosteriet Mix'));
+
+      expect((await listed()).slice(-1)).toEqual([['Pizzeria Kafferosteriet Mix', null]]);
+    });
+
+    it('uses the classifier only when history, keywords and the merchant code give nothing', async () => {
+      await confirmHistory();
+
+      await syncWith(
+        transaction('Pizzeria Napoli Haninge', { mcc: '5411' }),
+        transaction('Pizzeria Willys Solna'),
+        transaction('Bageriet Vete Vega'),
+      );
+
+      expect((await listed()).slice(-3)).toEqual([
+        ['Pizzeria Napoli Haninge', 'Mat & Dryck / Livsmedel ?'],
+        ['Pizzeria Willys Solna', 'Mat & Dryck / Livsmedel ?'],
+        ['Bageriet Vete Vega', 'Mat & Dryck / Café & fika ?'],
+      ]);
+    });
+
+    it('learns from a new confirmation without a restart, and from confirmed categories only', async () => {
+      await confirmHistory();
+      await syncWith(transaction('Verkstan Bilbolaget Skruv'));
+      expect((await listed()).at(-1)).toEqual(['Verkstan Bilbolaget Skruv', null]);
+
+      // Guesses are not training data; only the owner's confirmation is.
+      await confirm('Verkstan Bilbolaget Skruv', 'Transport', 'Bilpool & hyrbil');
+      // A subcategory with few confirmations has a low prior, so it takes a dozen to be guessed.
+      const places = ['Nord', 'Syd', 'Öst', 'Väst', 'Cityn', 'Hamn', 'Torg', 'Bro', 'Berg', 'Dal'];
+      const more = [...places, 'Skog', 'Äng', 'Kulle', 'Sjö', 'Hed'].map((p) => `Bilbolaget ${p}`);
+      await syncWith(...more.map((description) => transaction(description)));
+      for (const description of more) await confirm(description, 'Transport', 'Bilpool & hyrbil');
+      await syncWith(transaction('Bilbolaget Mitt'));
+
+      expect((await listed()).at(-1)).toEqual([
+        'Bilbolaget Mitt',
+        'Transport / Bilpool & hyrbil ?',
+      ]);
     });
   });
 });
