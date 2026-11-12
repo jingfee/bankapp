@@ -51,6 +51,7 @@ describe('BankerPage', () => {
     name,
     type,
     balance: null,
+    hidden: false,
     lastSyncedAt: null,
   });
 
@@ -97,7 +98,7 @@ describe('BankerPage', () => {
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
       bank: group.querySelector('h2')?.textContent?.trim(),
       accounts: Array.from(group.querySelectorAll('li')).map((li) =>
-        Array.from(li.querySelectorAll(':scope > span:first-child > *')).map((span) =>
+        Array.from(li.querySelectorAll(':scope > span:first-child > span')).map((span) =>
           span.textContent?.trim(),
         ),
       ),
@@ -472,6 +473,33 @@ describe('BankerPage', () => {
       expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
       expect(closed?.textContent).toContain('Sparkonto');
       expect(page.querySelector('section[data-bank] > ul')?.textContent).not.toContain('Sparkonto');
+    });
+  });
+
+  describe('hiding an account', () => {
+    it('hides a shown account and fetches the accounts again', async () => {
+      const response = (hidden: boolean): AccountsResponse => ({
+        banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment', 7), hidden }])],
+        syncing: false,
+        lastSync: null,
+      });
+      const page = await render((request) => request.flush(response(false)));
+      const button = page.querySelector<HTMLButtonElement>('[data-toggle-hidden]');
+      expect(button?.textContent?.trim()).toBe('Dölj konto');
+      expect(page.querySelector('[data-hidden]')).toBeNull();
+
+      button?.click();
+      const http = TestBed.inject(HttpTestingController);
+      const put = http.expectOne('/api/accounts/7/hidden');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ hidden: true });
+      put.flush(null);
+      await new Promise((resolve) => setTimeout(resolve));
+      http.expectOne('/api/accounts').flush(response(true));
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[data-hidden]')?.textContent?.trim()).toBe('Dold');
+      expect(page.querySelector('[data-toggle-hidden]')?.textContent?.trim()).toBe('Visa konto');
     });
   });
 

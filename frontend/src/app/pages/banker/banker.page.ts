@@ -79,6 +79,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             Förnyelsen kunde inte startas. Försök igen senare.
           </p>
         }
+        @if (hideFailed()) {
+          <p role="alert" class="text-sm text-red-700 dark:text-red-400">
+            Kontot kunde inte ändras. Försök igen senare.
+          </p>
+        }
         @if (startFailed()) {
           <p role="alert" class="text-sm text-red-700 dark:text-red-400">
             Uppdateringen kunde inte startas. Försök igen senare.
@@ -133,13 +138,27 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
               </div>
             }
             <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-              @for (account of group.accounts; track account.name) {
+              @for (account of group.accounts; track account.id) {
                 <li class="flex items-baseline justify-between gap-3 py-2">
                   <span class="flex flex-col">
                     <span>{{ account.name }}</span>
                     <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
                       typeLabel(account.type)
                     }}</span>
+                    @if (account.hidden) {
+                      <span data-hidden class="text-sm text-amber-700 dark:text-amber-400"
+                        >Dold</span
+                      >
+                    }
+                    <button
+                      type="button"
+                      data-toggle-hidden
+                      class="self-start text-sm underline disabled:opacity-50"
+                      [disabled]="togglingHidden()"
+                      (click)="setHidden(account.id, !account.hidden)"
+                    >
+                      {{ account.hidden ? 'Visa konto' : 'Dölj konto' }}
+                    </button>
                   </span>
                   <span class="flex flex-col items-end">
                     <span class="font-medium tabular-nums" data-balance>{{
@@ -192,6 +211,8 @@ export class BankerPage {
   private readonly redirector = inject(Redirector);
   protected readonly renewing = signal(false);
   protected readonly renewFailed = signal(false);
+  protected readonly togglingHidden = signal(false);
+  protected readonly hideFailed = signal(false);
   /** Emits to start (or restart) fetching the accounts. */
   private readonly refresh = new BehaviorSubject<void>(undefined);
   /** What the page currently shows, kept across refreshes. */
@@ -242,6 +263,22 @@ export class BankerPage {
       error: () => {
         this.manualSyncPending.set(false);
         this.startFailed.set(true);
+      },
+    });
+  }
+
+  /** Hides or shows an account; its transactions follow. */
+  protected setHidden(id: number, hidden: boolean): void {
+    this.togglingHidden.set(true);
+    this.hideFailed.set(false);
+    this.accounts.setHidden(id, hidden).subscribe({
+      next: () => {
+        this.togglingHidden.set(false);
+        this.refresh.next();
+      },
+      error: () => {
+        this.togglingHidden.set(false);
+        this.hideFailed.set(true);
       },
     });
   }

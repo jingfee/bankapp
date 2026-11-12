@@ -113,6 +113,13 @@
       "when": 1794513847962,
       "tag": "0015_rename_vatten_avlopp",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1794514223590,
+      "tag": "0016_account_hidden",
+      "breakpoints": true
     }
   ]
 }

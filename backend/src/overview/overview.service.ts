@@ -8,7 +8,7 @@ import type {
   OverviewTotals,
   OverviewTransactionsResponse,
 } from '@bankapp/shared';
-import { categoryColumns, toTransaction } from '../accounts/transaction-rows';
+import { categoryColumns, onVisibleAccount, toTransaction } from '../accounts/transaction-rows';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -77,7 +77,13 @@ export class OverviewService {
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
       .innerJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .innerJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(this.inMonth(month), eq(transactions.subcategoryId, subcategoryId)))
+      .where(
+        and(
+          onVisibleAccount(this.db),
+          this.inMonth(month),
+          eq(transactions.subcategoryId, subcategoryId),
+        ),
+      )
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
     return { transactions: rows.map(toTransaction) };
@@ -109,7 +115,7 @@ export class OverviewService {
       .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(this.inMonth(month))
+      .where(and(onVisibleAccount(this.db), this.inMonth(month)))
       .all();
 
     let uncategorised = 0;

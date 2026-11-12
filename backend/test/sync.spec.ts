@@ -47,7 +47,8 @@ function transaction(
     status: 'booked',
     amount,
     currency: 'SEK',
-    bookingDate: '2026-11-09',
+    // A card reservation has no booking date yet; one with a booking date to come is upcoming.
+    bookingDate: overrides.status === 'pending' ? null : '2026-11-09',
     valueDate: '2026-11-09',
     transactionDate: null,
     description: 'ICA',
@@ -409,6 +410,24 @@ describe('the initial sync', () => {
           offsetsTransactionId: null,
         },
       ]);
+    });
+
+    it('that the bank only has scheduled are not stored until they book, unlike card reservations', async () => {
+      const upcoming = { transactionDate: null, bookingDate: '2026-11-30', valueDate: null };
+      enableBanking.transactions.set('u1', [
+        transaction(-1500, { ...upcoming, status: 'pending', description: 'Hyra' }),
+        transaction(-35, {
+          status: 'pending',
+          transactionDate: '2026-11-10',
+          description: 'Kiosk',
+        }),
+        transaction(-20, { description: 'ICA' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => row.description)).toEqual(['Kiosk', 'ICA']);
     });
 
     it('are listed under the transaction date, else value date, else booking date, else the day they were fetched', async () => {

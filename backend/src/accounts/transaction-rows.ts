@@ -5,7 +5,17 @@ import type {
   Transaction,
   TransactionCategory,
 } from '@bankapp/shared';
-import { categories, subcategories, transactions } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
+import type { AppDatabase } from '../db/database';
+import { accounts, categories, subcategories, transactions } from '../db/schema';
+
+/** Only transactions of accounts the owner has not hidden are shown anywhere. */
+export function onVisibleAccount(db: AppDatabase) {
+  return inArray(
+    transactions.accountId,
+    db.select({ id: accounts.id }).from(accounts).where(eq(accounts.hidden, false)),
+  );
+}
 
 /** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
 export const categoryColumns = {
