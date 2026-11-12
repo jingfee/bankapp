@@ -8,6 +8,8 @@ Spending is computed per month from each transaction's date. A refund that arriv
 
 Only totals move. The refund keeps its own date everywhere else (transaction list, detail page). The link is `transactions.offsets_transaction_id`; a refund's subcategory is copied from its purchase whenever the purchase's subcategory is set, guessed or confirmed (`refreshRefundCategories`), so category queries need no special case.
 
+The refund likewise takes its purchase's share (ADR 0007), so a fully returned shared purchase also adds up to 0 kr in the owner's share.
+
 ## Considered Options
 
 - **Net the refund into the purchase row:** one number per purchase, but it hides the refund as a transaction and breaks the one-row-per-bank-transaction rule of ADR 0001.
