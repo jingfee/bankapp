@@ -8,7 +8,7 @@ import type {
   OverviewTotals,
   OverviewTransactionsResponse,
 } from '@bankapp/shared';
-import { categoryColumns, toTransaction } from '../accounts/accounts.service';
+import { categoryColumns, toTransaction } from '../accounts/transaction-rows';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
