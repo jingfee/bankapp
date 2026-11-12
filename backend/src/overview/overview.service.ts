@@ -35,9 +35,10 @@ export class OverviewService {
     @Inject(CLOCK) private readonly now: Clock,
   ) {}
 
-  /** The current month as `YYYY-MM`. */
+  /** The current month as `YYYY-MM`, in the server's own time like the frontend's. */
   currentMonth(): string {
-    return this.now().toISOString().slice(0, 7);
+    const now = this.now();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
   /**
