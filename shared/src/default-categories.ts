@@ -35,7 +35,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
       { name: 'Bolån ränta & amortering', icon: 'key-round' },
       { name: 'Hyra & avgift', icon: 'receipt' },
       { name: 'El & värme', icon: 'zap' },
-      { name: 'Vatten & avlopp', icon: 'droplets' },
+      { name: 'Vatten, avlopp & sopor', icon: 'droplets' },
       { name: 'Bredband, TV & mobil', icon: 'wifi' },
       { name: 'Hemförsäkring', icon: 'shield-check' },
       { name: 'Larm & säkerhet', icon: 'siren' },
