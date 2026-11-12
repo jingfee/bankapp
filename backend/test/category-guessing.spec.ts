@@ -400,7 +400,10 @@ describe('guessing categories', () => {
       for (const description of more) await confirm(description, 'Transport', 'Bilpool & hyrbil');
       await syncWith(transaction('Bilbolaget Mitt'));
 
-      expect((await listed()).at(-1)).toEqual(['Bilbolaget Mitt', 'Transport / Bilpool & hyrbil ?']);
+      expect((await listed()).at(-1)).toEqual([
+        'Bilbolaget Mitt',
+        'Transport / Bilpool & hyrbil ?',
+      ]);
     });
   });
 });
