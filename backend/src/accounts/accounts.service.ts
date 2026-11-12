@@ -1,13 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
 import type {
+  AccountType,
   AccountsResponse,
   Category,
   CategoryIcon,
   Money,
   SyncSummary,
   TransactionCategory,
+  Transaction,
   TransactionDetails,
+  TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
 import { DATABASE } from '../db/database.module';
@@ -70,6 +73,32 @@ function toCategory(row: CategoryColumns): TransactionCategory | null {
       icon: row.subcategoryIcon as CategoryIcon,
     },
     confirmed: row.confirmed,
+  };
+}
+
+interface ListedRow {
+  transaction: typeof transactions.$inferSelect;
+  accountName: string;
+  accountType: AccountType;
+  bank: string;
+  category: CategoryColumns;
+}
+
+function toTransaction({
+  transaction: row,
+  accountName,
+  accountType,
+  bank,
+  category,
+}: ListedRow): Transaction {
+  return {
+    id: row.id,
+    status: row.status,
+    amount: { amount: row.amount, currency: row.currency },
+    date: row.date,
+    description: row.description,
+    account: { id: row.accountId, name: accountName, bank, type: accountType },
+    category: toCategory(category),
   };
 }
 
@@ -194,17 +223,38 @@ export class AccountsService {
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1)?.transaction;
     return {
-      transactions: page.map(({ transaction: row, accountName, accountType, bank, category }) => ({
-        id: row.id,
-        status: row.status,
-        amount: { amount: row.amount, currency: row.currency },
-        date: row.date,
-        description: row.description,
-        account: { id: row.accountId, name: accountName, bank, type: accountType },
-        category: toCategory(category),
-      })),
+      transactions: page.map(toTransaction),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
     };
+  }
+
+  /** The transactions waiting for review: guessed or uncategorised, not yet decided by the owner. */
+  private readonly needsReview = eq(transactions.categoryConfirmed, false);
+
+  /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
+  listForReview(): TransactionReviewResponse {
+    const rows = this.db
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+        category: categoryColumns,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(this.needsReview)
+      .orderBy(desc(transactions.date), desc(transactions.id))
+      .all();
+    return { transactions: rows.map(toTransaction), count: rows.length };
+  }
+
+  /** How many transactions are waiting for review. */
+  countForReview(): number {
+    return this.db.select({ n: count() }).from(transactions).where(this.needsReview).get()?.n ?? 0;
   }
 
   /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */

@@ -27,6 +27,39 @@ describe('App', () => {
     }
   });
 
+  describe('Granska icon', () => {
+    const header = (fixture: { nativeElement: unknown }) =>
+      (fixture.nativeElement as HTMLElement).querySelector('header') as HTMLElement;
+
+    it('is in the header on every page, with the count as a badge', async () => {
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      const http = TestBed.inject(HttpTestingController);
+      for (const url of ['/', '/banker', '/anslut-bank']) {
+        await router.navigateByUrl(url);
+        http.match('/api/transactions/review/count').forEach((r) => r.flush({ count: 3 }));
+        await fixture.whenStable();
+        const link = header(fixture).querySelector('a[href="/granska"]');
+        expect(link?.getAttribute('aria-label')).toBe('Granska, 3 att granska');
+        expect(link?.querySelector('[data-review-badge]')?.textContent?.trim()).toBe('3');
+      }
+      http.match(() => true);
+    });
+
+    it('has no badge when nothing needs review', async () => {
+      const fixture = TestBed.createComponent(App);
+      const http = TestBed.inject(HttpTestingController);
+      await TestBed.inject(Router).navigateByUrl('/banker');
+      http.match('/api/transactions/review/count').forEach((r) => r.flush({ count: 0 }));
+      await fixture.whenStable();
+
+      const link = header(fixture).querySelector('a[href="/granska"]');
+      expect(link?.getAttribute('aria-label')).toBe('Granska');
+      expect(link?.querySelector('[data-review-badge]')).toBeNull();
+      http.match(() => true);
+    });
+  });
+
   it('starts on the transactions and has a Banker page of its own', async () => {
     const router = TestBed.inject(Router);
     const title = TestBed.inject(Title);
@@ -35,6 +68,9 @@ describe('App', () => {
     expect(title.getTitle()).toBe('Bankapp');
     await router.navigateByUrl('/banker');
     expect(title.getTitle()).toBe('Banker – Bankapp');
+    await router.navigateByUrl('/granska');
+    expect(title.getTitle()).toBe('Att granska – Bankapp');
+    TestBed.inject(HttpTestingController).match(() => true);
   });
 
   it('redirects /transaktioner to the start page', async () => {

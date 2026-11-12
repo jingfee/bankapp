@@ -12,6 +12,8 @@ import type {
   AccountsResponse,
   TransactionCategoryResponse,
   TransactionDetails,
+  TransactionReviewCountResponse,
+  TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
 import { AccountsService } from './accounts.service';
@@ -35,6 +37,17 @@ export class TransactionsController {
     const page = this.accounts.listTransactions(before);
     if (page === 'bad-cursor') throw new BadRequestException('The cursor is not valid');
     return page;
+  }
+
+  /** The guessed and uncategorised transactions, for the owner to review. */
+  @Get('review')
+  review(): TransactionReviewResponse {
+    return this.accounts.listForReview();
+  }
+
+  @Get('review/count')
+  reviewCount(): TransactionReviewCountResponse {
+    return { count: this.accounts.countForReview() };
   }
 
   @Get(':id')

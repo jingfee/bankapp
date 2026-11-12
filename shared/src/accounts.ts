@@ -110,6 +110,18 @@ export interface TransactionsResponse {
   nextCursor: string | null;
 }
 
+/** Response body of `GET /api/transactions/review`: what is waiting for the owner's review. */
+export interface TransactionReviewResponse {
+  /** Guessed and uncategorised transactions, newest first. */
+  transactions: Transaction[];
+  count: number;
+}
+
+/** Response body of `GET /api/transactions/review/count`. */
+export interface TransactionReviewCountResponse {
+  count: number;
+}
+
 /** A transaction in full, for its own page. Fields the bank did not send are null or empty. */
 export interface TransactionDetails {
   id: number;

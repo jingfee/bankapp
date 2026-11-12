@@ -1,14 +1,16 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import type {
   SetTransactionCategoryRequest,
   Transaction,
   TransactionCategory,
   TransactionCategoryResponse,
   TransactionDetails,
+  TransactionReviewCountResponse,
+  TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
-import { type Observable, map, tap } from 'rxjs';
+import { type Observable, type Subscription, map, tap } from 'rxjs';
 
 /** The part of the list the owner has loaded, kept so going back to it finds it as it was left. */
 export interface ListedTransactions {
@@ -23,11 +25,39 @@ export class TransactionsService {
   /** Set by the list page; read when the owner comes back to it with the browser's back button. */
   listed: ListedTransactions | null = null;
 
+  /** How many transactions wait for review, shown on the header icon; 0 until it is known. */
+  readonly reviewCount = signal(0);
+
   /** One page of the transactions of every account, newest first; `before` continues a previous page. */
   list(before?: string): Observable<TransactionsResponse> {
     return this.http.get<TransactionsResponse>('/api/transactions', {
       params: before === undefined ? {} : { before },
     });
+  }
+
+  /** The guessed and uncategorised transactions, newest first. Also updates `reviewCount`. */
+  review(): Observable<TransactionReviewResponse> {
+    return this.http.get<TransactionReviewResponse>('/api/transactions/review').pipe(
+      tap((response) => {
+        // This answer is newer than any count request still on its way.
+        this.countRequest?.unsubscribe();
+        this.reviewCount.set(response.count);
+      }),
+    );
+  }
+
+  private countRequest: Subscription | undefined;
+
+  /** Fetches how many transactions wait for review into `reviewCount`; a failure leaves it as it was. */
+  refreshReviewCount(): void {
+    // Only the latest request may set the count, so a slow older answer cannot overwrite it.
+    this.countRequest?.unsubscribe();
+    this.countRequest = this.http
+      .get<TransactionReviewCountResponse>('/api/transactions/review/count')
+      .subscribe({
+        next: (response) => this.reviewCount.set(response.count),
+        error: () => undefined,
+      });
   }
 
   /** One transaction in full; errors with a 404 when it no longer exists. */

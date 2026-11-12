@@ -23,6 +23,8 @@ export type {
   TransactionCategory,
   TransactionCategoryResponse,
   TransactionDetails,
+  TransactionReviewCountResponse,
+  TransactionReviewResponse,
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
