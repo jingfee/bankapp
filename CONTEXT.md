@@ -98,7 +98,7 @@ _Avoid_: Refresh, force sync
 ### Categorising
 
 **Category** (sv: _Kategori_):
-A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The app starts with a default set; the owner can add, rename, reorder and remove expense categories, while the single income category and the single Överföring category are fixed and only gain or lose subcategories.
+A top-level grouping of what money was spent on or came from, such as Boende & Hushåll. It has its own icon and colour, and holds one or more subcategories. The set of categories and subcategories is built into the app and the owner cannot edit it: guessing refers to subcategories by name, so changing the set is a code change (a migration plus the guessing lists).
 _Avoid_: Group, main category, tag
 
 **Subcategory** (sv: _Underkategori_):

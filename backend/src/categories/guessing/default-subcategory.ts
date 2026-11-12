@@ -1,6 +1,7 @@
 /**
- * A subcategory of the default list, named by its category and its own name. Guessing looks it up
- * by name, so one the owner renamed or removed is simply not guessed.
+ * A subcategory of the built-in list, named by its category and its own name. Guessing looks it up
+ * by name, so a migration that renames or removes a subcategory must update these too; one that
+ * no longer exists is simply not guessed.
  */
 export type DefaultSubcategory = readonly [category: string, subcategory: string];
 
