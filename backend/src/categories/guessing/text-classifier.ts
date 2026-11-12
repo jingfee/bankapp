@@ -14,10 +14,11 @@ const SIGN = 'sign:';
 
 /**
  * Below this many confirmed transactions the classifier is not trusted to say anything: with a
- * handful of examples every word looks decisive. Ten is roughly two examples for each of the few
- * subcategories an owner confirms first.
+ * handful of examples every word looks decisive. In the dev database's first round of tuning the
+ * only guesses made with 10 or 20 confirmations were both wrong, so it waits for 50, and staying
+ * silent only leaves a transaction uncategorised.
  */
-export const MIN_TRAINING_EXAMPLES = 10;
+export const MIN_TRAINING_EXAMPLES = 50;
 
 /**
  * A guess needs at least this posterior probability for its subcategory, otherwise the
@@ -25,17 +26,20 @@ export const MIN_TRAINING_EXAMPLES = 10;
  *
  * Naive Bayes is overconfident (it counts correlated words as independent evidence), so its
  * probabilities run high and a low threshold would guess almost everything. 0.8 is a starting
- * point checked only against hand-made confirmed categories in the tests: a variant of a
- * merchant confirmed several times passes, a word confirmed once or split between subcategories
- * does not. It has NOT yet been tuned against the dev database's confirmed categories (ADR 0003):
- * when it is, replace this note with what was found.
+ * point, and the data so far could not move it. `tools/tune-classifier.tune.ts` tuned it on the dev
+ * database's confirmed categories (ADR 0003): 98 confirmed, of which 67 reached the classifier
+ * (the rest are answered by history, keywords or merchant codes), spread over 37 subcategories,
+ * about two each. At 0.8 it made 0 to 2 guesses, too few to measure precision; at 0.5 to 0.6 it
+ * guessed 4 to 10 times and was right 0 to 50% of the time, so do not lower it. Re-run the tool
+ * once some 300 transactions reach the classifier and replace this note with what it finds.
  */
 export const CONFIDENCE_THRESHOLD = 0.8;
 
 /**
  * Smoothing for words a subcategory has not been confirmed with. Add-one smoothing is too blunt for
  * so little data: a word confirmed five times for one subcategory would reach only about 0.75.
- * At 0.5 such a word passes the threshold, while one confirmed a single time does not.
+ * At 0.5 such a word passes the threshold, while one confirmed a single time does not. The dev
+ * database was too sparse to prefer another value (0.1 looked better on two guesses, which is noise).
  */
 const SMOOTHING = 0.5;
 
