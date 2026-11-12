@@ -129,6 +129,10 @@ _Avoid_: Unknown, other, Övrigt
 A subcategory the app assigned to a transaction on its own. It counts in totals like any other but is shown as a guess until the owner confirms or changes it.
 _Avoid_: Suggestion, auto-category, prediction
 
+**Review** (sv: _Att granska_):
+The list of transactions the owner has yet to confirm, guessed or uncategorised, from November 2026 onwards, when the app went live. Older transactions are not asked about, though they are still guessed and can be categorised by hand.
+_Avoid_: Inbox, queue, todo
+
 **Confirmed category** (sv: _Bekräftad kategori_):
 A subcategory the owner chose or accepted for a transaction. The app never changes a confirmed category on its own.
 _Avoid_: Manual category, locked category
