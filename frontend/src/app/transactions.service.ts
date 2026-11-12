@@ -3,14 +3,13 @@ import { Injectable, inject, signal } from '@angular/core';
 import type {
   SetTransactionCategoryRequest,
   Transaction,
-  TransactionCategory,
   TransactionCategoryResponse,
   TransactionDetails,
   TransactionReviewCountResponse,
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
-import { type Observable, type Subscription, map, tap } from 'rxjs';
+import { type Observable, type Subscription, tap } from 'rxjs';
 
 /** The part of the list the owner has loaded, kept so going back to it finds it as it was left. */
 export interface ListedTransactions {
@@ -67,16 +66,20 @@ export class TransactionsService {
 
   /**
    * Sets the owner's chosen subcategory as confirmed, or removes it with null. The list kept for
-   * the way back is updated too, so it does not show the old category.
+   * the way back is updated too, so it does not show the old category; when other transactions
+   * were re-guessed with it, that list is dropped so it is fetched again.
    */
-  setCategory(id: number, subcategoryId: number | null): Observable<TransactionCategory | null> {
+  setCategory(id: number, subcategoryId: number | null): Observable<TransactionCategoryResponse> {
     const body: SetTransactionCategoryRequest = { subcategoryId };
     return this.http
       .put<TransactionCategoryResponse>(`/api/transactions/${id}/category`, body)
       .pipe(
-        map((response) => response.category),
-        tap((category) => {
+        tap(({ category, updatedSimilar }) => {
           if (this.listed === null) return;
+          if (updatedSimilar > 0) {
+            this.listed = null;
+            return;
+          }
           this.listed = {
             ...this.listed,
             transactions: this.listed.transactions.map((t) =>

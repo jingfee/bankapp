@@ -7,6 +7,7 @@ import { TransactionCategoryBadge } from '../../category-icon/transaction-catego
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { TransactionsService } from '../../transactions.service';
+import { similarUpdatedNote } from '../../similar-updated-note';
 
 type Status = 'loading' | 'ready' | 'failed';
 
@@ -39,6 +40,15 @@ type Status = 'loading' | 'ready' | 'failed';
           }
           @if (error(); as message) {
             <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ message }}</p>
+          }
+          @if (similarNote(); as note) {
+            <p
+              data-similar-updated
+              aria-live="polite"
+              class="text-sm text-zinc-500 dark:text-zinc-400"
+            >
+              {{ note }}
+            </p>
           }
           @for (group of groups(); track group.key) {
             <section
@@ -123,9 +133,11 @@ export class ReviewPage {
   protected readonly picking = signal<number | null>(null);
   protected readonly saving = signal<number | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly similarNote = signal<string | null>(null);
   /** Fetched the first time a picker opens. */
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
+  private refreshes = 0;
 
   /** Guesses first, then what has no category, each newest first as the server sent them. */
   protected readonly groups = computed(() =>
@@ -153,6 +165,20 @@ export class ReviewPage {
     });
   }
 
+  /** Fetches the list again after a save changed other rows; a failure keeps what is shown. */
+  private refresh(): void {
+    const saves = ++this.refreshes;
+    this.service.review().subscribe({
+      // An answer that a later save has outdated would bring back a row confirmed meanwhile.
+      next: (response) => {
+        if (saves === this.refreshes && this.saving() === null) {
+          this.transactions.set(response.transactions);
+        }
+      },
+      error: () => undefined,
+    });
+  }
+
   protected togglePicker(transaction: Transaction): void {
     this.error.set(null);
     this.picking.update((open) => (open === transaction.id ? null : transaction.id));
@@ -175,13 +201,18 @@ export class ReviewPage {
   protected save(transaction: Transaction, subcategoryId: number): void {
     if (this.saving() !== null) return; // one save at a time; the buttons are disabled meanwhile
     this.saving.set(transaction.id);
+    this.refreshes += 1; // outdates any refresh still on its way
     this.error.set(null);
+    this.similarNote.set(null);
     this.service.setCategory(transaction.id, subcategoryId).subscribe({
-      next: () => {
+      next: ({ updatedSimilar }) => {
         this.transactions.update((shown) => shown.filter((t) => t.id !== transaction.id));
         this.service.reviewCount.update((count) => Math.max(0, count - 1));
         if (this.picking() === transaction.id) this.picking.set(null);
         this.saving.set(null);
+        this.similarNote.set(similarUpdatedNote(updatedSimilar));
+        // The similar ones stay in the list but with the new guess.
+        if (updatedSimilar > 0) this.refresh();
       },
       error: () => {
         this.error.set('Kategorin kunde inte sparas. Försök igen.');

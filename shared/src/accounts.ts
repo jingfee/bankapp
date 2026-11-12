@@ -101,6 +101,11 @@ export interface SetTransactionCategoryRequest {
 /** Response body of `PUT /api/transactions/:id/category`. */
 export interface TransactionCategoryResponse {
   category: TransactionCategory | null;
+  /**
+   * How many other, unconfirmed transactions with the same normalised description were
+   * re-guessed to match a newly chosen category; 0 when it was removed.
+   */
+  updatedSimilar: number;
 }
 
 /** Response body of `GET /api/transactions`: every account's transactions, newest first. */
