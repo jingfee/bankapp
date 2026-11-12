@@ -15,6 +15,7 @@ import {
   KONTANTUTTAG,
   KULTUR,
   KURSER,
+  LARM,
   LIVSMEDEL,
   OVRIGA_FORSAKRINGAR,
   RENOVERING,
@@ -22,6 +23,7 @@ import {
   SNABBMAT,
   SPEL,
   SPORT,
+  STADNING,
   STREAMING,
   TANDVARD,
   TAXI,
@@ -79,6 +81,8 @@ const CODES: Record<string, DefaultSubcategory> = {
   '5211': RENOVERING, // building materials
   '5251': RENOVERING, // hardware stores
   '5261': TRADGARD, // nurseries, lawn and garden supply
+  '7349': STADNING, // cleaning, maintenance and janitorial services
+  '7393': LARM, // protective and security services, incl. alarm monitoring
   '6300': OVRIGA_FORSAKRINGAR, // insurance
   '8398': VALGORENHET, // charitable organisations
   '6011': KONTANTUTTAG, // cash withdrawals (ATM)

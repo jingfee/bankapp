@@ -20,7 +20,7 @@ export interface DefaultCategory {
 const other: DefaultSubcategory = { name: 'Övrigt', icon: 'circle-ellipsis' };
 
 /**
- * The categories, in sort order. The owner cannot edit them; migration 0010 seeds the same list,
+ * The categories, in sort order. The owner cannot edit them; migration 0010 seeds the same list (0013 adds to it),
  * and a change here needs a migration and a look at the guessing lists, which refer to
  * subcategories by name (see `guessing/default-subcategory.ts` in the backend).
  */
@@ -38,7 +38,9 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
       { name: 'Vatten & avlopp', icon: 'droplets' },
       { name: 'Bredband, TV & mobil', icon: 'wifi' },
       { name: 'Hemförsäkring', icon: 'shield-check' },
+      { name: 'Larm & säkerhet', icon: 'siren' },
       { name: 'Hushållsartiklar', icon: 'spray-can' },
+      { name: 'Städning', icon: 'sparkles' },
       { name: 'Inredning & möbler', icon: 'sofa' },
       { name: 'Renovering & underhåll', icon: 'hammer' },
       { name: 'Trädgård', icon: 'flower-2' },

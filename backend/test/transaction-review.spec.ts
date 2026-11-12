@@ -125,4 +125,18 @@ describe('transactions to review', () => {
     expect(count).toBe(1);
     expect(listed.map((t) => t.description)).toEqual(['Xyzzy C']);
   });
+
+  it('leaves out transactions from before November 2026, when the app went live', async () => {
+    store('Xyzzy Old', '2026-10-31', await livsmedel());
+    store('Xyzzy Older', '2025-03-14');
+    store('Xyzzy New', '2026-11-01');
+
+    const { count, transactions: listed } = await review();
+
+    expect(count).toBe(1);
+    expect(listed.map((t) => t.description)).toEqual(['Xyzzy New']);
+    expect((await request(server()).get('/api/transactions/review/count')).body).toEqual({
+      count: 1,
+    });
+  });
 });

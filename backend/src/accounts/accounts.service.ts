@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, isNotNull, lt, max, ne, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, isNotNull, lt, max, ne, or } from 'drizzle-orm';
 import type {
   AccountType,
   AccountsResponse,
@@ -36,6 +36,13 @@ import { parseTransactionDetails } from './transaction-details';
  * interim, then available. Provisional; revisit once real bank data has been seen.
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
+
+/**
+ * The first day Att granska asks about (`YYYY-MM-DD`): the app went live in November 2026, and
+ * the owner does not want to be reminded to categorise history from before then. Older
+ * transactions are still guessed and can still be categorised from their detail page.
+ */
+export const REVIEW_FROM = '2026-11-01';
 
 /** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
 const categoryColumns = {
@@ -229,8 +236,14 @@ export class AccountsService {
     };
   }
 
-  /** The transactions waiting for review: guessed or uncategorised, not yet decided by the owner. */
-  private readonly needsReview = eq(transactions.categoryConfirmed, false);
+  /**
+   * The transactions waiting for review: guessed or uncategorised, not yet decided by the owner,
+   * and listed on or after `REVIEW_FROM`.
+   */
+  private readonly needsReview = and(
+    eq(transactions.categoryConfirmed, false),
+    gte(transactions.date, REVIEW_FROM),
+  );
 
   /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
   listForReview(): TransactionReviewResponse {

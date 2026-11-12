@@ -3,7 +3,9 @@ import {
   APOTEK,
   KOLLEKTIVTRAFIK,
   KORTBETALNING,
+  LARM,
   LIVSMEDEL,
+  STADNING,
   STREAMING,
   type DefaultSubcategory,
 } from './default-subcategory';
@@ -36,4 +38,8 @@ export const MERCHANT_KEYWORDS: readonly (readonly [keyword: string, DefaultSubc
     ['apotek', APOTEK],
     ['apoteket', APOTEK],
     ['kronans', APOTEK],
+    ['verisure', LARM],
+    ['sector alarm', LARM],
+    ['hemfrid', STADNING],
+    ['vardagsfrid', STADNING],
   ];
