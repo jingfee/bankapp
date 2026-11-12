@@ -27,6 +27,8 @@ import {
 interface Confirmed extends ClassifierInput {
   id: number;
   subcategoryId: number;
+  /** Why layers 1-3 would already answer this one; all false means the classifier is asked. */
+  answeredBy: { history: boolean; keyword: boolean; code: boolean };
   /** Layers 1-3 would give no guess, so the classifier would be asked. */
   reachesClassifier: boolean;
 }
@@ -48,7 +50,7 @@ function load(path: string): Confirmed[] {
        WHERE category_confirmed = 1 AND subcategory_id IS NOT NULL
        ORDER BY COALESCE(category_confirmed_at, 0), id`,
     )
-    .all() as (Omit<Confirmed, 'reachesClassifier'> & { raw: string })[];
+    .all() as (Omit<Confirmed, 'reachesClassifier' | 'answeredBy'> & { raw: string })[];
   db.close();
 
   const perDescription = new Map<string, number>();
@@ -56,13 +58,14 @@ function load(path: string): Confirmed[] {
     const key = normaliseDescription(row.description);
     perDescription.set(key, (perDescription.get(key) ?? 0) + 1);
   }
-  return rows.map(({ raw, ...row }) => ({
-    ...row,
-    reachesClassifier:
-      perDescription.get(normaliseDescription(row.description)) === 1 &&
-      fromKeywords(row.description) === undefined &&
-      fromCode(raw) === undefined,
-  }));
+  return rows.map(({ raw, ...row }) => {
+    const answeredBy = {
+      history: (perDescription.get(normaliseDescription(row.description)) ?? 0) > 1,
+      keyword: fromKeywords(row.description) !== undefined,
+      code: fromCode(raw) !== undefined,
+    };
+    return { ...row, answeredBy, reachesClassifier: !Object.values(answeredBy).some(Boolean) };
+  });
 }
 
 function train(rows: Confirmed[], options: ClassifierOptions): TextClassifier<number> {
@@ -103,6 +106,10 @@ describe('tuning the classifier', () => {
     out.push(
       `  reaching the classifier (no history, keyword or merchant code): ${eligible.length}`,
     );
+    out.push('  already answered by (a transaction can count under several):');
+    for (const layer of ['history', 'keyword', 'code'] as const) {
+      out.push(`    ${layer.padEnd(8)} ${rows.filter((row) => row.answeredBy[layer]).length}`);
+    }
     if (eligible.length < 50) {
       out.push('Too few to say much: confirm more transactions and run this again.');
     }
