@@ -10,20 +10,17 @@ import type {
 } from '@bankapp/shared';
 import { type Subscription, catchError, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
-import { CategoryIconComponent } from '../../category-icon/category-icon';
+import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { OverviewService } from '../../overview.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
-import { CATEGORY_PALETTE } from '@bankapp/shared';
 
 type Status = 'loading' | 'ready' | 'failed';
 type TotalKind = keyof OverviewTotals;
 
-interface Bar {
-  id: number;
-  name: string;
-  total: number;
+interface Bar<T> {
+  item: T;
   /** Share of the section's total, as a whole percentage. */
   share: number;
   /** Width relative to the largest bar of the group, as a whole percentage. */
@@ -35,6 +32,10 @@ const TOTALS: { kind: TotalKind; label: string }[] = [
   { kind: 'spending', label: 'Utgifter' },
   { kind: 'net', label: 'Netto' },
 ];
+
+function labelOf(kind: TotalKind): string {
+  return TOTALS.find((total) => total.kind === kind)!.label;
+}
 
 const money = new MoneyPipe();
 
@@ -51,13 +52,10 @@ function shiftMonth(month: string, by: number): string {
 function bars<T extends { id: number; name: string; total: number }>(
   items: T[],
   sectionTotal: number,
-): (Bar & { item: T })[] {
+): Bar<T>[] {
   const largest = Math.max(...items.map((i) => i.total), 0);
   return items.map((item) => ({
     item,
-    id: item.id,
-    name: item.name,
-    total: item.total,
     share: sectionTotal > 0 ? Math.round((item.total / sectionTotal) * 100) : 0,
     width: largest > 0 ? Math.max(Math.round((item.total / largest) * 100), 0) : 0,
   }));
@@ -66,7 +64,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 /** One calendar month: income, spending and net, and where the money went. */
 @Component({
   selector: 'app-overview-page',
-  imports: [RouterLink, MoneyPipe, CategoryIconComponent, TransactionList],
+  imports: [RouterLink, MoneyPipe, CategoryBar, TransactionList],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       @if (expiringConnection()) {
@@ -160,89 +158,36 @@ function bars<T extends { id: number; name: string; total: number }>(
                 >
                   <h2 class="px-2 text-lg font-semibold">{{ section.title }}</h2>
                   <ul class="mt-2 flex flex-col">
-                    @for (bar of section.bars; track bar.id) {
-                      <li [attr.data-category-row]="bar.name">
-                        <button
-                          type="button"
-                          class="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                          [attr.aria-expanded]="openCategory() === bar.id"
-                          (click)="toggleCategory(bar.id)"
-                        >
-                          <span class="flex items-center gap-3">
-                            <app-category-icon [icon]="bar.item.icon" [colour]="bar.item.colour" />
-                            <span data-name class="min-w-0 flex-1 wrap-break-word">{{
-                              bar.name
-                            }}</span>
-                            <span class="flex shrink-0 flex-col items-end">
-                              <span data-amount class="font-medium tabular-nums">{{
-                                bar.total | money
-                              }}</span>
-                              <span
-                                data-share
-                                class="text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-                                >{{ bar.share }} %</span
-                              >
-                            </span>
-                          </span>
-                          <span
-                            class="mt-1 block h-2 rounded-full bg-zinc-100 dark:bg-zinc-800"
-                            aria-hidden="true"
-                          >
-                            <span
-                              data-bar
-                              class="block h-2 rounded-full bg-(--category-light) dark:bg-(--category-dark)"
-                              [style.width.%]="bar.width"
-                              [style.--category-light]="palette(bar.item).light"
-                              [style.--category-dark]="palette(bar.item).dark"
-                            ></span>
-                          </span>
-                        </button>
+                    @for (bar of section.bars; track bar.item.id) {
+                      <li [attr.data-category-row]="bar.item.name">
+                        <app-category-bar
+                          [icon]="bar.item.icon"
+                          [colour]="bar.item.colour"
+                          [name]="bar.item.name"
+                          [total]="bar.item.total"
+                          [share]="bar.share"
+                          [width]="bar.width"
+                          [expanded]="openCategory() === bar.item.id"
+                          (toggled)="toggleCategory(bar.item.id)"
+                        />
 
-                        @if (openCategory() === bar.id) {
+                        @if (openCategory() === bar.item.id) {
                           <ul
                             class="mt-1 mb-2 ml-3 flex flex-col border-l border-zinc-200 pl-1 dark:border-zinc-700"
                           >
-                            @for (sub of subBars(bar.item); track sub.id) {
-                              <li [attr.data-subcategory-row]="sub.name">
-                                <button
-                                  type="button"
-                                  class="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                  [attr.aria-expanded]="openSubcategory() === sub.id"
-                                  (click)="toggleSubcategory(sub.id)"
-                                >
-                                  <span class="flex items-center gap-3">
-                                    <app-category-icon
-                                      [icon]="sub.item.icon"
-                                      [colour]="bar.item.colour"
-                                    />
-                                    <span data-name class="min-w-0 flex-1 wrap-break-word">{{
-                                      sub.name
-                                    }}</span>
-                                    <span class="flex shrink-0 flex-col items-end">
-                                      <span data-amount class="font-medium tabular-nums">{{
-                                        sub.total | money
-                                      }}</span>
-                                      <span
-                                        data-share
-                                        class="text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-                                        >{{ sub.share }} %</span
-                                      >
-                                    </span>
-                                  </span>
-                                  <span
-                                    class="mt-1 block h-2 rounded-full bg-zinc-100 dark:bg-zinc-800"
-                                    aria-hidden="true"
-                                  >
-                                    <span
-                                      data-bar
-                                      class="block h-2 rounded-full bg-(--category-light) dark:bg-(--category-dark)"
-                                      [style.width.%]="sub.width"
-                                      [style.--category-light]="palette(bar.item).light"
-                                      [style.--category-dark]="palette(bar.item).dark"
-                                    ></span>
-                                  </span>
-                                </button>
-                                @if (openSubcategory() === sub.id) {
+                            @for (sub of subBars(bar.item); track sub.item.id) {
+                              <li [attr.data-subcategory-row]="sub.item.name">
+                                <app-category-bar
+                                  [icon]="sub.item.icon"
+                                  [colour]="bar.item.colour"
+                                  [name]="sub.item.name"
+                                  [total]="sub.item.total"
+                                  [share]="sub.share"
+                                  [width]="sub.width"
+                                  [expanded]="openSubcategory() === sub.item.id"
+                                  (toggled)="toggleSubcategory(sub.item.id)"
+                                />
+                                @if (openSubcategory() === sub.item.id) {
                                   @if (subStatus() === 'failed') {
                                     <p role="alert" class="px-2 py-2">
                                       Transaktionerna kunde inte hämtas. Försök igen senare.
@@ -342,10 +287,10 @@ export class OverviewPage {
     return [
       {
         key: 'spending',
-        title: 'Utgifter',
+        title: labelOf('spending'),
         bars: bars(this.spending(), o?.totals.spending ?? 0),
       },
-      { key: 'income', title: 'Inkomster', bars: bars(this.income(), o?.totals.income ?? 0) },
+      { key: 'income', title: labelOf('income'), bars: bars(this.income(), o?.totals.income ?? 0) },
     ];
   });
 
@@ -362,10 +307,6 @@ export class OverviewPage {
 
   constructor() {
     this.load();
-  }
-
-  protected palette(category: OverviewCategory) {
-    return CATEGORY_PALETTE[category.colour];
   }
 
   /** A category's subcategories as bars, sharing out the category's own total. */

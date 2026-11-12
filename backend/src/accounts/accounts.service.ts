@@ -19,15 +19,11 @@ import {
   or,
 } from 'drizzle-orm';
 import type {
-  AccountType,
   AccountsResponse,
-  Category,
-  CategoryIcon,
   Money,
   OffsetTransaction,
   SyncSummary,
   TransactionCategory,
-  Transaction,
   TransactionDetails,
   OffsetCandidatesResponse,
   TransactionReviewResponse,
@@ -49,6 +45,7 @@ import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
+import { categoryColumns, toCategory, toTransaction } from './transaction-rows';
 import { parseTransactionDetails } from './transaction-details';
 import {
   SEARCH_LIMIT,
@@ -72,78 +69,12 @@ const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
  */
 export const REVIEW_FROM = '2026-11-01';
 
-/** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
-export const categoryColumns = {
-  confirmed: transactions.categoryConfirmed,
-  subcategoryId: subcategories.id,
-  subcategoryName: subcategories.name,
-  subcategoryIcon: subcategories.icon,
-  categoryId: categories.id,
-  categoryName: categories.name,
-  categoryColour: categories.colour,
-};
-
-interface CategoryColumns {
-  confirmed: boolean;
-  subcategoryId: number | null;
-  subcategoryName: string | null;
-  subcategoryIcon: string | null;
-  categoryId: number | null;
-  categoryName: string | null;
-  categoryColour: string | null;
-}
-
-/** A transaction's category as the API shows it, or null when it is uncategorised. */
-function toCategory(row: CategoryColumns): TransactionCategory | null {
-  if (row.subcategoryId === null || row.categoryId === null) return null;
-  return {
-    // Stored as text; only palette and icon names are ever written.
-    category: {
-      id: row.categoryId,
-      name: row.categoryName ?? '',
-      colour: row.categoryColour as Category['colour'],
-    },
-    subcategory: {
-      id: row.subcategoryId,
-      name: row.subcategoryName ?? '',
-      icon: row.subcategoryIcon as CategoryIcon,
-    },
-    confirmed: row.confirmed,
-  };
-}
-
 function toOffsetTransaction(row: typeof transactions.$inferSelect): OffsetTransaction {
   return {
     id: row.id,
     description: row.description,
     amount: { amount: row.amount, currency: row.currency },
     date: row.date,
-  };
-}
-
-export interface ListedRow {
-  transaction: typeof transactions.$inferSelect;
-  accountName: string;
-  accountType: AccountType;
-  bank: string;
-  category: CategoryColumns;
-}
-
-export function toTransaction({
-  transaction: row,
-  accountName,
-  accountType,
-  bank,
-  category,
-}: ListedRow): Transaction {
-  return {
-    id: row.id,
-    status: row.status,
-    amount: { amount: row.amount, currency: row.currency },
-    date: row.date,
-    description: row.description,
-    account: { id: row.accountId, name: accountName, bank, type: accountType },
-    category: toCategory(category),
   };
 }
 
