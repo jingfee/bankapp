@@ -1,0 +1,2 @@
+ALTER TABLE `transactions` ADD `offsets_transaction_id` integer REFERENCES transactions(id);--> statement-breakpoint
+CREATE INDEX `transactions_offsets_transaction_id` ON `transactions` (`offsets_transaction_id`);

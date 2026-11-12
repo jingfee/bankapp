@@ -199,6 +199,9 @@ describe('GET /api/transactions', () => {
         remittanceInformation: ['Lunch', 'Rome'],
         referenceNumber: '12345',
         note: 'Team trip',
+        offsets: null,
+        refunds: [],
+        netAmount: null,
         raw: JSON.stringify(raw),
       });
       expect(body).not.toHaveProperty('valueDate');

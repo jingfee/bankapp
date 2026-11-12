@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../../clock';
+import { refreshRefundCategories } from '../../accounts/offsets';
 import type { AppDatabase } from '../../db/database';
 import { DATABASE } from '../../db/database.module';
 import { categories, startupTasks, subcategories, transactions } from '../../db/schema';
@@ -16,7 +17,7 @@ const GUESS_EXISTING = 'guess-existing-categories';
 /** SQLite limits the number of variables in one statement. */
 const BATCH_SIZE = 500;
 
-type Database = Pick<AppDatabase, 'select' | 'update'>;
+type Database = Pick<AppDatabase, 'select' | 'update' | 'run'>;
 
 /** Case, accents and word separators do not matter to keywords (`HEMKOP`, `COOP_MASTERCARD`). */
 const fold = (text: string) =>
@@ -117,6 +118,8 @@ export class CategoryGuesser implements OnApplicationBootstrap {
         guessed += 1;
       }
     }
+    // A guess for a purchase is also its refunds' category.
+    refreshRefundCategories(db);
     return guessed;
   }
 

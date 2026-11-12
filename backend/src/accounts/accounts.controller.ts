@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Body,
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type {
   AccountsResponse,
+  OffsetCandidatesResponse,
   TransactionCategoryResponse,
   TransactionDetails,
   TransactionReviewCountResponse,
@@ -71,6 +73,36 @@ export class TransactionsController {
     const result = this.accounts.setCategory(Number(id), subcategoryId);
     if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
     if (result === 'no-subcategory') throw new BadRequestException('There is no such subcategory');
+    if (result === 'offset') {
+      throw new ConflictException('A kvittad refund follows its purchase; change the purchase');
+    }
+    return result;
+  }
+
+  /** Purchases the money-in transaction could be offset against, ranked, or found by `q`. */
+  @Get(':id/offset-candidates')
+  offsetCandidates(@Param('id') id: string, @Query('q') q?: string): OffsetCandidatesResponse {
+    const result = isId(id) ? this.accounts.offsetCandidates(Number(id), q) : 'no-transaction';
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    return result;
+  }
+
+  /** Offsets the transaction against a purchase, or removes the link with `purchaseId: null`. */
+  @Put(':id/offset')
+  setOffset(@Param('id') id: string, @Body() body: unknown): TransactionDetails {
+    if (!isId(id)) throw new NotFoundException('There is no such transaction');
+    const { purchaseId } = (body ?? {}) as { purchaseId?: unknown };
+    if (purchaseId !== null && !(typeof purchaseId === 'number' && Number.isInteger(purchaseId))) {
+      throw new BadRequestException('purchaseId must be a transaction id or null');
+    }
+    const result = this.accounts.setOffset(Number(id), purchaseId);
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'no-purchase') throw new BadRequestException('There is no such purchase');
+    if (result === 'not-linkable') {
+      throw new BadRequestException(
+        'Only a booked money-in transaction can be offset against a booked purchase in the same currency',
+      );
+    }
     return result;
   }
 }

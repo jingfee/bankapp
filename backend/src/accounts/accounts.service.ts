@@ -1,15 +1,35 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, isNotNull, lt, max, ne, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gte,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  max,
+  ne,
+  not,
+  or,
+} from 'drizzle-orm';
 import type {
   AccountType,
   AccountsResponse,
   Category,
   CategoryIcon,
   Money,
+  OffsetTransaction,
   SyncSummary,
   TransactionCategory,
   Transaction,
   TransactionDetails,
+  OffsetCandidatesResponse,
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
@@ -30,6 +50,14 @@ import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
 import { parseTransactionDetails } from './transaction-details';
+import {
+  SEARCH_LIMIT,
+  SUGGESTION_LIMIT,
+  SUGGESTION_WINDOW_DAYS,
+  daysBetween,
+  descriptionMatch,
+  refreshRefundCategories,
+} from './offsets';
 
 /**
  * Which balance the overview shows, most preferred first: booked closing, then booked
@@ -84,6 +112,15 @@ function toCategory(row: CategoryColumns): TransactionCategory | null {
   };
 }
 
+function toOffsetTransaction(row: typeof transactions.$inferSelect): OffsetTransaction {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: { amount: row.amount, currency: row.currency },
+    date: row.date,
+  };
+}
+
 export interface ListedRow {
   transaction: typeof transactions.$inferSelect;
   accountName: string;
@@ -109,6 +146,8 @@ export function toTransaction({
     category: toCategory(category),
   };
 }
+
+const refunds = alias(transactions, 'refunds');
 
 /** How many transactions one page of the transaction list holds. */
 export const TRANSACTIONS_PAGE_SIZE = 50;
@@ -240,10 +279,26 @@ export class AccountsService {
    * The transactions waiting for review: guessed or uncategorised, not yet decided by the owner,
    * and listed on or after `REVIEW_FROM`.
    */
-  private readonly needsReview = and(
-    eq(transactions.categoryConfirmed, false),
-    gte(transactions.date, REVIEW_FROM),
-  );
+  private get needsReview() {
+    return and(
+      eq(transactions.categoryConfirmed, false),
+      gte(transactions.date, REVIEW_FROM),
+      // A refund follows its purchase, so there is nothing to ask about it.
+      isNull(transactions.offsetsTransactionId),
+      // A purchase that has been offset, and so has a category its refunds follow, is settled.
+      not(
+        and(
+          isNotNull(transactions.subcategoryId),
+          exists(
+            this.db
+              .select({ one: sql`1` })
+              .from(refunds)
+              .where(eq(refunds.offsetsTransactionId, transactions.id)),
+          ),
+        )!,
+      ),
+    );
+  }
 
   /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
   listForReview(): TransactionReviewResponse {
@@ -290,6 +345,14 @@ export class AccountsService {
       .get();
     if (found === undefined) return null;
     const { transaction: row, accountName, accountType, bank, category } = found;
+    const purchase =
+      row.offsetsTransactionId === null ? null : this.offsetTransaction(row.offsetsTransactionId);
+    const linked = this.db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.offsetsTransactionId, row.id))
+      .orderBy(desc(transactions.date), desc(transactions.id))
+      .all();
     return {
       id: row.id,
       status: row.status,
@@ -300,8 +363,147 @@ export class AccountsService {
       transactionDate: row.transactionDate,
       bookingDate: row.bookingDate,
       ...parseTransactionDetails(row.raw, row.amount),
+      offsets: purchase,
+      refunds: linked.map(toOffsetTransaction),
+      netAmount:
+        linked.length === 0
+          ? null
+          : {
+              amount:
+                Math.round((row.amount + linked.reduce((sum, r) => sum + r.amount, 0)) * 100) /
+                  100 +
+                0,
+              currency: row.currency,
+            },
       raw: row.raw,
     };
+  }
+
+  private offsetTransaction(id: number): OffsetTransaction | null {
+    const row = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
+    return row === undefined ? null : toOffsetTransaction(row);
+  }
+
+  /**
+   * Offsets (kvittar) a money-in transaction against the purchase it pays back, or removes the
+   * link with `purchaseId` null. The refund takes the purchase's subcategory as confirmed
+   * (ADR 0006); unlinking leaves it with that category. Both must be booked, in the same
+   * currency, money in and money out, and the purchase must not itself be a refund.
+   */
+  setOffset(
+    id: number,
+    purchaseId: number | null,
+  ): TransactionDetails | 'no-transaction' | 'no-purchase' | 'not-linkable' {
+    const result = this.db.transaction((tx) => {
+      const refund = tx.select().from(transactions).where(eq(transactions.id, id)).get();
+      if (refund === undefined) return 'no-transaction' as const;
+      if (purchaseId === null) {
+        tx.update(transactions)
+          .set({ offsetsTransactionId: null })
+          .where(eq(transactions.id, id))
+          .run();
+        return 'ok' as const;
+      }
+      const purchase = tx.select().from(transactions).where(eq(transactions.id, purchaseId)).get();
+      if (purchase === undefined) return 'no-purchase' as const;
+      const hasRefunds =
+        tx
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(eq(transactions.offsetsTransactionId, id))
+          .get() !== undefined;
+      if (
+        refund.amount <= 0 ||
+        purchase.amount >= 0 ||
+        refund.status !== 'booked' ||
+        purchase.status !== 'booked' ||
+        refund.currency !== purchase.currency ||
+        purchase.offsetsTransactionId !== null ||
+        hasRefunds
+      ) {
+        return 'not-linkable' as const;
+      }
+      tx.update(transactions)
+        .set({ offsetsTransactionId: purchaseId, categoryConfirmedAt: this.now() })
+        .where(eq(transactions.id, id))
+        .run();
+      refreshRefundCategories(tx);
+      return 'ok' as const;
+    });
+    if (result !== 'ok') return result;
+    return this.getTransaction(id) ?? 'no-transaction';
+  }
+
+  /** Purchases a money-in transaction could be offset against; see `OffsetCandidatesResponse`. */
+  offsetCandidates(id: number, search?: string): OffsetCandidatesResponse | 'no-transaction' {
+    const refund = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
+    if (refund === undefined) return 'no-transaction';
+    const text = search?.trim() ?? '';
+    const base = and(
+      lt(transactions.amount, 0),
+      eq(transactions.status, 'booked'),
+      eq(transactions.currency, refund.currency),
+      isNull(transactions.offsetsTransactionId),
+      ne(transactions.id, id),
+    );
+    const select = () =>
+      this.db
+        .select({
+          transaction: transactions,
+          accountName: accounts.name,
+          accountType: accounts.type,
+          bank: connections.bankName,
+          category: categoryColumns,
+        })
+        .from(transactions)
+        .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+        .innerJoin(connections, eq(accounts.connectionId, connections.id))
+        .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+        .leftJoin(categories, eq(subcategories.categoryId, categories.id));
+
+    if (text !== '') {
+      const escaped = text.replace(/[\\%_]/g, (c) => `\\${c}`);
+      const rows = select()
+        .where(and(base, sql`${transactions.description} LIKE ${`%${escaped}%`} ESCAPE '\\'`))
+        .orderBy(desc(transactions.date), desc(transactions.id))
+        .limit(SEARCH_LIMIT)
+        .all();
+      return { transactions: rows.map(toTransaction) };
+    }
+
+    if (refund.amount <= 0) return { transactions: [] };
+    const earliest = new Date(Date.parse(refund.date) - SUGGESTION_WINDOW_DAYS * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const rows = select()
+      .where(
+        and(
+          base,
+          gte(transactions.date, earliest),
+          lte(transactions.date, refund.date),
+          gte(sql`-${transactions.amount}`, refund.amount),
+        ),
+      )
+      .all();
+    const ranked = rows
+      .map((row) => ({
+        row,
+        match: descriptionMatch(refund.description, row.transaction.description),
+      }))
+      .filter(
+        (entry): entry is { row: (typeof rows)[number]; match: 0 | 1 } => entry.match !== null,
+      )
+      .sort(
+        (a, b) =>
+          a.match - b.match ||
+          Math.abs(-a.row.transaction.amount - refund.amount) -
+            Math.abs(-b.row.transaction.amount - refund.amount) ||
+          daysBetween(a.row.transaction.date, refund.date) -
+            daysBetween(b.row.transaction.date, refund.date) ||
+          b.row.transaction.id - a.row.transaction.id,
+      )
+      .slice(0, SUGGESTION_LIMIT);
+    return { transactions: ranked.map(({ row }) => toTransaction(row)) };
   }
 
   /**
@@ -316,7 +518,8 @@ export class AccountsService {
   ):
     | { category: TransactionCategory | null; updatedSimilar: number }
     | 'no-transaction'
-    | 'no-subcategory' {
+    | 'no-subcategory'
+    | 'offset' {
     if (
       subcategoryId !== null &&
       this.db
@@ -328,6 +531,14 @@ export class AccountsService {
       return 'no-subcategory';
     }
     return this.db.transaction((tx) => {
+      const current = tx
+        .select({ offsets: transactions.offsetsTransactionId })
+        .from(transactions)
+        .where(eq(transactions.id, id))
+        .get();
+      if (current === undefined) return 'no-transaction' as const;
+      // A kvittad refund follows its purchase; the owner changes the purchase instead.
+      if (current.offsets !== null) return 'offset' as const;
       const updated = tx
         .update(transactions)
         // Removing is the owner's decision too, so the app does not guess the transaction again.
@@ -348,7 +559,13 @@ export class AccountsService {
             subcategoryId: transactions.subcategoryId,
           })
           .from(transactions)
-          .where(and(eq(transactions.categoryConfirmed, false), ne(transactions.id, id)))
+          .where(
+            and(
+              eq(transactions.categoryConfirmed, false),
+              ne(transactions.id, id),
+              isNull(transactions.offsetsTransactionId),
+            ),
+          )
           .all()
           .filter((row) => normaliseDescription(row.description) === target);
         for (const row of similar) {
@@ -357,6 +574,7 @@ export class AccountsService {
         }
       }
 
+      refreshRefundCategories(tx);
       const row = tx
         .select(categoryColumns)
         .from(transactions)

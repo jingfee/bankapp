@@ -2,8 +2,16 @@ import { similarUpdatedNote } from '../../similar-updated-note';
 import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { AccountType, Category, Money, TransactionDetails } from '@bankapp/shared';
+import type { Subscription } from 'rxjs';
+import type {
+  AccountType,
+  Category,
+  Money,
+  Transaction,
+  TransactionDetails,
+} from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
 import { CategoryPickerComponent } from '../../category-picker/category-picker';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
@@ -87,7 +95,7 @@ function formatOriginal({ amount, currency }: Money): string {
                   data-category-button
                   class="flex flex-1 items-center gap-3 text-left"
                   [attr.aria-expanded]="picking()"
-                  [disabled]="saving()"
+                  [disabled]="saving() || t.offsets !== null"
                   (click)="togglePicker()"
                 >
                   <app-transaction-category-badge [category]="t.category" />
@@ -112,13 +120,15 @@ function formatOriginal({ amount, currency }: Money): string {
                       >
                     }
                   </span>
-                  <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                    picking() ? 'Stäng' : 'Ändra'
-                  }}</span>
+                  @if (t.offsets === null) {
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                      picking() ? 'Stäng' : 'Ändra'
+                    }}</span>
+                  }
                 </button>
               </div>
               @if (t.category; as c) {
-                @if (!c.confirmed) {
+                @if (!c.confirmed && t.offsets === null) {
                   <button
                     type="button"
                     data-confirm-category
@@ -129,15 +139,17 @@ function formatOriginal({ amount, currency }: Money): string {
                     Stämmer
                   </button>
                 }
-                <button
-                  type="button"
-                  data-remove-category
-                  class="self-start text-sm font-medium underline"
-                  [disabled]="saving()"
-                  (click)="setCategory(null)"
-                >
-                  Ta bort kategori
-                </button>
+                @if (t.offsets === null) {
+                  <button
+                    type="button"
+                    data-remove-category
+                    class="self-start text-sm font-medium underline"
+                    [disabled]="saving()"
+                    (click)="setCategory(null)"
+                  >
+                    Ta bort kategori
+                  </button>
+                }
               }
               @if (categoryError(); as error) {
                 <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ error }}</p>
@@ -159,6 +171,128 @@ function formatOriginal({ amount, currency }: Money): string {
                 }
               }
             </section>
+            @if (t.offsets; as purchase) {
+              <section
+                data-offsets
+                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <h2 class="font-semibold">Kvittad mot</h2>
+                <a
+                  data-offsets-purchase
+                  [routerLink]="['/transaktioner', purchase.id]"
+                  class="flex justify-between gap-3 underline"
+                >
+                  <span>{{ purchase.description }}</span>
+                  <span class="tabular-nums">{{
+                    purchase.amount.amount | money: purchase.amount.currency
+                  }}</span>
+                </a>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                  Räknas i köpets månad och följer köpets kategori.
+                </p>
+                <button
+                  type="button"
+                  data-remove-offset
+                  class="self-start text-sm font-medium underline"
+                  [disabled]="saving()"
+                  (click)="setOffset(null)"
+                >
+                  Ta bort kvittning
+                </button>
+              </section>
+            } @else if (t.amount.amount > 0 && t.status === 'booked') {
+              <section
+                data-offset-picker
+                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <button
+                  type="button"
+                  data-offset-toggle
+                  class="self-start font-medium underline"
+                  [attr.aria-expanded]="offsetting()"
+                  (click)="toggleOffset()"
+                >
+                  {{ offsetting() ? 'Stäng' : 'Kvitta mot ett köp' }}
+                </button>
+                @if (offsetting()) {
+                  <input
+                    data-offset-search
+                    type="search"
+                    placeholder="Sök köp"
+                    aria-label="Sök köp"
+                    class="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+                    [value]="offsetSearch()"
+                    (input)="searchOffsets($any($event.target).value)"
+                  />
+                  @if (offsetCandidates(); as candidates) {
+                    @if (candidates.length === 0) {
+                      <p data-offset-empty>
+                        {{
+                          offsetSearch().trim()
+                            ? 'Inga träffar'
+                            : 'Inga troliga köp. Sök efter ett.'
+                        }}
+                      </p>
+                    }
+                    <ul>
+                      @for (candidate of candidates; track candidate.id) {
+                        <li>
+                          <button
+                            type="button"
+                            [attr.data-offset-candidate]="candidate.id"
+                            class="flex w-full justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            [disabled]="saving()"
+                            (click)="setOffset(candidate.id)"
+                          >
+                            <span class="flex flex-col">
+                              <span>{{ candidate.description }}</span>
+                              <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                                candidate.date
+                              }}</span>
+                            </span>
+                            <span class="tabular-nums">{{
+                              candidate.amount.amount | money: candidate.amount.currency
+                            }}</span>
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p aria-live="polite">Hämtar köp…</p>
+                  }
+                }
+              </section>
+            }
+            @if (t.refunds.length > 0 && t.netAmount; as net) {
+              <section
+                data-refunds
+                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <h2 class="font-semibold">Kvitterat av</h2>
+                <ul class="flex flex-col gap-1">
+                  @for (refund of t.refunds; track refund.id) {
+                    <li>
+                      <a
+                        [attr.data-refund]="refund.id"
+                        [routerLink]="['/transaktioner', refund.id]"
+                        class="flex justify-between gap-3 underline"
+                      >
+                        <span>{{ refund.description }}</span>
+                        <span class="tabular-nums">{{
+                          refund.amount.amount | money: refund.amount.currency
+                        }}</span>
+                      </a>
+                    </li>
+                  }
+                </ul>
+                <p class="flex justify-between font-medium">
+                  <span>Netto</span>
+                  <span data-net-amount class="tabular-nums">{{
+                    net.amount | money: net.currency
+                  }}</span>
+                </p>
+              </section>
+            }
             <dl
               class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
@@ -197,6 +331,13 @@ export class TransactionDetailsPage {
   /** Fetched the first time the picker opens. */
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
+
+  protected readonly offsetting = signal(false);
+  protected readonly offsetSearch = signal('');
+  /** Null while the candidates are being fetched. */
+  protected readonly offsetCandidates = signal<Transaction[] | null>(null);
+  private candidateRequest: Subscription | undefined;
+  private loadRequest: Subscription | undefined;
 
   protected readonly state = signal<State>({ status: 'loading' });
   protected readonly details = computed(() => {
@@ -273,13 +414,67 @@ export class TransactionDetailsPage {
   });
 
   constructor() {
-    const id = inject(ActivatedRoute).snapshot.paramMap.get('id') ?? '';
-    this.transactions.get(id).subscribe({
+    // Following a link to the linked purchase or refund keeps this page and changes the id.
+    inject(ActivatedRoute)
+      .paramMap.pipe(takeUntilDestroyed())
+      .subscribe((params) => this.load(params.get('id') ?? ''));
+  }
+
+  private load(id: string): void {
+    this.state.set({ status: 'loading' });
+    this.candidateRequest?.unsubscribe();
+    this.loadRequest?.unsubscribe();
+    this.offsetting.set(false);
+    this.offsetCandidates.set(null);
+    this.categoryError.set(null);
+    this.similarNote.set(null);
+    this.picking.set(false);
+    this.loadRequest = this.transactions.get(id).subscribe({
       next: (details) => this.state.set({ status: 'ready', details }),
       error: (error: unknown) =>
         this.state.set({
           status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
         }),
+    });
+  }
+
+  protected toggleOffset(): void {
+    this.offsetting.update((open) => !open);
+    this.categoryError.set(null);
+    if (this.offsetting()) this.searchOffsets('');
+  }
+
+  protected searchOffsets(text: string): void {
+    const details = this.details();
+    if (details === null) return;
+    this.offsetSearch.set(text);
+    this.offsetCandidates.set(null);
+    this.candidateRequest?.unsubscribe();
+    this.candidateRequest = this.transactions.offsetCandidates(details.id, text).subscribe({
+      next: ({ transactions }) => this.offsetCandidates.set(transactions),
+      error: () => {
+        this.offsetting.set(false);
+        this.categoryError.set('Köpen kunde inte hämtas. Försök igen senare.');
+      },
+    });
+  }
+
+  /** Offsets this refund against a purchase, or removes the link with null. */
+  protected setOffset(purchaseId: number | null): void {
+    const details = this.details();
+    if (details === null || this.saving()) return;
+    this.saving.set(true);
+    this.categoryError.set(null);
+    this.transactions.setOffset(details.id, purchaseId).subscribe({
+      next: (updated) => {
+        this.state.set({ status: 'ready', details: updated });
+        this.offsetting.set(false);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.categoryError.set('Kvittningen kunde inte sparas. Försök igen.');
+        this.saving.set(false);
+      },
     });
   }
 

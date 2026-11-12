@@ -406,6 +406,7 @@ describe('the initial sync', () => {
           subcategoryId: expect.any(Number) as number,
           categoryConfirmed: false,
           categoryConfirmedAt: null,
+          offsetsTransactionId: null,
         },
       ]);
     });
