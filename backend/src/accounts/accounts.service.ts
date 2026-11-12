@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, lt, max, ne, or } from 'drizzle-orm';
 import type {
   AccountType,
   AccountsResponse,
@@ -28,6 +28,7 @@ import {
 import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
+import { normaliseDescription } from '../categories/guessing/normalise-description';
 import { parseTransactionDetails } from './transaction-details';
 
 /**
@@ -292,12 +293,17 @@ export class AccountsService {
 
   /**
    * Assigns the owner's chosen subcategory to a transaction as confirmed, or makes it
-   * uncategorised for good when `subcategoryId` is null. Returns the category it now has.
+   * uncategorised for good when `subcategoryId` is null. Returns the category it now has and,
+   * when a category was chosen, how many other transactions with the same normalised description
+   * were guessed anew to match (ADR 0004). Confirmed transactions are never touched.
    */
   setCategory(
     id: number,
     subcategoryId: number | null,
-  ): TransactionCategory | null | 'no-transaction' | 'no-subcategory' {
+  ):
+    | { category: TransactionCategory | null; updatedSimilar: number }
+    | 'no-transaction'
+    | 'no-subcategory' {
     if (
       subcategoryId !== null &&
       this.db
@@ -308,22 +314,45 @@ export class AccountsService {
     ) {
       return 'no-subcategory';
     }
-    const updated = this.db
-      .update(transactions)
-      // Removing is the owner's decision too, so the app does not guess the transaction again.
-      .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
-      .where(eq(transactions.id, id))
-      .returning({ id: transactions.id })
-      .get();
-    if (updated === undefined) return 'no-transaction';
-    const row = this.db
-      .select(categoryColumns)
-      .from(transactions)
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(eq(transactions.id, id))
-      .get();
-    return row ? toCategory(row) : null;
+    return this.db.transaction((tx) => {
+      const updated = tx
+        .update(transactions)
+        // Removing is the owner's decision too, so the app does not guess the transaction again.
+        .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
+        .where(eq(transactions.id, id))
+        .returning({ id: transactions.id, description: transactions.description })
+        .get();
+      if (updated === undefined) return 'no-transaction' as const;
+
+      let updatedSimilar = 0;
+      if (subcategoryId !== null) {
+        // What the guesser's history layer would answer now: the subcategory just confirmed.
+        const target = normaliseDescription(updated.description);
+        const similar = tx
+          .select({
+            id: transactions.id,
+            description: transactions.description,
+            subcategoryId: transactions.subcategoryId,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.categoryConfirmed, false), ne(transactions.id, id)))
+          .all()
+          .filter((row) => normaliseDescription(row.description) === target);
+        for (const row of similar) {
+          tx.update(transactions).set({ subcategoryId }).where(eq(transactions.id, row.id)).run();
+          if (row.subcategoryId !== subcategoryId) updatedSimilar += 1;
+        }
+      }
+
+      const row = tx
+        .select(categoryColumns)
+        .from(transactions)
+        .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+        .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+        .where(eq(transactions.id, id))
+        .get();
+      return { category: row ? toCategory(row) : null, updatedSimilar };
+    });
   }
 
   /** The balance of the preferred type from each account's most recent fetch. */

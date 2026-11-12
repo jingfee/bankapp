@@ -122,11 +122,38 @@ describe('ReviewPage', () => {
     const request = http.expectOne('/api/transactions/2/category');
     expect(request.request.method).toBe('PUT');
     expect(request.request.body).toEqual({ subcategoryId: 12 });
-    request.flush({ category: { ...guess, confirmed: true } });
+    request.flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
     await fixture.whenStable();
 
     expect(ids(page)).toEqual(['1']);
     expect(service.reviewCount()).toBe(1);
+  });
+
+  it('says how many similar transactions were updated, and shows their new guess', async () => {
+    const { fixture, page, http } = await render({
+      count: 3,
+      transactions: [
+        transaction(3, { category: guess }),
+        transaction(2, { category: guess }),
+        transaction(1),
+      ],
+    });
+
+    (page.querySelector('li[data-id="3"] [data-confirm]') as HTMLButtonElement).click();
+    http
+      .expectOne('/api/transactions/3/category')
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 2 });
+    http.expectOne('/api/transactions/review').flush({
+      count: 2,
+      transactions: [transaction(2, { category: guess }), transaction(1, { category: guess })],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.querySelector('[data-similar-updated]')?.textContent?.trim()).toBe(
+      '2 liknande transaktioner uppdaterades',
+    );
+    expect(ids(page)).toEqual(['2', '1']);
   });
 
   it('sets a category from the inline picker, for a guess as well as an uncategorised row', async () => {
@@ -158,7 +185,7 @@ describe('ReviewPage', () => {
     (page.querySelector('li[data-id="2"] [data-subcategory="13"]') as HTMLButtonElement).click();
     http
       .expectOne('/api/transactions/2/category')
-      .flush({ category: { ...guess, confirmed: true } });
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
     await fixture.whenStable();
     expect(ids(page)).toEqual([]);
   });

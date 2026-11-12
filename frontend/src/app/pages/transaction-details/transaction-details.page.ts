@@ -1,3 +1,4 @@
+import { similarUpdatedNote } from '../../similar-updated-note';
 import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -141,6 +142,15 @@ function formatOriginal({ amount, currency }: Money): string {
               @if (categoryError(); as error) {
                 <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ error }}</p>
               }
+              @if (similarNote(); as note) {
+                <p
+                  data-similar-updated
+                  aria-live="polite"
+                  class="text-sm text-zinc-500 dark:text-zinc-400"
+                >
+                  {{ note }}
+                </p>
+              }
               @if (picking()) {
                 @if (categories(); as list) {
                   <app-category-picker [categories]="list" (picked)="setCategory($event)" />
@@ -183,6 +193,7 @@ export class TransactionDetailsPage {
   protected readonly picking = signal(false);
   protected readonly saving = signal(false);
   protected readonly categoryError = signal<string | null>(null);
+  protected readonly similarNote = signal<string | null>(null);
   /** Fetched the first time the picker opens. */
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
@@ -296,9 +307,11 @@ export class TransactionDetailsPage {
     if (details === null || this.saving()) return;
     this.saving.set(true);
     this.categoryError.set(null);
+    this.similarNote.set(null);
     this.transactions.setCategory(details.id, subcategoryId).subscribe({
-      next: (category) => {
+      next: ({ category, updatedSimilar }) => {
         this.state.set({ status: 'ready', details: { ...details, category } });
+        this.similarNote.set(similarUpdatedNote(updatedSimilar));
         this.picking.set(false);
         this.saving.set(false);
       },
