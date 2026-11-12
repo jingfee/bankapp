@@ -32,7 +32,7 @@ export class CategoriesService {
         id: category.id,
         name: category.name,
         kind: category.kind,
-        // Stored as text; the seed and the editing API only ever write palette and icon names.
+        // Stored as text; only migrations write them, with palette and icon names.
         colour: category.colour as Category['colour'],
         icon: category.icon as CategoryIcon,
         fixed: category.fixed,

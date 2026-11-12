@@ -12,14 +12,18 @@ export interface DefaultCategory {
   kind: CategoryKind;
   colour: CategoryColour;
   icon: CategoryIcon;
-  /** The owner cannot rename, remove or add another of these; only their subcategories change. */
+  /** True for the single income category and the single transfer category. */
   fixed: boolean;
   subcategories: DefaultSubcategory[];
 }
 
 const other: DefaultSubcategory = { name: 'Övrigt', icon: 'circle-ellipsis' };
 
-/** What a fresh database is seeded with, in sort order. Migration 0010 seeds the same list. */
+/**
+ * The categories, in sort order. The owner cannot edit them; migration 0010 seeds the same list,
+ * and a change here needs a migration and a look at the guessing lists, which refer to
+ * subcategories by name (see `guessing/default-subcategory.ts` in the backend).
+ */
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
   {
     name: 'Boende & Hushåll',

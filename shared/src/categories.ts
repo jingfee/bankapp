@@ -17,7 +17,7 @@ export interface Category {
   kind: CategoryKind;
   colour: CategoryColour;
   icon: CategoryIcon;
-  /** The single income and transfer categories: they cannot be renamed or removed. */
+  /** True for the single income category and the single transfer category. */
   fixed: boolean;
   /** In the owner's order. */
   subcategories: Subcategory[];
