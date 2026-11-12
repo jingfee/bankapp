@@ -337,6 +337,7 @@ export class TransactionDetailsPage {
   /** Null while the candidates are being fetched. */
   protected readonly offsetCandidates = signal<Transaction[] | null>(null);
   private candidateRequest: Subscription | undefined;
+  private loadRequest: Subscription | undefined;
 
   protected readonly state = signal<State>({ status: 'loading' });
   protected readonly details = computed(() => {
@@ -421,11 +422,14 @@ export class TransactionDetailsPage {
 
   private load(id: string): void {
     this.state.set({ status: 'loading' });
+    this.candidateRequest?.unsubscribe();
+    this.loadRequest?.unsubscribe();
     this.offsetting.set(false);
+    this.offsetCandidates.set(null);
     this.categoryError.set(null);
     this.similarNote.set(null);
     this.picking.set(false);
-    this.transactions.get(id).subscribe({
+    this.loadRequest = this.transactions.get(id).subscribe({
       next: (details) => this.state.set({ status: 'ready', details }),
       error: (error: unknown) =>
         this.state.set({

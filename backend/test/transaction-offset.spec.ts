@@ -221,13 +221,13 @@ describe('kvitta a refund against its purchase', () => {
     expect(await review()).toEqual([]);
   });
 
-  it('keeps the pair in Att granska while the purchase has no category', async () => {
+  it('keeps only the purchase in Att granska while it has no category', async () => {
     const purchase = store(-500, '2026-11-10', 'Zalando');
     const refund = store(500, '2026-12-05', 'Zalando');
 
     await link(refund, purchase).expect(200);
 
-    expect(await review()).toEqual([refund, purchase]);
+    expect(await review()).toEqual([purchase]);
     await request(server())
       .put(`/api/transactions/${purchase}/category`)
       .send({ subcategoryId: ids.get('Kläder & skor') })

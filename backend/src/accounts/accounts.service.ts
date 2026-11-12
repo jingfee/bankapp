@@ -283,6 +283,8 @@ export class AccountsService {
     return and(
       eq(transactions.categoryConfirmed, false),
       gte(transactions.date, REVIEW_FROM),
+      // A refund follows its purchase, so there is nothing to ask about it.
+      isNull(transactions.offsetsTransactionId),
       // A purchase that has been offset, and so has a category its refunds follow, is settled.
       not(
         and(
@@ -494,7 +496,8 @@ export class AccountsService {
       .sort(
         (a, b) =>
           a.match - b.match ||
-          -a.row.transaction.amount + b.row.transaction.amount ||
+          Math.abs(-a.row.transaction.amount - refund.amount) -
+            Math.abs(-b.row.transaction.amount - refund.amount) ||
           daysBetween(a.row.transaction.date, refund.date) -
             daysBetween(b.row.transaction.date, refund.date) ||
           b.row.transaction.id - a.row.transaction.id,
