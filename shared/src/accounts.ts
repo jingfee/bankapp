@@ -1,3 +1,6 @@
+import type { Subcategory } from './categories';
+import type { CategoryColour } from './category-palette';
+
 export type AccountType = 'payment' | 'savings' | 'card';
 
 /** An amount of money, negative when money is owed. */
@@ -78,6 +81,26 @@ export interface Transaction {
   date: string;
   description: string;
   account: TransactionAccount;
+  /** The assigned subcategory, or null when the transaction is uncategorised. */
+  category: TransactionCategory | null;
+}
+
+/** The subcategory a transaction is assigned, with its category's name and colour. */
+export interface TransactionCategory {
+  category: { id: number; name: string; colour: CategoryColour };
+  subcategory: Subcategory;
+  /** True when the owner chose or accepted it; false for a guessed category. */
+  confirmed: boolean;
+}
+
+/** Request body of `PUT /api/transactions/:id/category`; null makes the transaction uncategorised. */
+export interface SetTransactionCategoryRequest {
+  subcategoryId: number | null;
+}
+
+/** Response body of `PUT /api/transactions/:id/category`. */
+export interface TransactionCategoryResponse {
+  category: TransactionCategory | null;
 }
 
 /** Response body of `GET /api/transactions`: every account's transactions, newest first. */
@@ -86,8 +109,6 @@ export interface TransactionsResponse {
   /** Pass as `?before=` to get the next, older page; null when there are no more. */
   nextCursor: string | null;
 }
-<<<<<<< Updated upstream
-=======
 
 /** Response body of `GET /api/transactions/review`: what is waiting for the owner's review. */
 export interface TransactionReviewResponse {
@@ -127,4 +148,3 @@ export interface TransactionDetails {
   /** The transaction as the bank returned it, as stored (JSON). */
   raw: string;
 }
->>>>>>> Stashed changes

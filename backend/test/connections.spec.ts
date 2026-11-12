@@ -69,40 +69,6 @@ describe('connecting a bank', () => {
       const state = enableBanking.authorisations[0]!.state;
       await callback({ state, code: 'code-1' }).expect(400);
     });
-
-    describe('personnummer', () => {
-      const withPersonnummer = { ...testConfig, personnummer: '199001011234' };
-
-      it.each(['required', 'optional'] as const)(
-        'is sent to a bank where it is %s',
-        async (support) => {
-          enableBanking.banks = [bank('Coop Mastercard', { personnummer: support })];
-          await start(withPersonnummer);
-
-          await startConnection('Coop Mastercard').expect(201);
-
-          expect(enableBanking.authorisations[0]!.personnummer).toBe('199001011234');
-        },
-      );
-
-      it('is not sent to a bank that does not take it', async () => {
-        enableBanking.banks = [bank('Swedbank', { personnummer: 'none' })];
-        await start(withPersonnummer);
-
-        await startConnection('Swedbank').expect(201);
-
-        expect(enableBanking.authorisations[0]).not.toHaveProperty('personnummer');
-      });
-
-      it('is left out when none is configured', async () => {
-        enableBanking.banks = [bank('Coop Mastercard', { personnummer: 'required' })];
-        await start();
-
-        await startConnection('Coop Mastercard').expect(201);
-
-        expect(enableBanking.authorisations[0]).not.toHaveProperty('personnummer');
-      });
-    });
   });
 
   const SESSION_VALID_UNTIL = new Date('2027-02-08T12:00:00.000Z');
@@ -116,6 +82,7 @@ describe('connecting a bank', () => {
         name: 'Sparkonto',
         type: 'savings',
         currency: 'SEK',
+        raw: '{"uid":"uid-2"}',
       },
       {
         uid: 'uid-1',
@@ -123,6 +90,7 @@ describe('connecting a bank', () => {
         name: 'Lönekonto',
         type: 'payment',
         currency: 'SEK',
+        raw: '{"uid":"uid-1"}',
       },
     ],
   };
@@ -186,6 +154,7 @@ describe('connecting a bank', () => {
         name: 'Lönekonto',
         type: 'payment',
         currency: 'SEK',
+        raw: '{"uid":"uid-1"}',
         closed: false,
       });
     });
@@ -318,6 +287,7 @@ describe('connecting a bank', () => {
             name: 'Coop Mastercard',
             type: 'card',
             currency: 'SEK',
+            raw: '{}',
           },
         ],
       };

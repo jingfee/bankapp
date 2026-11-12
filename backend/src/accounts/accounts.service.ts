@@ -1,8 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-<<<<<<< Updated upstream
-import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
-import type { AccountsResponse, Money, SyncSummary, TransactionsResponse } from '@bankapp/shared';
-=======
 import { and, asc, count, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
 import type {
   AccountType,
@@ -17,13 +13,14 @@ import type {
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
->>>>>>> Stashed changes
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import {
   accounts,
   balances,
+  categories,
   connections,
+  subcategories,
   syncAccountResults,
   syncRuns,
   transactions,
@@ -31,6 +28,7 @@ import {
 import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
+import { parseTransactionDetails } from './transaction-details';
 
 /**
  * Which balance the overview shows, most preferred first: booked closing, then booked
@@ -38,8 +36,6 @@ import { SyncService } from '../sync/sync.service';
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
 
-<<<<<<< Updated upstream
-=======
 /** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
 const categoryColumns = {
   confirmed: transactions.categoryConfirmed,
@@ -106,7 +102,6 @@ function toTransaction({
   };
 }
 
->>>>>>> Stashed changes
 /** How many transactions one page of the transaction list holds. */
 export const TRANSACTIONS_PAGE_SIZE = 50;
 
@@ -214,10 +209,13 @@ export class AccountsService {
         accountName: accounts.name,
         accountType: accounts.type,
         bank: connections.bankName,
+        category: categoryColumns,
       })
       .from(transactions)
       .innerJoin(accounts, eq(transactions.accountId, accounts.id))
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(after)
       .orderBy(desc(transactions.date), desc(transactions.id))
       .limit(TRANSACTIONS_PAGE_SIZE + 1)
@@ -225,24 +223,11 @@ export class AccountsService {
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1)?.transaction;
     return {
-<<<<<<< Updated upstream
-      transactions: page.map(({ transaction: row, accountName, accountType, bank }) => ({
-        id: row.id,
-        status: row.status,
-        amount: { amount: row.amount, currency: row.currency },
-        date: row.date,
-        description: row.description,
-        account: { id: row.accountId, name: accountName, bank, type: accountType },
-      })),
-=======
       transactions: page.map(toTransaction),
->>>>>>> Stashed changes
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
     };
   }
 
-<<<<<<< Updated upstream
-=======
   /** The transactions waiting for review: guessed or uncategorised, not yet decided by the owner. */
   private readonly needsReview = eq(transactions.categoryConfirmed, false);
 
@@ -341,7 +326,6 @@ export class AccountsService {
     return row ? toCategory(row) : null;
   }
 
->>>>>>> Stashed changes
   /** The balance of the preferred type from each account's most recent fetch. */
   private shownBalances(): Map<number, Money> {
     const latestFetch = this.db

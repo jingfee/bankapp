@@ -2,6 +2,7 @@ import type { AppConfig } from '../src/config/config';
 import {
   RateLimitError,
   type AuthorisationRequest,
+  type EnableBankingAccount,
   type EnableBankingBalance,
   type EnableBankingBank,
   type EnableBankingClient,
@@ -15,7 +16,6 @@ export const testConfig: AppConfig = {
   applicationId: 'test-application-id',
   privateKeyPath: '/not/used/in/tests.pem',
   redirectUrl: 'http://localhost:3000/api/connections/callback',
-  personnummer: undefined,
   dataDir: '/not/used/in/tests',
   timezone: 'Europe/Stockholm',
   scheduledSyncs: false,
@@ -43,6 +43,11 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   requestedBalances: string[] = [];
   /** The options of every balance request, in order. */
   balanceOptions: (RequestOptions | undefined)[] = [];
+  /** What the bank describes each account as, by `uid`; an account without an entry fails. */
+  accountDetails = new Map<string, EnableBankingAccount>();
+  /** Account `uid`s whose details the bank answers with a rate limit. */
+  rateLimitedDetails = new Set<string>();
+  requestedDetails: string[] = [];
   /** Transactions by account `uid`; an account without an entry has none. */
   transactions = new Map<string, EnableBankingTransaction[]>();
   /** Account `uid`s whose transactions the bank refuses to return. */
@@ -78,6 +83,15 @@ export class FakeEnableBankingClient implements EnableBankingClient {
     return this.balances.get(accountUid) ?? [];
   }
 
+  getAccountDetails(accountUid: string): Promise<EnableBankingAccount> {
+    this.requestedDetails.push(accountUid);
+    if (this.rateLimitedDetails.has(accountUid)) {
+      return Promise.reject(new RateLimitError('Too many requests'));
+    }
+    const details = this.accountDetails.get(accountUid);
+    return details ? Promise.resolve(details) : Promise.reject(new Error('No details'));
+  }
+
   getTransactions(
     accountUid: string,
     options?: TransactionsRequestOptions,
@@ -98,7 +112,6 @@ export function bank(name: string, overrides: Partial<EnableBankingBank> = {}): 
     logoUrl: null,
     beta: false,
     maximumConsentSeconds: 90 * 24 * 3600,
-    personnummer: 'none',
     ...overrides,
   };
 }

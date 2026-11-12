@@ -1,0 +1,1 @@
+ALTER TABLE `authorisations` ADD `renewal` integer DEFAULT false NOT NULL;

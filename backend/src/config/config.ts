@@ -15,8 +15,6 @@ export interface AppConfig {
   timezone: string;
   /** Whether syncs run on a schedule; off in development, which shares the banks' request limit. */
   scheduledSyncs: boolean;
-  /** The owner's personnummer (12 digits), passed to banks that take it when connecting. */
-  personnummer?: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -39,11 +37,6 @@ const schema = z.object({
     z.url({ protocol: /^https?$/, error: 'REDIRECT_URL must be an http(s) URL' }),
   ),
   DATA_DIR: required('DATA_DIR'),
-  PERSONNUMMER: z
-    .string()
-    .trim()
-    .regex(/^\d{12}$/, 'PERSONNUMMER must be 12 digits, e.g. 199001011234')
-    .optional(),
   SCHEDULED_SYNCS: z
     .enum(['true', 'false', ''], { error: 'SCHEDULED_SYNCS must be true or false' })
     .optional(),
@@ -99,7 +92,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
     scheduledSyncs: values.SCHEDULED_SYNCS === 'true',
-    personnummer: values.PERSONNUMMER,
   };
 }
 

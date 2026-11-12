@@ -1,12 +1,3 @@
-<<<<<<< Updated upstream
-import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-
-@Component({
-  selector: 'app-root',
-  imports: [RouterOutlet],
-  template: '<router-outlet />',
-=======
 import { Component, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -73,7 +64,6 @@ import { TransactionsService } from './transactions.service';
     </header>
     <router-outlet />
   `,
->>>>>>> Stashed changes
 })
 export class App {
   private readonly transactions = inject(TransactionsService);

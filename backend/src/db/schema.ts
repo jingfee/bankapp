@@ -8,7 +8,6 @@ export const banks = sqliteTable('banks', {
   logoUrl: text('logo_url'),
   beta: integer('beta', { mode: 'boolean' }).notNull().default(false),
   maximumConsentSeconds: integer('maximum_consent_seconds').notNull(),
-  personnummer: text('personnummer', { enum: ['none', 'optional', 'required'] }).notNull(),
 });
 
 /** The owner's permission to read one bank. A bank has at most one. */
@@ -31,12 +30,16 @@ export const accounts = sqliteTable('accounts', {
   currency: text('currency').notNull(),
   /** Set when a renewal no longer returns the account; it keeps its history but is not synced. */
   closed: integer('closed', { mode: 'boolean' }).notNull().default(false),
+  /** The account as Enable Banking last returned it, as JSON; empty until first seen (ADR 0001). */
+  raw: text('raw'),
 });
 
 /** A BankID login that has been started but not yet returned; `state` is the redirect's secret. */
 export const authorisations = sqliteTable('authorisations', {
   state: text('state').primaryKey(),
   bankName: text('bank_name').notNull(),
+  /** The owner asked to renew a connection that was still active. */
+  renewal: integer('renewal', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
@@ -100,7 +103,12 @@ export const transactions = sqliteTable(
     currency: text('currency').notNull(),
     bookingDate: text('booking_date'),
     valueDate: text('value_date'),
-    /** The day the transaction is listed under (`YYYY-MM-DD`): booking date, else value date, else the day it was fetched. */
+    /** The day the owner made the transaction (`YYYY-MM-DD`), when the bank says. */
+    transactionDate: text('transaction_date'),
+    /**
+     * The day the transaction is listed under (`YYYY-MM-DD`): transaction date, else value date,
+     * else booking date, else the day it was fetched.
+     */
     date: text('date').notNull(),
     description: text('description').notNull(),
     entryReference: text('entry_reference'),
@@ -109,11 +117,65 @@ export const transactions = sqliteTable(
     /** The transaction as the bank returned it, as JSON. */
     raw: text('raw').notNull(),
     fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+    /** What the transaction is categorised as; null when it is uncategorised. */
+    subcategoryId: integer('subcategory_id').references(() => subcategories.id),
+    /**
+     * True when the owner decided the category: chose or accepted a subcategory, or removed it
+     * (`subcategoryId` null). The app never changes or guesses it then.
+     */
+    categoryConfirmed: integer('category_confirmed', { mode: 'boolean' }).notNull().default(false),
+    /** When the owner last chose or accepted the category; history reuses the most recent. */
+    categoryConfirmedAt: integer('category_confirmed_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
       .on(table.accountId, table.dedupKey)
       .where(sql`${table.status} = 'booked'`),
     index('transactions_account_date').on(table.accountId, table.date, table.id),
+    index('transactions_subcategory_id').on(table.subcategoryId),
   ],
 );
+
+/**
+ * What a transaction is categorised as, at the top level. `colour` is a name from the shared
+ * palette and `icon` a name from the shared curated icon set. There is exactly one income and
+ * one transfer category, both fixed.
+ */
+export const categories = sqliteTable(
+  'categories',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    kind: text('kind', { enum: ['expense', 'income', 'transfer'] }).notNull(),
+    colour: text('colour').notNull(),
+    icon: text('icon').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    fixed: integer('fixed', { mode: 'boolean' }).notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex('categories_one_income_or_transfer')
+      .on(table.kind)
+      .where(sql`kind <> 'expense'`),
+  ],
+);
+
+/** A second-level grouping; it has its category's colour and kind. */
+export const subcategories = sqliteTable(
+  'subcategories',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    categoryId: integer('category_id')
+      .notNull()
+      .references(() => categories.id),
+    name: text('name').notNull(),
+    icon: text('icon').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+  },
+  (table) => [index('subcategories_category_id').on(table.categoryId)],
+);
+
+/** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
+export const startupTasks = sqliteTable('startup_tasks', {
+  name: text('name').primaryKey(),
+  completedAt: integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
+});

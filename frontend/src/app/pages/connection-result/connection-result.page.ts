@@ -10,11 +10,11 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
       @if (status === 'ok') {
         <h1 class="text-3xl font-semibold tracking-tight">Banken är ansluten</h1>
         <p>{{ bank }} är nu ansluten.</p>
-        <a routerLink="/" class="font-medium underline">Till översikten</a>
+        <a routerLink="/banker" class="font-medium underline">Till översikten</a>
       } @else if (status === 'redan') {
         <h1 class="text-3xl font-semibold tracking-tight">Banken är redan ansluten</h1>
         <p>{{ bank }} är redan ansluten. Ingen ny koppling skapades.</p>
-        <a routerLink="/" class="font-medium underline">Till översikten</a>
+        <a routerLink="/banker" class="font-medium underline">Till översikten</a>
       } @else {
         <h1 class="text-3xl font-semibold tracking-tight">Anslutningen misslyckades</h1>
         <p role="alert">BankID-inloggningen avbröts eller misslyckades. Ingen koppling skapades.</p>

@@ -4,13 +4,13 @@ import { z } from 'zod';
 import {
   RateLimitError,
   type AuthorisationRequest,
+  EnableBankingAccount,
   EnableBankingAccountType,
   EnableBankingBalance,
   EnableBankingBank,
   EnableBankingClient,
   EnableBankingSession,
   EnableBankingTransaction,
-  PersonnummerSupport,
   PsuContext,
   RequestOptions,
   TransactionsRequestOptions,
@@ -43,34 +43,31 @@ const aspspsResponse = z.object({
       logo: z.string().nullish(),
       beta: z.boolean().nullish(),
       maximum_consent_validity: z.number().nullish(),
-      auth_methods: z
-        .array(
-          z.object({
-            psu_type: z.string().nullish(),
-            credentials: z
-              .array(z.object({ name: z.string(), required: z.boolean().nullish() }))
-              .nullish(),
-          }),
-        )
-        .nullish(),
     }),
   ),
 });
 
 const authResponse = z.object({ url: z.string() });
 
+/** Accounts are kept as Enable Banking returned them, so only the fields we read are described. */
+const accountResource = z.looseObject({
+  uid: z.string().nullish(),
+  identification_hash: z.string().nullish(),
+  name: z.string().nullish(),
+  details: z.string().nullish(),
+  product: z.string().nullish(),
+  account_id: z.object({ iban: z.string().nullish() }).nullish(),
+  cash_account_type: z.string().nullish(),
+  currency: z.string().nullish(),
+});
+
 const sessionResponse = z.object({
   session_id: z.string(),
   access: z.object({ valid_until: z.string() }),
   accounts: z.array(
-    z.object({
+    accountResource.extend({
       uid: z.string(),
       identification_hash: z.string(),
-      name: z.string().nullish(),
-      details: z.string().nullish(),
-      product: z.string().nullish(),
-      account_id: z.object({ iban: z.string().nullish() }).nullish(),
-      cash_account_type: z.string().nullish(),
       currency: z.string(),
     }),
   ),
@@ -119,21 +116,6 @@ const ACCOUNT_TYPES: Record<string, EnableBankingAccountType> = {
   CARD: 'card',
 };
 
-/**
- * Banks that take the personnummer list a `userId` credential on their personal auth method.
- * Anything else (including business-only methods) means we should not send it.
- */
-function personnummerSupport(
-  methods: z.infer<typeof aspspsResponse>['aspsps'][number]['auth_methods'],
-): PersonnummerSupport {
-  const credentials = (methods ?? [])
-    .filter((method) => method.psu_type === 'personal')
-    .flatMap((method) => method.credentials ?? [])
-    .filter((credential) => credential.name === 'userId');
-  if (credentials.length === 0) return 'none';
-  return credentials.some((credential) => credential.required) ? 'required' : 'optional';
-}
-
 export class HttpEnableBankingClient implements EnableBankingClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -156,7 +138,6 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       logoUrl: bank.logo ?? null,
       beta: bank.beta ?? false,
       maximumConsentSeconds: bank.maximum_consent_validity ?? DEFAULT_CONSENT_SECONDS,
-      personnummer: personnummerSupport(bank.auth_methods),
     }));
   }
 
@@ -167,7 +148,6 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       state: request.state,
       redirect_url: request.redirectUrl,
       psu_type: 'personal',
-      ...(request.personnummer ? { psu_id: request.personnummer } : {}),
     });
     return { url: authResponse.parse(response).url };
   }
@@ -177,20 +157,24 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     return {
       sessionId: session.session_id,
       validUntil: new Date(session.access.valid_until),
-      accounts: session.accounts.map((account) => ({
-        uid: account.uid,
-        identificationHash: account.identification_hash,
-        // `name` is the account holder's, so it only comes after what names the account itself.
-        name:
-          account.details?.trim() ||
-          account.product?.trim() ||
-          account.account_id?.iban ||
-          account.name?.trim() ||
-          account.uid,
-        type: ACCOUNT_TYPES[account.cash_account_type ?? ''] ?? 'payment',
-        currency: account.currency,
-      })),
+      accounts: session.accounts.map((account) =>
+        toAccount(account, account.uid, account.identification_hash),
+      ),
     };
+  }
+
+  async getAccountDetails(
+    accountUid: string,
+    options: RequestOptions = {},
+  ): Promise<EnableBankingAccount> {
+    const response = await this.send(
+      'GET',
+      `/accounts/${encodeURIComponent(accountUid)}/details`,
+      undefined,
+      options.psu,
+    );
+    const account = accountResource.parse(response);
+    return toAccount(account, account.uid ?? accountUid, account.identification_hash ?? '');
   }
 
   async getBalances(
@@ -234,7 +218,11 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     do {
       const url = key ? `${path}&continuation_key=${encodeURIComponent(key)}` : path;
       const page = transactionsResponse.parse(await this.send('GET', url, undefined, options.psu));
-      for (const raw of page.transactions) transactions.push(toTransaction(raw));
+      for (const raw of page.transactions) {
+        // A rejected or cancelled attempt never happened, so the owner should not see it.
+        if (raw.status === 'RJCT' || raw.status === 'CNCL') continue;
+        transactions.push(toTransaction(raw));
+      }
       key = page.continuation_key;
       if (key) {
         // An empty page can still carry a key, so only a missing key ends the history.
@@ -287,6 +275,27 @@ export class HttpEnableBankingClient implements EnableBankingClient {
   }
 }
 
+function toAccount(
+  account: z.infer<typeof accountResource>,
+  uid: string,
+  identificationHash: string,
+): EnableBankingAccount {
+  return {
+    uid,
+    identificationHash,
+    // `name` is the account holder's, so it only comes after what names the account itself.
+    name:
+      account.details?.trim() ||
+      account.product?.trim() ||
+      account.account_id?.iban ||
+      account.name?.trim() ||
+      uid,
+    type: ACCOUNT_TYPES[account.cash_account_type ?? ''] ?? 'payment',
+    currency: account.currency ?? '',
+    raw: JSON.stringify(account),
+  };
+}
+
 function toTransaction(
   raw: z.infer<typeof transactionsResponse>['transactions'][number],
 ): EnableBankingTransaction {
@@ -307,7 +316,8 @@ function toTransaction(
     amount: raw.credit_debit_indicator === 'DBIT' ? -size : size,
     currency: raw.transaction_amount.currency,
     bookingDate: raw.booking_date ?? null,
-    valueDate: raw.value_date ?? raw.transaction_date ?? null,
+    valueDate: raw.value_date ?? null,
+    transactionDate: raw.transaction_date ?? null,
     description,
     entryReference: raw.entry_reference ?? null,
     raw: JSON.stringify(raw),

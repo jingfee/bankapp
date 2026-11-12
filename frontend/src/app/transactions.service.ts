@@ -1,9 +1,4 @@
 import { HttpClient } from '@angular/common/http';
-<<<<<<< Updated upstream
-import { Injectable, inject } from '@angular/core';
-import type { TransactionsResponse } from '@bankapp/shared';
-import type { Observable } from 'rxjs';
-=======
 import { Injectable, inject, signal } from '@angular/core';
 import type {
   SetTransactionCategoryRequest,
@@ -22,29 +17,23 @@ export interface ListedTransactions {
   transactions: Transaction[];
   cursor: string | null;
 }
->>>>>>> Stashed changes
 
 @Injectable({ providedIn: 'root' })
 export class TransactionsService {
   private readonly http = inject(HttpClient);
 
-<<<<<<< Updated upstream
-=======
   /** Set by the list page; read when the owner comes back to it with the browser's back button. */
   listed: ListedTransactions | null = null;
 
   /** How many transactions wait for review, shown on the header icon; 0 until it is known. */
   readonly reviewCount = signal(0);
 
->>>>>>> Stashed changes
   /** One page of the transactions of every account, newest first; `before` continues a previous page. */
   list(before?: string): Observable<TransactionsResponse> {
     return this.http.get<TransactionsResponse>('/api/transactions', {
       params: before === undefined ? {} : { before },
     });
   }
-<<<<<<< Updated upstream
-=======
 
   /** The guessed and uncategorised transactions, newest first. Also updates `reviewCount`. */
   review(): Observable<TransactionReviewResponse> {
@@ -97,5 +86,4 @@ export class TransactionsService {
         }),
       );
   }
->>>>>>> Stashed changes
 }

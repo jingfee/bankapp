@@ -44,7 +44,7 @@ describe('daily database backup', () => {
     await startAt('2026-07-01T00:30:00Z');
     (app.get(DATABASE) as AppDatabase)
       .insert(banks)
-      .values({ name: 'Skandia', country: 'SE', maximumConsentSeconds: 3600, personnummer: 'none' })
+      .values({ name: 'Skandia', country: 'SE', maximumConsentSeconds: 3600 })
       .run();
 
     expect(() => backupFiles()).toThrow(); // nothing before 03:00

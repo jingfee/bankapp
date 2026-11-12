@@ -1,7 +1,3 @@
-<<<<<<< Updated upstream
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
-import type { AccountsResponse, TransactionsResponse } from '@bankapp/shared';
-=======
 import {
   BadRequestException,
   Body,
@@ -20,7 +16,6 @@ import type {
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
->>>>>>> Stashed changes
 import { AccountsService } from './accounts.service';
 
 @Controller('accounts')
@@ -43,8 +38,6 @@ export class TransactionsController {
     if (page === 'bad-cursor') throw new BadRequestException('The cursor is not valid');
     return page;
   }
-<<<<<<< Updated upstream
-=======
 
   /** The guessed and uncategorised transactions, for the owner to review. */
   @Get('review')
@@ -84,5 +77,4 @@ export class TransactionsController {
 
 function isId(value: string): boolean {
   return /^\d{1,15}$/.test(value);
->>>>>>> Stashed changes
 }

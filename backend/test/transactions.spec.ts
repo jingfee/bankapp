@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import type { TransactionsResponse } from '@bankapp/shared';
+import type { TransactionDetails, TransactionsResponse } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
@@ -152,5 +152,92 @@ describe('GET /api/transactions', () => {
 
   it('answers 400 for a bad cursor', async () => {
     await get('?before=nonsense').expect(400);
+  });
+
+  describe('GET /api/transactions/:id', () => {
+    const detail = async (id: number): Promise<TransactionDetails> =>
+      (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200)).body;
+
+    it('returns the details parsed from the raw response', async () => {
+      const raw = {
+        credit_debit_indicator: 'DBIT',
+        transaction_amount: { amount: '12.50', currency: 'EUR' },
+        creditor: { name: 'Café Roma' },
+        debtor: { name: 'Me' },
+        exchange_rate: {
+          exchange_rate: '11.2',
+          instructed_amount: { amount: '1.12', currency: 'EUR' },
+        },
+        remittance_information: ['Lunch', 'Rome'],
+        reference_number: '12345',
+        note: 'Team trip',
+      };
+      add({
+        date: '2026-11-08',
+        description: 'Lunch Rome',
+        amount: -12.5,
+        transactionDate: '2026-11-08',
+        bookingDate: '2026-11-10',
+        valueDate: '2026-11-10',
+        raw: JSON.stringify(raw),
+      });
+
+      const body = await detail(1);
+
+      expect(body).toEqual({
+        id: 1,
+        status: 'booked',
+        amount: { amount: -12.5, currency: 'SEK' },
+        description: 'Lunch Rome',
+        account: { id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
+        category: null,
+        transactionDate: '2026-11-08',
+        bookingDate: '2026-11-10',
+        counterparty: 'Café Roma',
+        originalAmount: { amount: -1.12, currency: 'EUR' },
+        exchangeRate: 11.2,
+        remittanceInformation: ['Lunch', 'Rome'],
+        referenceNumber: '12345',
+        note: 'Team trip',
+        raw: JSON.stringify(raw),
+      });
+      expect(body).not.toHaveProperty('valueDate');
+    });
+
+    it('uses the debtor as the other party when money arrived', async () => {
+      add({
+        date: '2026-11-08',
+        amount: 100,
+        raw: JSON.stringify({
+          credit_debit_indicator: 'CRDT',
+          creditor: { name: 'Me' },
+          debtor: { name: 'Employer AB' },
+        }),
+      });
+
+      expect((await detail(1)).counterparty).toBe('Employer AB');
+    });
+
+    it('leaves out what the bank did not send, also when the raw is not usable', async () => {
+      add({ date: '2026-11-08', bookingDate: null, status: 'pending' });
+      add({ date: '2026-11-08', raw: 'not json' });
+
+      for (const id of [1, 2]) {
+        expect(await detail(id)).toMatchObject({
+          transactionDate: null,
+          counterparty: null,
+          originalAmount: null,
+          exchangeRate: null,
+          remittanceInformation: [],
+          referenceNumber: null,
+          note: null,
+        });
+      }
+    });
+
+    it('answers 404 for an unknown or non-numeric id', async () => {
+      await request(app.getHttpServer()).get('/api/transactions/99').expect(404);
+      await request(app.getHttpServer()).get('/api/transactions/abc').expect(404);
+    });
   });
 });

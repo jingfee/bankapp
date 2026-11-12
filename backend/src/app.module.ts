@@ -4,6 +4,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { AccountsModule } from './accounts/accounts.module';
 import { BackupModule } from './backup/backup.module';
 import { BanksModule } from './banks/banks.module';
+import { CategoriesModule } from './categories/categories.module';
 import type { AppConfig } from './config/config';
 import { CLOCK, type Clock } from './clock';
 import { ConnectionsModule } from './connections/connections.module';
@@ -52,6 +53,7 @@ export class AppModule {
         EnableBankingModule.register(options.enableBanking),
         ScheduleModule.forRoot(),
         BanksModule,
+        CategoriesModule,
         ConnectionsModule,
         AccountsModule,
         BackupModule,

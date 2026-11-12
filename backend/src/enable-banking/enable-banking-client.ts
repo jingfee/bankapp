@@ -1,6 +1,3 @@
-/** Whether a bank takes the owner's personnummer when starting the BankID login. */
-export type PersonnummerSupport = 'none' | 'optional' | 'required';
-
 /** A bank as Enable Banking describes it (an "ASPSP"). */
 export interface EnableBankingBank {
   name: string;
@@ -9,7 +6,6 @@ export interface EnableBankingBank {
   beta: boolean;
   /** The longest permission the bank grants, in seconds. */
   maximumConsentSeconds: number;
-  personnummer: PersonnummerSupport;
 }
 
 export interface AuthorisationRequest {
@@ -19,8 +15,6 @@ export interface AuthorisationRequest {
   /** Echoed back to the redirect URL; ties the return to this request. */
   state: string;
   redirectUrl: string;
-  /** Only set for banks that take it. 12 digits, e.g. `199001011234`. */
-  personnummer?: string;
 }
 
 export type EnableBankingAccountType = 'payment' | 'savings' | 'card';
@@ -31,6 +25,8 @@ export interface EnableBankingAccount {
   name: string;
   type: EnableBankingAccountType;
   currency: string;
+  /** The account as Enable Banking returned it (unknown fields kept), as JSON, so naming can improve later. */
+  raw: string;
 }
 
 /** What a successful BankID login yields. */
@@ -61,8 +57,10 @@ export interface EnableBankingTransaction {
   currency: string;
   /** `YYYY-MM-DD`, when the bank says. Pending transactions often have none. */
   bookingDate: string | null;
-  /** `YYYY-MM-DD`; falls back to the bank's transaction date when it gives no value date. */
+  /** `YYYY-MM-DD`, when the bank says. */
   valueDate: string | null;
+  /** `YYYY-MM-DD`: the day the owner made the transaction, when the bank says. */
+  transactionDate: string | null;
   description: string;
   /** The bank's own identifier for a booked transaction, when it gives one. */
   entryReference: string | null;
@@ -109,6 +107,14 @@ export abstract class EnableBankingClient {
     accountUid: string,
     options?: RequestOptions,
   ): Promise<EnableBankingBalance[]>;
+  /**
+   * The account as Enable Banking describes it now, for refreshing its name. Rejects with
+   * {@link RateLimitError} when the bank says the account was asked for too often.
+   */
+  abstract getAccountDetails(
+    accountUid: string,
+    options?: RequestOptions,
+  ): Promise<EnableBankingAccount>;
   /**
    * The transactions of the account from `dateFrom`, or the longest history the bank returns,
    * with every page already fetched. Both fetches reject with {@link RateLimitError} when the

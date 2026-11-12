@@ -1,9 +1,9 @@
-import type { INestApplication } from '@nestjs/common';
+import { Logger, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import type { AccountsResponse, ConnectedAccount } from '@bankapp/shared';
+import type { AccountsResponse, ConnectedAccount, TransactionDetails } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
-import { balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
+import { accounts, balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
 import type {
   EnableBankingAccount,
   EnableBankingBalance,
@@ -21,7 +21,7 @@ function account(
   name: string,
   type: EnableBankingAccount['type'] = 'payment',
 ): EnableBankingAccount {
-  return { uid, identificationHash: `hash-${uid}`, name, type, currency: 'SEK' };
+  return { uid, identificationHash: `hash-${uid}`, name, type, currency: 'SEK', raw: '{}' };
 }
 
 function balance(
@@ -49,6 +49,7 @@ function transaction(
     currency: 'SEK',
     bookingDate: '2026-11-09',
     valueDate: '2026-11-09',
+    transactionDate: null,
     description: 'ICA',
     entryReference: null,
     raw: JSON.stringify({ amount }),
@@ -284,6 +285,56 @@ describe('the initial sync', () => {
     });
   });
 
+  describe('account details', () => {
+    const details = (uid: string, name: string): EnableBankingAccount => ({
+      ...account(uid, name),
+      raw: JSON.stringify({ uid, product: name }),
+    });
+    const storedAccounts = () => db().select().from(accounts).orderBy(accounts.id).all();
+
+    it('renames the account and stores the raw account from the bank', async () => {
+      enableBanking.accountDetails.set('u1', details('u1', 'Lönekonto'));
+
+      await connect('Swedbank', [account('u1', 'Anna Andersson')]);
+      await settled();
+
+      expect(storedAccounts()).toMatchObject([
+        { name: 'Lönekonto', raw: JSON.stringify({ uid: 'u1', product: 'Lönekonto' }) },
+      ]);
+    });
+
+    it('keeps the old name and still syncs when the details cannot be fetched', async () => {
+      enableBanking.balances.set('u1', [balance('CLBD', 5)]);
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      await connect('Swedbank', [account('u1', 'Anna Andersson')]);
+      await settled();
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not fetch details'));
+      warn.mockRestore();
+
+      expect(storedAccounts()).toMatchObject([{ name: 'Anna Andersson', raw: '{}' }]);
+      expect(await accountNamed('Anna Andersson')).toMatchObject({ balance: { amount: 5 } });
+      expect(db().select().from(syncAccountResults).all()).toMatchObject([{ outcome: 'ok' }]);
+    });
+
+    it('treats a rate limit on the details as a rate limit for the connection', async () => {
+      enableBanking.rateLimitedDetails.add('u1');
+
+      await connect('Swedbank', [
+        account('u1', 'Lönekonto'),
+        account('u2', 'Sparkonto', 'savings'),
+      ]);
+      await settled();
+
+      expect(db().select().from(syncAccountResults).all()).toMatchObject([
+        { accountId: 1, outcome: 'rate-limited' },
+        { accountId: 2, outcome: 'rate-limited' },
+      ]);
+      expect(enableBanking.requestedDetails).toEqual(['u1']);
+    });
+  });
+
   it('records the run with its trigger and start and end time', async () => {
     enableBanking.balances.set('u1', [balance('CLBD', 1)]);
 
@@ -325,6 +376,7 @@ describe('the initial sync', () => {
         transaction(-125.5, {
           bookingDate: '2026-11-09',
           valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
           description: 'ICA Maxi',
           entryReference: 'ref-1',
           raw: '{"original":true}',
@@ -343,26 +395,110 @@ describe('the initial sync', () => {
           currency: 'SEK',
           bookingDate: '2026-11-09',
           valueDate: '2026-11-08',
-          date: '2026-11-09',
+          transactionDate: '2026-11-07',
+          date: '2026-11-07',
           description: 'ICA Maxi',
           entryReference: 'ref-1',
           dedupKey: 'ref:ref-1',
           raw: '{"original":true}',
           fetchedAt: START,
+          // Guessed from the merchant keywords.
+          subcategoryId: expect.any(Number) as number,
+          categoryConfirmed: false,
+          categoryConfirmedAt: null,
         },
       ]);
     });
 
-    it('are listed under the value date, or else the day they were fetched, when not booked', async () => {
+    it('are listed under the transaction date, else value date, else booking date, else the day they were fetched', async () => {
+      const undated = { bookingDate: null, valueDate: null, transactionDate: null };
       enableBanking.transactions.set('u1', [
-        transaction(-1, { status: 'pending', bookingDate: null, valueDate: '2026-11-10' }),
-        transaction(-2, { status: 'pending', bookingDate: null, valueDate: null }),
+        transaction(-1, {
+          ...undated,
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
+        }),
+        transaction(-2, { ...undated, bookingDate: '2026-11-09', valueDate: '2026-11-08' }),
+        transaction(-3, { ...undated, bookingDate: '2026-11-09' }),
+        transaction(-4, { ...undated, status: 'pending', valueDate: '2026-11-06' }),
+        transaction(-5, { ...undated, status: 'pending' }),
       ]);
 
       await connect('Swedbank', [account('u1', 'Lönekonto')]);
       await settled();
 
-      expect(stored().map((row) => row.date)).toEqual(['2026-11-10', '2026-11-10']);
+      expect(stored().map((row) => row.date)).toEqual([
+        '2026-11-07',
+        '2026-11-08',
+        '2026-11-09',
+        '2026-11-06',
+        '2026-11-10',
+      ]);
+    });
+
+    it('are listed newest first by their transaction date, not their booking date', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-1, {
+          description: 'Bought earlier',
+          bookingDate: '2026-11-09',
+          transactionDate: '2026-11-03',
+        }),
+        transaction(-2, {
+          description: 'Bought later',
+          bookingDate: '2026-11-08',
+          transactionDate: '2026-11-06',
+        }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      const body = (await request(app.getHttpServer()).get('/api/transactions').expect(200)).body;
+      expect(
+        body.transactions.map((t: { description: string; date: string }) => [
+          t.description,
+          t.date,
+        ]),
+      ).toEqual([
+        ['Bought later', '2026-11-06'],
+        ['Bought earlier', '2026-11-03'],
+      ]);
+    });
+
+    it('stored before transaction dates were used are not stored again by the next sync', async () => {
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      // Written by the earlier version: no transaction date, fingerprint made from the booking date.
+      db()
+        .insert(transactions)
+        .values({
+          accountId: 1,
+          status: 'booked',
+          amount: -35,
+          currency: 'SEK',
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          date: '2026-11-09',
+          description: 'Espresso House',
+          entryReference: null,
+          dedupKey: 'fp:["2026-11-09",-35,"Espresso House"]:0',
+          raw: '{}',
+          fetchedAt: START,
+        })
+        .run();
+      enableBanking.transactions.set('u1', [
+        transaction(-35, {
+          description: 'Espresso House',
+          bookingDate: '2026-11-09',
+          valueDate: '2026-11-08',
+          transactionDate: '2026-11-07',
+        }),
+      ]);
+
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toHaveLength(1);
     });
 
     it('are not stored twice when the next sync returns them again', async () => {
@@ -440,6 +576,210 @@ describe('the initial sync', () => {
         ['pending', -35],
         ['pending', -50],
       ]);
+    });
+
+    it('that are pending match their booked twin whatever the case or punctuation of the description', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-129, { status: 'pending', description: 'Foo Bar Store' }),
+        transaction(-129, { description: 'FOO.BAR STORE' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => row.status)).toEqual(['booked']);
+    });
+
+    it('that are pending match their booked twin when the bank reserved it with the opposite sign', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-350, { status: 'pending', description: 'Fake.com' }),
+        transaction(350, { description: 'FAKE.COM' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => [row.status, row.amount])).toEqual([['booked', 350]]);
+    });
+
+    it('that are pending keep their stored row across syncs while they stay pending', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-12, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([{ id: first!.id, status: 'pending', amount: -12 }]);
+    });
+
+    it('that are pending are updated in place when they book', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'CAFE', entryReference: 'b1', bookingDate: '2026-11-11' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([
+        { id: first!.id, status: 'booked', description: 'CAFE', bookingDate: '2026-11-11' },
+      ]);
+
+      // Booked now, so it is not stored again by a later sync.
+      await app.get(SyncService).start('manual').finished;
+      expect(stored()).toHaveLength(1);
+    });
+
+    describe('that are pending with a category set by hand', () => {
+      /** Sets Mat & Dryck / Café & fika on a transaction, as the owner would; returns its id. */
+      async function categoriseByHand(id: number): Promise<number> {
+        const body = (await request(app.getHttpServer()).get('/api/categories')).body as {
+          categories: { name: string; subcategories: { id: number; name: string }[] }[];
+        };
+        const cafe = body.categories
+          .find((c) => c.name === 'Mat & Dryck')!
+          .subcategories.find((s) => s.name === 'Café & fika')!;
+        await request(app.getHttpServer())
+          .put(`/api/transactions/${id}/category`)
+          .send({ subcategoryId: cafe.id })
+          .expect(200);
+        return cafe.id;
+      }
+
+      const categoryOf = async (id: number) =>
+        (
+          (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200))
+            .body as TransactionDetails
+        ).category;
+
+      it('keep it across a sync and when they book', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const [first] = stored();
+        const cafe = await categoriseByHand(first!.id);
+
+        await app.get(SyncService).start('manual').finished;
+        expect(await categoryOf(first!.id)).toMatchObject({
+          subcategory: { id: cafe },
+          confirmed: true,
+        });
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, {
+            description: 'CAFE',
+            entryReference: 'b1',
+            bookingDate: '2026-11-11',
+          }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+        expect(stored()).toMatchObject([{ id: first!.id, status: 'booked' }]);
+        expect(await categoryOf(first!.id)).toMatchObject({
+          subcategory: { id: cafe },
+          confirmed: true,
+        });
+      });
+
+      it('keep it when the bank gives them no entry reference, across a sync and when they book', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: null }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const cafe = await categoriseByHand(stored()[0]!.id);
+
+        await app.get(SyncService).start('manual').finished;
+        const [pending] = stored();
+        expect(pending).toMatchObject({ status: 'pending', subcategoryId: cafe });
+        expect(await categoryOf(pending!.id)).toMatchObject({ confirmed: true });
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { description: 'CAFE', entryReference: 'b1' }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+        const [booked] = stored();
+        expect(stored()).toHaveLength(1);
+        expect(booked).toMatchObject({ status: 'booked', subcategoryId: cafe });
+        expect(await categoryOf(booked!.id)).toMatchObject({ confirmed: true });
+      });
+
+      it('hand it to their booked twin when that is already stored', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        const cafe = await categoriseByHand(stored()[0]!.id);
+        // The booked twin got stored on its own, e.g. by a sync that did not recognise the pair.
+        db()
+          .insert(transactions)
+          .values({
+            accountId: stored()[0]!.accountId,
+            status: 'booked',
+            amount: -10,
+            currency: 'SEK',
+            date: '2026-11-09',
+            description: 'Cafe',
+            entryReference: 'b1',
+            dedupKey: 'ref:b1',
+            raw: '{}',
+            fetchedAt: START,
+          })
+          .run();
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+
+        expect(stored()).toMatchObject([
+          { status: 'booked', subcategoryId: cafe, categoryConfirmed: true },
+        ]);
+      });
+    });
+
+    it('that are pending are updated in place when they book after the bank stopped returning them', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [first] = stored();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([{ id: first!.id, status: 'booked' }]);
+    });
+
+    it('that are pending are removed when the bank stops returning them without a booked match', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+        transaction(-20, { status: 'pending', description: 'Kiosk', entryReference: 'p2' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-20, { status: 'pending', description: 'Kiosk', entryReference: 'p2' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored().map((row) => row.description)).toEqual(['Kiosk']);
     });
 
     it('that are booked are never deleted when the bank stops returning them', async () => {

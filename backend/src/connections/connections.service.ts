@@ -33,11 +33,11 @@ export class ConnectionsService {
   ) {}
 
   /** Starts a BankID login for the bank and returns the URL to send the owner to. */
-  async start(bankName: string): Promise<{ url: string }> {
+  async start(bankName: string, renewal = false): Promise<{ url: string }> {
     const bank = this.db.select().from(banks).where(eq(banks.name, bankName)).get();
     if (!bank) throw new HttpException('Unknown bank', HttpStatus.NOT_FOUND);
 
-    if (!this.canConnect(bank.name)) {
+    if (!renewal && !this.canConnect(bank.name)) {
       throw new HttpException('The bank is already connected', HttpStatus.CONFLICT);
     }
 
@@ -56,15 +56,15 @@ export class ConnectionsService {
         validUntil: new Date(now.getTime() + bank.maximumConsentSeconds * 1000 - CONSENT_MARGIN_MS),
         state,
         redirectUrl: this.config.redirectUrl,
-        ...(bank.personnummer !== 'none' && this.config.personnummer
-          ? { personnummer: this.config.personnummer }
-          : {}),
       }));
     } catch (cause) {
       this.logger.warn(`Could not start a connection to ${bank.name}: ${String(cause)}`);
       throw new HttpException('Enable Banking refused to start the login', HttpStatus.BAD_GATEWAY);
     }
-    this.db.insert(authorisations).values({ state, bankName: bank.name, createdAt: now }).run();
+    this.db
+      .insert(authorisations)
+      .values({ state, bankName: bank.name, renewal, createdAt: now })
+      .run();
     return { url };
   }
 
@@ -92,7 +92,8 @@ export class ConnectionsService {
 
     const bank = authorisation.bankName;
     if (error || !code) return { outcome: 'failed', bank };
-    if (!this.canConnect(bank)) return { outcome: 'already-connected', bank };
+    const renewal = authorisation.renewal;
+    if (!renewal && !this.canConnect(bank)) return { outcome: 'already-connected', bank };
     let session: EnableBankingSession;
     try {
       session = await this.enableBanking.createSession(code);
@@ -121,7 +122,7 @@ export class ConnectionsService {
       });
     } catch (cause) {
       // A concurrent login for the same bank may have won while we waited for Enable Banking.
-      if (!this.canConnect(bank)) return { outcome: 'already-connected', bank };
+      if (!renewal && !this.canConnect(bank)) return { outcome: 'already-connected', bank };
       this.logger.warn(`Could not store the connection to ${bank}: ${String(cause)}`);
       return { outcome: 'failed', bank };
     }
@@ -159,6 +160,7 @@ export class ConnectionsService {
             name: account.name,
             type: account.type,
             currency: account.currency,
+            raw: account.raw,
             closed: false,
           })
           .where(
@@ -189,7 +191,10 @@ export class ConnectionsService {
     return connectionId;
   }
 
-  /** A bank can be connected if it has no connection yet, or its connection is due for renewal. */
+  /**
+   * A bank can be connected if it has no connection yet, or its connection is due for renewal.
+   * An owner-requested renewal of an active connection skips this check at its call sites.
+   */
   private canConnect(bankName: string): boolean {
     const existing = this.db
       .select({ validUntil: connections.validUntil })

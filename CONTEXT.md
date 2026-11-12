@@ -66,6 +66,7 @@ _Avoid_: Completed, settled, cleared
 
 **Pending transaction** (sv: _Reserverad_):
 A transaction the bank has registered but not yet booked; it may change or disappear before booking. A pending transaction that books is the same transaction, not a second one: the owner sees it once, first as pending and then as booked.
+The bank may reserve a refund with the wrong sign and describe the merchant slightly differently once booked, so the two are recognised as the same by amount size, currency and the description's letters and digits. Rejected and cancelled attempts (`RJCT`, `CNCL`) are not transactions and are never stored. The bank does not say which card made a purchase, so there is no cardholder.
 _Avoid_: Reserved, waiting, authorised, reservation (as a separate thing from its booked transaction)
 
 **Transaction date** (sv: _Transaktionsdatum_):
@@ -79,7 +80,7 @@ _Avoid_: Settlement date, posting date
 ### Syncing
 
 **Sync** (sv: _Uppdatering_):
-One run of fetching balances and transactions for every account on active connections and storing them.
+One run of fetching details, balances and transactions for every account on active connections and storing them. Account details refresh the account's name.
 _Avoid_: Fetch, refresh, import
 
 **Initial sync** (sv: _Första uppdatering_):

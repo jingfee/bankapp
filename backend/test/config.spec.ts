@@ -74,16 +74,10 @@ describe('loadConfig', () => {
     expect(() => loadConfig(validEnv)).toThrow(/REDIRECT_URL must be an http\(s\) URL/);
   });
 
-  it('reads the optional personnummer', () => {
+  it('ignores a leftover PERSONNUMMER', () => {
     validEnv['PERSONNUMMER'] = '199001011234';
 
-    expect(loadConfig(validEnv).personnummer).toBe('199001011234');
-  });
-
-  it.each(['19900101-1234', '9001011234', 'abc'])('rejects the personnummer %s', (value) => {
-    validEnv['PERSONNUMMER'] = value;
-
-    expect(() => loadConfig(validEnv)).toThrow(/PERSONNUMMER must be 12 digits/);
+    expect(() => loadConfig(validEnv)).not.toThrow();
   });
 
   it('rejects an unknown time zone', () => {

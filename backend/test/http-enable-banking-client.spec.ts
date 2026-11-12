@@ -88,7 +88,6 @@ describe('HttpEnableBankingClient', () => {
         logoUrl: 'https://logos.example/n.png',
         beta: true,
         maximumConsentSeconds: 7776000,
-        personnummer: 'none',
       },
       {
         name: 'Skandia',
@@ -96,7 +95,6 @@ describe('HttpEnableBankingClient', () => {
         logoUrl: null,
         beta: false,
         maximumConsentSeconds: 30 * 24 * 3600,
-        personnummer: 'none',
       },
     ]);
   });
@@ -125,34 +123,6 @@ describe('HttpEnableBankingClient', () => {
     await expect(client().listBanks('SE')).rejects.toThrow(/^.{1,600}$/);
   });
 
-  it.each([
-    [true, 'required'],
-    [false, 'optional'],
-  ])(
-    'reads a personal user id credential (required: %s) as %s personnummer',
-    async (isRequired, expected) => {
-      respond = () =>
-        Response.json({
-          aspsps: [
-            {
-              name: 'Coop Mastercard',
-              country: 'SE',
-              auth_methods: [
-                { name: 'BankID', psu_type: 'business', credentials: [] },
-                {
-                  name: 'BankID',
-                  psu_type: 'personal',
-                  credentials: [{ name: 'userId', title: 'Personnummer', required: isRequired }],
-                },
-              ],
-            },
-          ],
-        });
-
-      expect((await client().listBanks('SE'))[0]!.personnummer).toBe(expected);
-    },
-  );
-
   describe('startAuthorisation', () => {
     const authorisation = {
       bank: 'Swedbank',
@@ -179,52 +149,45 @@ describe('HttpEnableBankingClient', () => {
           psu_type: 'personal',
         },
       });
-      expect(requests[0]!.body).not.toHaveProperty('psu_id');
       expect(requests[0]!.headers['Authorization']).toMatch(/^Bearer /);
-    });
-
-    it('passes the personnummer as psu_id', async () => {
-      respond = () => Response.json({ url: 'https://bankid.example/go' });
-
-      await client().startAuthorisation({ ...authorisation, personnummer: '199001011234' });
-
-      expect(requests[0]!.body).toMatchObject({ psu_id: '199001011234' });
     });
   });
 
   describe('createSession', () => {
+    const sessionAccounts = [
+      {
+        uid: 'u1',
+        identification_hash: 'h1',
+        name: 'Anna Andersson',
+        details: 'Lönekonto',
+        product: 'Privatkonto',
+        cash_account_type: 'CACC',
+        currency: 'SEK',
+      },
+      {
+        uid: 'u2',
+        identification_hash: 'h2',
+        name: 'Anna Andersson',
+        product: 'Sparkonto',
+        cash_account_type: 'SVGS',
+        currency: 'SEK',
+      },
+      {
+        uid: 'u3',
+        identification_hash: 'h3',
+        name: 'Anna Andersson',
+        account_id: { iban: 'SE123' },
+        cash_account_type: 'CARD',
+        currency: 'SEK',
+      },
+    ];
+
     it('exchanges the code and maps the session and its accounts', async () => {
       respond = () =>
         Response.json({
           session_id: 'session-1',
           access: { valid_until: '2027-02-08T12:00:00.000Z' },
-          accounts: [
-            {
-              uid: 'u1',
-              identification_hash: 'h1',
-              name: 'Anna Andersson',
-              details: 'Lönekonto',
-              product: 'Privatkonto',
-              cash_account_type: 'CACC',
-              currency: 'SEK',
-            },
-            {
-              uid: 'u2',
-              identification_hash: 'h2',
-              name: 'Anna Andersson',
-              product: 'Sparkonto',
-              cash_account_type: 'SVGS',
-              currency: 'SEK',
-            },
-            {
-              uid: 'u3',
-              identification_hash: 'h3',
-              name: 'Anna Andersson',
-              account_id: { iban: 'SE123' },
-              cash_account_type: 'CARD',
-              currency: 'SEK',
-            },
-          ],
+          accounts: sessionAccounts,
         });
 
       expect(await client().createSession('the-code')).toEqual({
@@ -237,6 +200,7 @@ describe('HttpEnableBankingClient', () => {
             name: 'Lönekonto',
             type: 'payment',
             currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[0]),
           },
           {
             uid: 'u2',
@@ -244,8 +208,16 @@ describe('HttpEnableBankingClient', () => {
             name: 'Sparkonto',
             type: 'savings',
             currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[1]),
           },
-          { uid: 'u3', identificationHash: 'h3', name: 'SE123', type: 'card', currency: 'SEK' },
+          {
+            uid: 'u3',
+            identificationHash: 'h3',
+            name: 'SE123',
+            type: 'card',
+            currency: 'SEK',
+            raw: JSON.stringify(sessionAccounts[2]),
+          },
         ],
       });
       expect(requests[0]).toMatchObject({
@@ -253,6 +225,40 @@ describe('HttpEnableBankingClient', () => {
         method: 'POST',
         body: { code: 'the-code' },
       });
+    });
+  });
+
+  describe('getAccountDetails', () => {
+    it('fetches the account details and maps them like a session account', async () => {
+      const resource = {
+        uid: 'u1',
+        identification_hash: 'h1',
+        name: 'Anna Andersson',
+        product: 'Privatkonto',
+        cash_account_type: 'CACC',
+        currency: 'SEK',
+        extra: 'kept',
+      };
+      respond = () => Response.json(resource);
+
+      expect(await client().getAccountDetails('u 1')).toEqual({
+        uid: 'u1',
+        identificationHash: 'h1',
+        name: 'Privatkonto',
+        type: 'payment',
+        currency: 'SEK',
+        raw: JSON.stringify(resource),
+      });
+      expect(requests[0]).toMatchObject({
+        url: 'https://enable.test/accounts/u%201/details',
+        method: 'GET',
+      });
+    });
+
+    it('rejects with a RateLimitError when the bank is asked too often', async () => {
+      respond = () => new Response('', { status: 429 });
+
+      await expect(client().getAccountDetails('u1')).rejects.toBeInstanceOf(RateLimitError);
     });
   });
 
@@ -442,6 +448,7 @@ describe('HttpEnableBankingClient', () => {
         currency: 'SEK',
         bookingDate: '2026-11-09',
         valueDate: '2026-11-08',
+        transactionDate: null,
         description: 'ICA Maxi Stockholm',
         entryReference: 'ref-1',
       });
@@ -469,9 +476,42 @@ describe('HttpEnableBankingClient', () => {
         status: 'pending',
         amount: 125.5,
         bookingDate: null,
-        valueDate: '2026-11-10',
+        valueDate: null,
+        transactionDate: '2026-11-10',
         description: 'Anna Andersson',
         entryReference: null,
+      });
+    });
+
+    it('leaves out rejected and cancelled transactions, which never happened', async () => {
+      pages({
+        transactions: [
+          raw({ entry_reference: 'a', status: 'RJCT' }),
+          raw({ entry_reference: 'b', status: 'CNCL' }),
+          raw({ entry_reference: 'c', status: 'OTHR' }),
+          raw({ entry_reference: 'd', status: 'PDNG' }),
+          raw({ entry_reference: 'e' }),
+        ],
+      });
+
+      const transactions = await client().getTransactions('u1');
+
+      expect(transactions.map((t) => [t.entryReference, t.status])).toEqual([
+        ['c', 'pending'],
+        ['d', 'pending'],
+        ['e', 'booked'],
+      ]);
+    });
+
+    it('keeps the transaction date apart from the value date', async () => {
+      pages({ transactions: [raw({ transaction_date: '2026-11-07' })] });
+
+      const [transaction] = await client().getTransactions('u1');
+
+      expect(transaction).toMatchObject({
+        bookingDate: '2026-11-09',
+        valueDate: '2026-11-08',
+        transactionDate: '2026-11-07',
       });
     });
 
