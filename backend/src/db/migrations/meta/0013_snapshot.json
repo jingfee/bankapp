@@ -75,9 +75,7 @@
       "indexes": {
         "accounts_identification_hash_unique": {
           "name": "accounts_identification_hash_unique",
-          "columns": [
-            "identification_hash"
-          ],
+          "columns": ["identification_hash"],
           "isUnique": true
         }
       },
@@ -85,13 +83,9 @@
         "accounts_connection_id_connections_id_fk": {
           "name": "accounts_connection_id_connections_id_fk",
           "tableFrom": "accounts",
-          "columnsFrom": [
-            "connection_id"
-          ],
+          "columnsFrom": ["connection_id"],
           "tableTo": "connections",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -197,13 +191,9 @@
         "balances_account_id_accounts_id_fk": {
           "name": "balances_account_id_accounts_id_fk",
           "tableFrom": "balances",
-          "columnsFrom": [
-            "account_id"
-          ],
+          "columnsFrom": ["account_id"],
           "tableTo": "accounts",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -315,9 +305,7 @@
       "indexes": {
         "categories_one_income_or_transfer": {
           "name": "categories_one_income_or_transfer",
-          "columns": [
-            "kind"
-          ],
+          "columns": ["kind"],
           "where": "kind <> 'expense'",
           "isUnique": true
         }
@@ -362,9 +350,7 @@
       "indexes": {
         "connections_bank_name_unique": {
           "name": "connections_bank_name_unique",
-          "columns": [
-            "bank_name"
-          ],
+          "columns": ["bank_name"],
           "isUnique": true
         }
       },
@@ -439,9 +425,7 @@
       "indexes": {
         "subcategories_category_id": {
           "name": "subcategories_category_id",
-          "columns": [
-            "category_id"
-          ],
+          "columns": ["category_id"],
           "isUnique": false
         }
       },
@@ -449,13 +433,9 @@
         "subcategories_category_id_categories_id_fk": {
           "name": "subcategories_category_id_categories_id_fk",
           "tableFrom": "subcategories",
-          "columnsFrom": [
-            "category_id"
-          ],
+          "columnsFrom": ["category_id"],
           "tableTo": "categories",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -523,26 +503,18 @@
         "sync_account_results_sync_run_id_sync_runs_id_fk": {
           "name": "sync_account_results_sync_run_id_sync_runs_id_fk",
           "tableFrom": "sync_account_results",
-          "columnsFrom": [
-            "sync_run_id"
-          ],
+          "columnsFrom": ["sync_run_id"],
           "tableTo": "sync_runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "sync_account_results_account_id_accounts_id_fk": {
           "name": "sync_account_results_account_id_accounts_id_fk",
           "tableFrom": "sync_account_results",
-          "columnsFrom": [
-            "account_id"
-          ],
+          "columnsFrom": ["account_id"],
           "tableTo": "accounts",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -716,27 +688,18 @@
       "indexes": {
         "transactions_booked_dedup": {
           "name": "transactions_booked_dedup",
-          "columns": [
-            "account_id",
-            "dedup_key"
-          ],
+          "columns": ["account_id", "dedup_key"],
           "where": "\"transactions\".\"status\" = 'booked'",
           "isUnique": true
         },
         "transactions_account_date": {
           "name": "transactions_account_date",
-          "columns": [
-            "account_id",
-            "date",
-            "id"
-          ],
+          "columns": ["account_id", "date", "id"],
           "isUnique": false
         },
         "transactions_subcategory_id": {
           "name": "transactions_subcategory_id",
-          "columns": [
-            "subcategory_id"
-          ],
+          "columns": ["subcategory_id"],
           "isUnique": false
         }
       },
@@ -744,26 +707,18 @@
         "transactions_account_id_accounts_id_fk": {
           "name": "transactions_account_id_accounts_id_fk",
           "tableFrom": "transactions",
-          "columnsFrom": [
-            "account_id"
-          ],
+          "columnsFrom": ["account_id"],
           "tableTo": "accounts",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "transactions_subcategory_id_subcategories_id_fk": {
           "name": "transactions_subcategory_id_subcategories_id_fk",
           "tableFrom": "transactions",
-          "columnsFrom": [
-            "subcategory_id"
-          ],
+          "columnsFrom": ["subcategory_id"],
           "tableTo": "subcategories",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
