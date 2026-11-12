@@ -138,13 +138,30 @@ describe('TransactionDetailsPage', () => {
       );
       expect(request.request.method).toBe('PUT');
       expect(request.request.body).toEqual({ subcategoryId: 12 });
-      request.flush({ category: livsmedel });
+      request.flush({ category: livsmedel, updatedSimilar: 0 });
       await rendered.fixture.whenStable();
 
       expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
       expect(page.querySelector('[data-confirm-category]')).toBeNull();
       expect(page.querySelector('[data-category-guessed-note]')).toBeNull();
       expect(service.listed?.transactions[0]?.category).toEqual(livsmedel);
+    });
+
+    it('says how many similar transactions were updated, if any', async () => {
+      const rendered = await render(details({ category: { ...livsmedel, confirmed: false } }));
+      const { page } = rendered;
+      expect(page.querySelector('[data-similar-updated]')).toBeNull();
+
+      (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/transactions/5/category')
+        .flush({ category: livsmedel, updatedSimilar: 1 });
+      await rendered.fixture.whenStable();
+      rendered.fixture.detectChanges();
+
+      expect(page.querySelector('[data-similar-updated]')?.textContent?.trim()).toBe(
+        '1 liknande transaktion uppdaterades',
+      );
     });
 
     it('offers no Stämmer for a confirmed category', async () => {
@@ -270,7 +287,7 @@ describe('TransactionDetailsPage', () => {
       );
       expect(request.request.method).toBe('PUT');
       expect(request.request.body).toEqual({ subcategoryId: 13 });
-      request.flush({ category: restaurang });
+      request.flush({ category: restaurang, updatedSimilar: 0 });
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Mat & Dryck / Restaurang');
@@ -286,7 +303,7 @@ describe('TransactionDetailsPage', () => {
         '/api/transactions/5/category',
       );
       expect(request.request.body).toEqual({ subcategoryId: null });
-      request.flush({ category: null });
+      request.flush({ category: null, updatedSimilar: 0 });
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Okategoriserad');

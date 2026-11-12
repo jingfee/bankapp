@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type {
   CategoriesResponse,
@@ -91,7 +92,7 @@ describe('categorising a transaction by hand', () => {
       subcategory: { id: livsmedel, name: 'Livsmedel', icon: 'shopping-basket' },
       confirmed: true,
     };
-    expect(response.body).toEqual({ category: expected });
+    expect(response.body).toEqual({ category: expected, updatedSimilar: 0 });
     expect((await detail()).category).toEqual(expected);
     expect((await listed()).category).toEqual(expected);
   });
@@ -109,7 +110,7 @@ describe('categorising a transaction by hand', () => {
 
     const response = await put({ subcategoryId: null }).expect(200);
 
-    expect(response.body).toEqual({ category: null });
+    expect(response.body).toEqual({ category: null, updatedSimilar: 0 });
     expect((await detail()).category).toBeNull();
   });
 
@@ -124,5 +125,70 @@ describe('categorising a transaction by hand', () => {
     const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
     await put({ subcategoryId: livsmedel }, 99).expect(404);
     await put({ subcategoryId: livsmedel }, 'abc').expect(404);
+  });
+
+  describe('spreading to transactions with the same description', () => {
+    const add = (
+      id: number,
+      description: string,
+      extra: Partial<typeof transactions.$inferInsert> = {},
+    ) =>
+      db
+        .insert(transactions)
+        .values({
+          accountId: 1,
+          status: 'booked',
+          amount: -100,
+          currency: 'SEK',
+          date: '2026-11-0' + id,
+          description,
+          dedupKey: `k${id}`,
+          raw: '{}',
+          fetchedAt: new Date('2026-11-10T12:00:00Z'),
+          ...extra,
+        })
+        .run();
+    const stored = (id: number) =>
+      db.select().from(transactions).where(eq(transactions.id, id)).get()!;
+
+    it('re-guesses guessed and uncategorised neighbours, and reports how many changed', async () => {
+      const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
+      const alkohol = await subcategoryId('Alkohol', 'Mat & Dryck');
+      add(2, 'ICA NARA HORNSTULL 123'); // uncategorised, same normalised description
+      add(3, 'ica nara hornstull', { subcategoryId: alkohol }); // guessed differently
+      add(4, 'ICA Nara Hornstull', { subcategoryId: livsmedel }); // guessed already the same
+      add(5, 'Spotify'); // different description
+
+      const response = await put({ subcategoryId: livsmedel }).expect(200);
+
+      expect(response.body.updatedSimilar).toBe(2);
+      for (const id of [2, 3, 4]) {
+        expect(stored(id)).toMatchObject({ subcategoryId: livsmedel, categoryConfirmed: false });
+      }
+      expect(stored(5).subcategoryId).toBeNull();
+    });
+
+    it('leaves confirmed neighbours alone, also those without a category', async () => {
+      const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
+      const alkohol = await subcategoryId('Alkohol', 'Mat & Dryck');
+      add(2, 'ICA Nara Hornstull', { subcategoryId: alkohol, categoryConfirmed: true });
+      add(3, 'ICA Nara Hornstull', { subcategoryId: null, categoryConfirmed: true });
+
+      const response = await put({ subcategoryId: livsmedel }).expect(200);
+
+      expect(response.body.updatedSimilar).toBe(0);
+      expect(stored(2)).toMatchObject({ subcategoryId: alkohol, categoryConfirmed: true });
+      expect(stored(3)).toMatchObject({ subcategoryId: null, categoryConfirmed: true });
+    });
+
+    it('does not spread when the category is removed', async () => {
+      const alkohol = await subcategoryId('Alkohol', 'Mat & Dryck');
+      add(2, 'ICA Nara Hornstull', { subcategoryId: alkohol });
+
+      const response = await put({ subcategoryId: null }).expect(200);
+
+      expect(response.body).toEqual({ category: null, updatedSimilar: 0 });
+      expect(stored(2).subcategoryId).toBe(alkohol);
+    });
   });
 });

@@ -71,7 +71,7 @@ export class TransactionsController {
     const result = this.accounts.setCategory(Number(id), subcategoryId);
     if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
     if (result === 'no-subcategory') throw new BadRequestException('There is no such subcategory');
-    return { category: result };
+    return result;
   }
 }
 
