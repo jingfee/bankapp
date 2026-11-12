@@ -14,6 +14,26 @@ import { TransactionsService } from './transactions.service';
       <a routerLink="/" class="text-lg font-semibold tracking-tight">Bankapp</a>
       <nav aria-label="Huvudmeny" class="flex items-center gap-1">
         <a
+          routerLink="/transaktioner"
+          aria-label="Transaktioner"
+          class="rounded-lg p-2 hover:bg-zinc-200/60"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="size-6"
+            aria-hidden="true"
+          >
+            <path d="M8 6h13M8 12h13M8 18h13" />
+            <path d="M3 6h.01M3 12h.01M3 18h.01" />
+          </svg>
+        </a>
+        <a
           routerLink="/granska"
           [attr.aria-label]="
             reviewCount() > 0 ? 'Granska, ' + reviewCount() + ' att granska' : 'Granska'

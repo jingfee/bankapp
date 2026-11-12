@@ -24,6 +24,9 @@ describe('App', () => {
       const header = (fixture.nativeElement as HTMLElement).querySelector('header');
       expect(header?.textContent).toContain('Bankapp');
       expect(header?.querySelector('a[href="/banker"]')?.getAttribute('aria-label')).toBe('Banker');
+      expect(header?.querySelector('a[href="/transaktioner"]')?.getAttribute('aria-label')).toBe(
+        'Transaktioner',
+      );
     }
   });
 
