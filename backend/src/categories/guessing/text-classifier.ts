@@ -7,6 +7,11 @@ export interface ClassifierInput {
   amount: number;
 }
 
+/** Feature prefixes: only words say what a transaction is; account and sign just refine it. */
+const WORD = 'word:';
+const ACCOUNT = 'account:';
+const SIGN = 'sign:';
+
 /**
  * Below this many confirmed transactions the classifier is not trusted to say anything: with a
  * handful of examples every word looks decisive. Ten is roughly two examples for each of the few
@@ -82,8 +87,6 @@ export class TextClassifier<Label extends string | number> {
   }
 }
 
-const WORD = 'word:';
-
 function features({ description, accountId, amount }: ClassifierInput): string[] {
   const words = normaliseDescription(description)
     .normalize('NFD')
@@ -92,7 +95,7 @@ function features({ description, accountId, amount }: ClassifierInput): string[]
     .filter((word) => word.length > 1);
   return [
     ...[...new Set(words)].map((word) => `${WORD}${word}`),
-    `account:${accountId}`,
-    `sign:${amount < 0 ? 'out' : 'in'}`,
+    `${ACCOUNT}${accountId}`,
+    `${SIGN}${amount < 0 ? 'out' : 'in'}`,
   ];
 }

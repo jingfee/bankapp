@@ -38,13 +38,13 @@ const KEYWORDS = [...MERCHANT_KEYWORDS]
   }));
 
 /**
- * Assigns guessed categories, locally and without any network call (ADR 0004). Three layers are
+ * Assigns guessed categories, locally and without any network call (ADR 0004). Four layers are
  * tried in order: the subcategory most recently confirmed for the same normalised description;
  * the built-in Swedish merchant keywords; the card's merchant category code from the raw bank
- * response; last a naive Bayes classifier trained only on the owner's confirmed categories
- * (`text-classifier.ts`). When none gives a match the transaction stays uncategorised. A transaction that
- * already has a category, or whose category the owner decided (also to have none), is never
- * touched.
+ * response; and a naive Bayes classifier trained only on the owner's confirmed categories
+ * (`text-classifier.ts`). When none gives a match the transaction stays uncategorised. A
+ * transaction that already has a category, or whose category the owner decided (also to have
+ * none), is never touched.
  */
 @Injectable()
 export class CategoryGuesser implements OnApplicationBootstrap {

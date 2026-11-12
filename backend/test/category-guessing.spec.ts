@@ -378,13 +378,13 @@ describe('guessing categories', () => {
       await syncWith(
         transaction('Pizzeria Napoli Haninge', { mcc: '5411' }),
         transaction('Pizzeria Willys Solna'),
-        transaction('Bageriet Vete Götgatan'),
+        transaction('Bageriet Vete Vega'),
       );
 
       expect((await listed()).slice(10)).toEqual([
         ['Pizzeria Napoli Haninge', 'Mat & Dryck / Livsmedel ?'],
         ['Pizzeria Willys Solna', 'Mat & Dryck / Livsmedel ?'],
-        ['Bageriet Vete Götgatan', 'Mat & Dryck / Café & fika ?'],
+        ['Bageriet Vete Vega', 'Mat & Dryck / Café & fika ?'],
       ]);
     });
 
