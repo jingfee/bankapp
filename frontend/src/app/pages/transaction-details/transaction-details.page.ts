@@ -48,11 +48,11 @@ function formatOriginal({ amount, currency }: Money): string {
         }
         @case ('gone') {
           <h1 class="text-3xl font-semibold tracking-tight">Transaktionen finns inte längre</h1>
-          <a routerLink="/" class="font-medium underline">Till transaktionerna</a>
+          <a routerLink="/transaktioner" class="font-medium underline">Till transaktionerna</a>
         }
         @case ('failed') {
           <p role="alert">Transaktionen kunde inte hämtas. Försök igen senare.</p>
-          <a routerLink="/" class="font-medium underline">Till transaktionerna</a>
+          <a routerLink="/transaktioner" class="font-medium underline">Till transaktionerna</a>
         }
         @default {
           @if (details(); as t) {
@@ -325,6 +325,6 @@ export class TransactionDetailsPage {
   /** Steps back in history when the owner came from inside the app, so the list keeps its scroll position. */
   protected back(): void {
     if (this.router.lastSuccessfulNavigation()?.previousNavigation) this.location.back();
-    else void this.router.navigateByUrl('/');
+    else void this.router.navigateByUrl('/transaktioner');
   }
 }

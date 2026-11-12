@@ -364,7 +364,7 @@ describe('TransactionDetailsPage', () => {
     const { page } = await render({ httpStatus: 404 });
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Transaktionen finns inte längre');
-    expect(page.querySelector('a')?.getAttribute('href')).toBe('/');
+    expect(page.querySelector('a')?.getAttribute('href')).toBe('/transaktioner');
     expect(page.querySelector('[role="alert"]')).toBeNull();
   });
 

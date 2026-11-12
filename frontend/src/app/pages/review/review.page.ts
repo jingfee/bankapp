@@ -36,7 +36,9 @@ type Status = 'loading' | 'ready' | 'failed';
           </header>
           @if (transactions().length === 0) {
             <p data-empty>Inget att granska just nu.</p>
-            <a routerLink="/" class="self-start font-medium underline">Till transaktionerna</a>
+            <a routerLink="/transaktioner" class="self-start font-medium underline"
+              >Till transaktionerna</a
+            >
           }
           @if (error(); as message) {
             <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ message }}</p>

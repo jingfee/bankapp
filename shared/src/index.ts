@@ -28,3 +28,10 @@ export type {
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
+export type {
+  OverviewCategory,
+  OverviewResponse,
+  OverviewSubcategory,
+  OverviewTotals,
+  OverviewTransactionsResponse,
+} from './overview';
