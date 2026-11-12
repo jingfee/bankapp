@@ -13,6 +13,7 @@ import { DatabaseModule, type DatabaseLocation } from './db/database.module';
 import type { EnableBankingClient } from './enable-banking/enable-banking-client';
 import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
+import { OverviewModule } from './overview/overview.module';
 
 export const API_PREFIX = 'api';
 
@@ -56,6 +57,7 @@ export class AppModule {
         CategoriesModule,
         ConnectionsModule,
         AccountsModule,
+        OverviewModule,
         BackupModule,
         ...staticFrontendModules,
       ],

@@ -45,7 +45,7 @@ const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
 export const REVIEW_FROM = '2026-11-01';
 
 /** The columns `toCategory` reads; select them with the subcategory and category left-joined. */
-const categoryColumns = {
+export const categoryColumns = {
   confirmed: transactions.categoryConfirmed,
   subcategoryId: subcategories.id,
   subcategoryName: subcategories.name,
@@ -84,7 +84,7 @@ function toCategory(row: CategoryColumns): TransactionCategory | null {
   };
 }
 
-interface ListedRow {
+export interface ListedRow {
   transaction: typeof transactions.$inferSelect;
   accountName: string;
   accountType: AccountType;
@@ -92,7 +92,7 @@ interface ListedRow {
   category: CategoryColumns;
 }
 
-function toTransaction({
+export function toTransaction({
   transaction: row,
   accountName,
   accountType,

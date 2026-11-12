@@ -60,7 +60,7 @@ describe('App', () => {
     });
   });
 
-  it('starts on the transactions and has a Banker page of its own', async () => {
+  it('starts on the overview and has a Banker page of its own', async () => {
     const router = TestBed.inject(Router);
     const title = TestBed.inject(Title);
 
@@ -73,12 +73,21 @@ describe('App', () => {
     TestBed.inject(HttpTestingController).match(() => true);
   });
 
-  it('redirects /transaktioner to the start page', async () => {
+  it('shows the overview at / and the transaction list at /transaktioner', async () => {
     const harness = await RouterTestingHarness.create();
+    const http = TestBed.inject(HttpTestingController);
+    const title = TestBed.inject(Title);
+
+    await harness.navigateByUrl('/');
+    expect(http.match((r) => r.url === '/api/overview').length).toBeGreaterThan(0);
+    expect(title.getTitle()).toBe('Bankapp');
+    http.match(() => true);
 
     await harness.navigateByUrl('/transaktioner');
-
-    expect(TestBed.inject(Router).url).toBe('/');
-    TestBed.inject(HttpTestingController).match(() => true);
+    expect(TestBed.inject(Router).url).toBe('/transaktioner');
+    expect(title.getTitle()).toBe('Transaktioner – Bankapp');
+    expect(http.match((r) => r.url === '/api/transactions').length).toBeGreaterThan(0);
+    expect(http.match((r) => r.url === '/api/accounts')).toHaveLength(0);
+    http.match(() => true);
   });
 });

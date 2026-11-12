@@ -4,10 +4,12 @@ import { ConnectionResultPage } from './pages/connection-result/connection-resul
 import { BankerPage } from './pages/banker/banker.page';
 import { ReviewPage } from './pages/review/review.page';
 import { TransactionDetailsPage } from './pages/transaction-details/transaction-details.page';
+import { OverviewPage } from './pages/overview/overview.page';
 import { TransactionsPage } from './pages/transactions/transactions.page';
 
 export const routes: Routes = [
-  { path: '', component: TransactionsPage, title: 'Bankapp' },
+  { path: '', component: OverviewPage, title: 'Bankapp' },
+  { path: 'transaktioner', component: TransactionsPage, title: 'Transaktioner – Bankapp' },
   { path: 'banker', component: BankerPage, title: 'Banker – Bankapp' },
   { path: 'granska', component: ReviewPage, title: 'Att granska – Bankapp' },
   { path: 'anslut-bank', component: ConnectBankPage, title: 'Anslut bank – Bankapp' },
@@ -21,6 +23,5 @@ export const routes: Routes = [
     component: TransactionDetailsPage,
     title: 'Transaktion – Bankapp',
   },
-  { path: 'transaktioner', redirectTo: '', pathMatch: 'full' },
   { path: '**', redirectTo: '' },
 ];
