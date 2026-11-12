@@ -127,6 +127,29 @@ export interface TransactionReviewCountResponse {
   count: number;
 }
 
+/** The other side of a kvittning, as shown on a transaction's page. */
+export interface OffsetTransaction {
+  id: number;
+  description: string;
+  amount: Money;
+  /** The day it is listed under (`YYYY-MM-DD`). */
+  date: string;
+}
+
+/** Request body of `PUT /api/transactions/:id/offset`; null removes the link. */
+export interface SetTransactionOffsetRequest {
+  purchaseId: number | null;
+}
+
+/**
+ * Response body of `GET /api/transactions/:id/offset-candidates`: purchases a money-in
+ * transaction could be offset against. Without a search text they are the likely ones, best
+ * match first; with one, any purchase whose description contains it, newest first.
+ */
+export interface OffsetCandidatesResponse {
+  transactions: Transaction[];
+}
+
 /** A transaction in full, for its own page. Fields the bank did not send are null or empty. */
 export interface TransactionDetails {
   id: number;
@@ -150,6 +173,12 @@ export interface TransactionDetails {
   remittanceInformation: string[];
   referenceNumber: string | null;
   note: string | null;
+  /** The purchase this refund is offset against (kvittad), or null. */
+  offsets: OffsetTransaction | null;
+  /** The refunds offset against this purchase, newest first; empty for anything else. */
+  refunds: OffsetTransaction[];
+  /** The purchase's amount with its refunds added; null when it has no refunds. */
+  netAmount: Money | null;
   /** The transaction as the bank returned it, as stored (JSON). */
   raw: string;
 }

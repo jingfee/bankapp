@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type {
   CategoryIcon,
   OverviewCategory,
@@ -25,6 +26,9 @@ function shiftMonth(month: string, by: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
 }
 
+/** The purchase a transaction is offset against, if it is a kvittad refund (ADR 0006). */
+const purchases = alias(transactions, 'purchases');
+
 /** Money sums are floats; rounding to öre keeps the noise out of the API. */
 const round = (value: number) => Math.round(value * 100) / 100 + 0;
 
@@ -44,6 +48,7 @@ export class OverviewService {
   /**
    * Income, spending and net of `month` and the month before, with the breakdown by category.
    * Transfers and uncategorised transactions are in no total; pending ones are, by their date.
+   * A kvittad refund counts in its purchase's month.
    */
   overview(month: string): OverviewResponse {
     const current = this.summarise(month);
@@ -67,6 +72,7 @@ export class OverviewService {
         category: categoryColumns,
       })
       .from(transactions)
+      .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
       .innerJoin(accounts, eq(transactions.accountId, accounts.id))
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
       .innerJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
@@ -77,11 +83,10 @@ export class OverviewService {
     return { transactions: rows.map(toTransaction) };
   }
 
+  /** In `month` by the transaction's date, or by its purchase's when it is a kvittad refund. */
   private inMonth(month: string) {
-    return and(
-      gte(transactions.date, `${month}-01`),
-      lt(transactions.date, `${shiftMonth(month, 1)}-01`),
-    );
+    const date = sql<string>`coalesce(${purchases.date}, ${transactions.date})`;
+    return and(gte(date, `${month}-01`), lt(date, `${shiftMonth(month, 1)}-01`));
   }
 
   private summarise(
@@ -101,6 +106,7 @@ export class OverviewService {
         sortOrder: categories.sortOrder,
       })
       .from(transactions)
+      .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(this.inMonth(month))

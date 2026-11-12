@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import type { CategoriesResponse, TransactionCategory, TransactionDetails } from '@bankapp/shared';
+import { of } from 'rxjs';
 import { TransactionsService } from '../../transactions.service';
 import { TransactionDetailsPage } from './transaction-details.page';
 
@@ -17,7 +18,7 @@ describe('TransactionDetailsPage', () => {
         provideRouter([{ path: '**', children: [] }]),
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap({ id: '5' }) } },
+          useValue: { paramMap: of(convertToParamMap({ id: '5' })) },
         },
       ],
     });
@@ -40,6 +41,9 @@ describe('TransactionDetailsPage', () => {
     remittanceInformation: [],
     referenceNumber: null,
     note: null,
+    offsets: null,
+    refunds: [],
+    netAmount: null,
     raw: '{"a":1}',
     ...overrides,
   });
@@ -346,6 +350,109 @@ describe('TransactionDetailsPage', () => {
       expect(rendered.page.querySelector('[role="alert"]')?.textContent).toContain(
         'Kategorin kunde inte sparas',
       );
+    });
+  });
+
+  describe('kvittning', () => {
+    const purchase = {
+      id: 3,
+      description: 'Zalando',
+      amount: { amount: -500, currency: 'SEK' },
+      date: '2026-11-10',
+    };
+    const refund = {
+      id: 8,
+      description: 'Zalando retur',
+      amount: { amount: 200, currency: 'SEK' },
+      date: '2026-12-05',
+    };
+
+    it('shows a purchase’s refunds and its net amount', async () => {
+      const { page } = await render(
+        details({ refunds: [refund], netAmount: { amount: -300, currency: 'SEK' } }),
+      );
+
+      expect(page.querySelector('[data-refund="8"]')?.getAttribute('href')).toBe(
+        '/transaktioner/8',
+      );
+      expect(page.querySelector('[data-net-amount]')?.textContent?.trim()).toMatch(/^−300,00\skr$/);
+      expect(page.querySelector('[data-offset-picker]')).toBeNull();
+    });
+
+    it('shows the purchase a refund is offset against, without a way to change its category', async () => {
+      const { page } = await render(details({ amount: refund.amount, offsets: purchase }));
+
+      expect(page.querySelector('[data-offsets-purchase]')?.getAttribute('href')).toBe(
+        '/transaktioner/3',
+      );
+      expect((page.querySelector('[data-category-button]') as HTMLButtonElement).disabled).toBe(
+        true,
+      );
+      expect(page.querySelector('[data-remove-category]')).toBeNull();
+    });
+
+    it('offers suggestions on a money-in transaction and links the chosen purchase', async () => {
+      const service = TestBed.inject(TransactionsService);
+      service.listed = { transactions: [], cursor: null };
+      const rendered = await render(details({ amount: refund.amount }));
+      const http = TestBed.inject(HttpTestingController);
+
+      (rendered.page.querySelector('[data-offset-toggle]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/transactions/5/offset-candidates').flush({
+        transactions: [{ ...details(), id: 3, description: 'Zalando', date: '2026-11-10' }],
+      });
+      await rendered.fixture.whenStable();
+
+      (rendered.page.querySelector('[data-offset-candidate="3"]') as HTMLButtonElement).click();
+      const put = http.expectOne('/api/transactions/5/offset');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ purchaseId: 3 });
+      put.flush(details({ amount: refund.amount, offsets: purchase }));
+      http.expectOne('/api/transactions/review/count').flush({ count: 0 });
+      await rendered.fixture.whenStable();
+
+      expect(rendered.page.querySelector('[data-offsets-purchase]')).not.toBeNull();
+      expect(service.listed).toBeNull();
+    });
+
+    it('searches for any purchase', async () => {
+      const rendered = await render(details({ amount: refund.amount }));
+      const http = TestBed.inject(HttpTestingController);
+      (rendered.page.querySelector('[data-offset-toggle]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/transactions/5/offset-candidates').flush({ transactions: [] });
+      await rendered.fixture.whenStable();
+
+      const input = rendered.page.querySelector('[data-offset-search]') as HTMLInputElement;
+      input.value = 'zal';
+      input.dispatchEvent(new Event('input'));
+      await rendered.fixture.whenStable();
+
+      http
+        .expectOne(
+          (r) => r.url === '/api/transactions/5/offset-candidates' && r.params.get('q') === 'zal',
+        )
+        .flush({ transactions: [] });
+      await rendered.fixture.whenStable();
+      expect(rendered.page.querySelector('[data-offset-empty]')?.textContent?.trim()).toBe(
+        'Inga träffar',
+      );
+    });
+
+    it('removes a link', async () => {
+      const rendered = await render(details({ amount: refund.amount, offsets: purchase }));
+      const http = TestBed.inject(HttpTestingController);
+
+      (rendered.page.querySelector('[data-remove-offset]') as HTMLButtonElement).click();
+      const put = http.expectOne('/api/transactions/5/offset');
+      expect(put.request.body).toEqual({ purchaseId: null });
+      put.flush(details({ amount: refund.amount }));
+      http.expectOne('/api/transactions/review/count').flush({ count: 0 });
+      await rendered.fixture.whenStable();
+
+      expect(rendered.page.querySelector('[data-offsets]')).toBeNull();
+      expect(rendered.page.querySelector('[data-offset-picker]')).not.toBeNull();
     });
   });
 

@@ -294,7 +294,7 @@ export class SyncService implements OnModuleInit {
    * booked transactions were new.
    */
   private storeTransactions(
-    tx: Pick<AppDatabase, 'insert' | 'delete' | 'update' | 'select'>,
+    tx: Pick<AppDatabase, 'insert' | 'delete' | 'update' | 'select' | 'run'>,
     account: AccountRow,
     fetched: EnableBankingTransaction[],
     fetchedAt: Date,

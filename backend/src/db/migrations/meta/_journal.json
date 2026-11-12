@@ -99,6 +99,13 @@
       "when": 1794508649892,
       "tag": "0013_stadning_larm",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794511891230,
+      "tag": "0014_transaction_offsets",
+      "breakpoints": true
     }
   ]
 }

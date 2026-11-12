@@ -136,3 +136,7 @@ _Avoid_: Inbox, queue, todo
 **Confirmed category** (sv: _Bekräftad kategori_):
 A subcategory the owner chose or accepted for a transaction. The app never changes a confirmed category on its own.
 _Avoid_: Manual category, locked category
+
+**Offset** (sv: _Kvittning_, verb _kvitta_):
+Linking a money-in transaction, a refund, to the one purchase it pays back, such as a returned item or a friend's Swish for their share of a bill. A refund offsets exactly one purchase; a purchase can have several refunds. The refund takes the purchase's subcategory as a confirmed category and follows it when it changes, so the owner changes the purchase, not the refund. In totals the refund counts in the purchase's month (ADR 0006). A purchase that has refunds and a category is not asked about in Review. Removing the link leaves the refund with that category, counting in its own month again.
+_Avoid_: Match, link (in the UI), reconcile, refund category

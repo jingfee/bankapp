@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 /** Cached list of banks Enable Banking supports, replaced wholesale on every refresh. */
 export const banks = sqliteTable('banks', {
@@ -126,6 +134,13 @@ export const transactions = sqliteTable(
     categoryConfirmed: integer('category_confirmed', { mode: 'boolean' }).notNull().default(false),
     /** When the owner last chose or accepted the category; history reuses the most recent. */
     categoryConfirmedAt: integer('category_confirmed_at', { mode: 'timestamp_ms' }),
+    /**
+     * The purchase this money-in transaction is offset against (kvittad), or null. The refund
+     * takes the purchase's subcategory and counts in the purchase's month (ADR 0006).
+     */
+    offsetsTransactionId: integer('offsets_transaction_id').references(
+      (): AnySQLiteColumn => transactions.id,
+    ),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
@@ -133,6 +148,7 @@ export const transactions = sqliteTable(
       .where(sql`${table.status} = 'booked'`),
     index('transactions_account_date').on(table.accountId, table.date, table.id),
     index('transactions_subcategory_id').on(table.subcategoryId),
+    index('transactions_offsets_transaction_id').on(table.offsetsTransactionId),
   ],
 );
 

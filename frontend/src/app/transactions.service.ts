@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type {
+  OffsetCandidatesResponse,
   SetTransactionCategoryRequest,
+  SetTransactionOffsetRequest,
   Transaction,
   TransactionCategoryResponse,
   TransactionDetails,
@@ -88,5 +90,26 @@ export class TransactionsService {
           };
         }),
       );
+  }
+
+  /** Purchases a money-in transaction could be offset against: likely ones, or those matching `search`. */
+  offsetCandidates(id: number, search = ''): Observable<OffsetCandidatesResponse> {
+    return this.http.get<OffsetCandidatesResponse>(`/api/transactions/${id}/offset-candidates`, {
+      params: search.trim() === '' ? {} : { q: search.trim() },
+    });
+  }
+
+  /**
+   * Offsets (kvittar) a refund against a purchase, or removes the link with null. The refund's
+   * category and what waits for review change with it, so the list kept for the way back is dropped.
+   */
+  setOffset(id: number, purchaseId: number | null): Observable<TransactionDetails> {
+    const body: SetTransactionOffsetRequest = { purchaseId };
+    return this.http.put<TransactionDetails>(`/api/transactions/${id}/offset`, body).pipe(
+      tap(() => {
+        this.listed = null;
+        this.refreshReviewCount();
+      }),
+    );
   }
 }
