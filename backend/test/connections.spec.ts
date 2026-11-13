@@ -157,6 +157,7 @@ describe('connecting a bank', () => {
         raw: '{"uid":"uid-1"}',
         closed: false,
         hidden: false,
+        share: null,
       });
     });
 

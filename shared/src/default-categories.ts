@@ -205,6 +205,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
       { name: 'Mellan egna konton', icon: 'arrow-left-right' },
       { name: 'Kortbetalning', icon: 'credit-card' },
       { name: 'Sparande & investeringar', icon: 'piggy-bank' },
+      { name: 'Avräkning delade utgifter', icon: 'hand-coins' },
       other,
     ],
   },

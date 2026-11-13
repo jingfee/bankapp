@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { AccountsResponse } from '@bankapp/shared';
+import type { AccountsResponse, ShareOption } from '@bankapp/shared';
 import type { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -15,5 +15,10 @@ export class AccountsService {
   /** Hides an account from the overview and its transactions, or shows it again. */
   setHidden(id: number, hidden: boolean): Observable<void> {
     return this.http.put<void>(`/api/accounts/${id}/hidden`, { hidden });
+  }
+
+  /** Sets the share the owner bears of an account's transactions. */
+  setShare(id: number, share: ShareOption): Observable<void> {
+    return this.http.put<void>(`/api/accounts/${id}/share`, { share });
   }
 }

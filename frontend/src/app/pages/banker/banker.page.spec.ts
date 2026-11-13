@@ -52,6 +52,7 @@ describe('BankerPage', () => {
     type,
     balance: null,
     hidden: false,
+    share: 'me',
     lastSyncedAt: null,
   });
 
@@ -500,6 +501,62 @@ describe('BankerPage', () => {
 
       expect(page.querySelector('[data-hidden]')?.textContent?.trim()).toBe('Dold');
       expect(page.querySelector('[data-toggle-hidden]')?.textContent?.trim()).toBe('Visa konto');
+    });
+  });
+
+  describe('the share of an account', () => {
+    const response = (share: ConnectedAccount['share']): AccountsResponse => ({
+      banks: [group('Swedbank', [{ ...account('Coop Mastercard', 'card', 7), share }])],
+      syncing: false,
+      lastSync: null,
+    });
+    const select = (page: HTMLElement) => page.querySelector<HTMLSelectElement>('[data-share]');
+
+    it('shows the options with the account’s share selected', async () => {
+      const page = await render((request) => request.flush(response('half')));
+
+      const options = [...(select(page)?.options ?? [])];
+      expect(options.map((o) => o.textContent?.trim())).toEqual([
+        'Jag',
+        '50/50',
+        'Hushåll',
+        'Partner',
+      ]);
+      expect(select(page)?.value).toBe('half');
+    });
+
+    it('saves a chosen share and fetches the accounts again', async () => {
+      const page = await render((request) => request.flush(response('me')));
+      const control = select(page)!;
+
+      control.value = 'partner';
+      control.dispatchEvent(new Event('change'));
+      const http = TestBed.inject(HttpTestingController);
+      const put = http.expectOne('/api/accounts/7/share');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ share: 'partner' });
+      put.flush(null);
+      await new Promise((resolve) => setTimeout(resolve));
+      http.expectOne('/api/accounts').flush(response('partner'));
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(select(page)?.value).toBe('partner');
+    });
+
+    it('says so when Hushåll cannot be chosen yet', async () => {
+      const page = await render((request) => request.flush(response('me')));
+      const control = select(page)!;
+
+      control.value = 'household';
+      control.dispatchEvent(new Event('change'));
+      const http = TestBed.inject(HttpTestingController);
+      http
+        .expectOne('/api/accounts/7/share')
+        .flush({ message: 'no ratio' }, { status: 409, statusText: 'Conflict' });
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain('Hushåll');
+      expect(select(page)?.value).toBe('me');
     });
   });
 

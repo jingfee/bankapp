@@ -2,6 +2,7 @@ import type {
   AccountType,
   Category,
   CategoryIcon,
+  EffectiveShare,
   Transaction,
   TransactionCategory,
 } from '@bankapp/shared';
@@ -65,13 +66,10 @@ export interface ListedRow {
   category: CategoryColumns;
 }
 
-export function toTransaction({
-  transaction: row,
-  accountName,
-  accountType,
-  bank,
-  category,
-}: ListedRow): Transaction {
+export function toTransaction(
+  { transaction: row, accountName, accountType, bank, category }: ListedRow,
+  share: EffectiveShare,
+): Transaction {
   return {
     id: row.id,
     status: row.status,
@@ -80,5 +78,6 @@ export function toTransaction({
     description: row.description,
     account: { id: row.accountId, name: accountName, bank, type: accountType },
     category: toCategory(category),
+    share,
   };
 }

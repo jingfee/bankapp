@@ -9,6 +9,7 @@ import type {
   OverviewTransactionsResponse,
 } from '@bankapp/shared';
 import { categoryColumns, onVisibleAccount, toTransaction } from '../accounts/transaction-rows';
+import { effectiveShares } from '../accounts/shares';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -86,7 +87,11 @@ export class OverviewService {
       )
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
-    return { transactions: rows.map(toTransaction) };
+    const shares = effectiveShares(
+      this.db,
+      rows.map((row) => row.transaction),
+    );
+    return { transactions: rows.map((row) => toTransaction(row, shares.get(row.transaction.id)!)) };
   }
 
   /** In `month` by the transaction's date, or by its purchase's when it is a kvittad refund. */

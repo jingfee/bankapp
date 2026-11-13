@@ -25,6 +25,7 @@ describe('TransactionsPage', () => {
     description: `Köp ${id}`,
     account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
     category: null,
+    share: { option: 'me', percent: 100, source: 'default' },
     ...overrides,
   });
 
