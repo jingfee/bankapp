@@ -168,15 +168,19 @@ _Avoid_: Match, link (in the UI), reconcile, refund category
 ### Sharing
 
 **Share** (sv: _Andel_):
-The part of a transaction the owner bears, as a percentage; the rest is borne by the partner. 100% means not shared. A share is a whole percentage from 0 to 100. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise 100%; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
-_Avoid_: Split, ratio, portion, my part
+The part of a transaction the owner bears; the rest is borne by the partner. A share is one of four options, never a free percentage: _Jag_ (100%, not shared), _50/50_ (50%), _Hushåll_ (the household ratio in force on the transaction's date) and _Partner_ (0%, the partner bears it all). Transactions, accounts and subcategories store the option, not the percentage. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise _Jag_; which accounts and subcategories have which option is the owner's setting, nothing is built in; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The household ratio is the exception (ADR 0011). The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
+_Avoid_: Split, ratio, portion, my part, percentage (for the option)
+
+**Household ratio** (sv: _Hushållsandel_):
+The owner's part of costs shared as _Hushåll_, such as the mortgage, broadband and electricity: a whole percentage, shown as e.g. _Hushåll (60/40)_. It is a short dated list, each entry in force from its date until the next, so changing it leaves earlier transactions, months and settled periods as they were (ADR 0011).
+_Avoid_: Custom share, split ratio, household share
 
 **Partner** (sv: _Partner_):
 The one other person the owner splits costs with. The partner has no access to the app and no accounts in it; they appear only as who paid a manual transaction and as the sender of settlements.
 _Avoid_: Wife, spouse, other party, co-owner
 
 **Shared transaction** (sv: _Delad_):
-A transaction whose share is below 100%.
+A transaction whose share is anything but _Jag_.
 _Avoid_: Split transaction, joint transaction
 
 **Settlement** (sv: _Avräkning_):

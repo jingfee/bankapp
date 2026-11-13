@@ -6,15 +6,18 @@ status: accepted
 
 The owner splits some costs with another person: the card is shared 50/50, the mortgage in a fixed ratio, and other payments case by case. The owner pays every bill in full, and once a month the other party sends one bank transfer for their part (the settlement, sv: _Avräkning_). The overview should be able to show the owner's own costs.
 
-So each transaction has a share, the percentage the owner bears: its own if set, else its account's, else its subcategory's, else 100%. An offset refund always takes its purchase's share (extending ADR 0006), so a fully refunded shared purchase nets to 0 kr. Shares are applied only when the overview sums totals, and only when the owner picks _Min andel_; every transaction keeps the bank's full amount everywhere else. The settlement is categorised as a transfer (Överföring › Avräkning delade utgifter), so it is in no total.
+So each transaction has a share, the part the owner bears: its own if set, else its account's, else its subcategory's, else not shared. A share is one of four options (_Jag_ 100%, _50/50_, _Hushåll_ at the household ratio, _Partner_ 0%), not a free percentage: the owner's splits are always one of these, and storing the option lets the household ratio change in one place (ADR 0011). An offset refund always takes its purchase's share (extending ADR 0006), so a fully refunded shared purchase nets to 0 kr. Shares are applied only when the overview sums totals, and only when the owner picks _Min andel_; every transaction keeps the bank's full amount everywhere else. The settlement is categorised as a transfer (Överföring › Avräkning delade utgifter), so it is in no total.
 
-Shares are current settings, not history: changing an account's or subcategory's share recomputes every month it touches.
+Shares are current settings, not history: changing an account's or subcategory's share recomputes every month it touches. The household ratio is dated instead (ADR 0011).
+
+_Amended before implementation: shares were first a whole percentage from 0 to 100._
 
 ## Considered Options
 
 - **Count the settlement as income:** _Hela beloppet_ would then show income the owner did not earn, and _Min andel_ would subtract the other party's part twice (once by the share, once as income).
 - **Offset the settlement against the shared purchases:** a refund offsets exactly one purchase (ADR 0006), and the settlement pays for a month of purchases in one sum, so it cannot be linked that way. Without shares, offsetting would also leave the overview unable to show the full amount.
 - **Store the owner's part as the transaction's amount:** breaks the one-row-per-bank-transaction record (ADR 0001) and loses the real amount the transaction list must show.
+- **A free percentage from 0 to 100:** more flexible than needed, and a ratio typed on many accounts and subcategories would have to be changed on each.
 - **Date-ranged shares:** would keep old months stable when a split changes, but adds much complexity for a rare event; a past transaction can be pinned with its own share instead.
 
 ## Consequences

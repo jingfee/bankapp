@@ -12,7 +12,7 @@ The card is shared through its purchases, which carry the card account's share; 
 
 Rules:
 
-- Counted: every transaction whose share is below 100% and whose category is not a transfer, uncategorised and guessed ones included (their share comes from the account), booked and pending, outside hidden accounts.
+- Counted: every transaction whose share is not _Jag_ and whose category is not a transfer, uncategorised and guessed ones included (their share comes from the account), booked and pending, outside hidden accounts.
 - Settlements: every transaction in Överföring › Avräkning delade utgifter, guessed or confirmed, booked or pending. Guessing recognises the partner's transfers.
 - Start: a balance setting gives an amount as of a day; transactions dated before it are taken as included. There is no balance until the first setting, and the owner can set it again whenever they like.
 - An account counts only transactions dated on or after the day it was first connected, so the history an initial sync brings in does not flood the balance. Those transactions still count in the overview.
