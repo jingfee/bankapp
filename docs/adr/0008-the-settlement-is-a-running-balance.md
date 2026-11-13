@@ -23,11 +23,12 @@ Rules:
 - **Monthly statement with a cutoff:** what the spreadsheet did; needs manual numbers for bills paid after the cutoff and a cutoff rule per kind of bill.
 - **Card purchases by the card's billing cycle:** the bank gives no cycle dates, and with a running balance the cycle changes nothing owed.
 - **Count booked transactions only:** stable but days behind; pending transactions keep their identity (ADR 0005), so counting them cannot count twice, and the balance just follows when one changes or is cancelled.
+- **Count upcoming invoices before they are paid:** the shown amount would then match what the partner pays in advance, as in the spreadsheet. Rejected: upcoming payments are not stored (#67), arrive with the wrong sign, and would need matching to their booked transaction and categorising before payment, all to move each bill one settlement earlier.
 - **Count from when the app first saw a transaction:** the app does not record that, and it breaks when a new account syncs a year of history.
 
 ## Consequences
 
-- The partner pays for bills about a month after they are paid, not in advance as the spreadsheet did; the first balance setting absorbs the switch.
+- The partner pays for bills after they are paid, not in advance as the spreadsheet did. At the switch, the first balance setting is the partner's share of what is already paid; a settlement that also covered bills paid in the next few days leaves the balance negative until those bills book, and nothing is counted twice. From then on the shown amount leaves out bills not yet paid.
 - A pending purchase dated just before a balance setting but reported after it is treated as already included; a manual transaction fixes the rare miss.
 - An old settlement period's total can change when a transaction books late; amounts paid never change.
 - A wrongly guessed card payment counts until it is categorised as a transfer.
