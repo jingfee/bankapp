@@ -61,8 +61,20 @@ The amount on an account at a point in time, negative when money is owed.
 _Avoid_: Amount, total, debt
 
 **Transaction** (sv: _Transaktion_):
-A single movement of money on an account, as reported by the bank. Negative when money leaves the account.
+A single movement of money on an account, as reported by the bank, or a manual transaction. Negative when money leaves the account.
 _Avoid_: Entry, payment, purchase
+
+**Manual transaction** (sv: _Manuell transaktion_):
+A transaction the owner entered by hand, for money no connected account shows, such as a purchase on a card not yet connected or something the partner paid. It belongs to no account and shows _Manuell_ where the account name would be. The owner gives its date (today by default), description, amount, subcategory and share (the subcategory's by default) and who paid it; its category is confirmed, so it is never in Review. It is always booked, and unlike a bank transaction it can be edited and deleted. It counts in lists, the overview and the settlement balance like any other transaction (ADR 0009).
+_Avoid_: Manual entry, cash transaction, adjustment
+
+**Paid by** (sv: _Betald av_):
+Who paid a manual transaction: the owner (_Jag_) or the partner (_Partner_). Bank transactions are always paid by the owner. A transaction paid by the partner keeps its full amount and its share still means the owner's part: the owner owes the partner that part, so it lowers the settlement balance instead of raising it.
+_Avoid_: Payer, cardholder, owner of the transaction
+
+**Replace** (sv: _Ersätt_):
+Linking a manual transaction paid by the owner to the bank transaction that later arrives for the same purchase, once its account is connected. The manual transaction then disappears everywhere and the bank transaction takes its place, with its subcategory and share, including in the settlement balance. Review suggests a bank transaction whose amount is within max(2 kr, 2%) and whose date is within 5 days; _Inte samma_ means that pair is never suggested again.
+_Avoid_: Merge, match (in the UI), dedupe
 
 **Booked transaction** (sv: _Bokförd_):
 A transaction the bank has finalised; it does not change afterwards.
@@ -80,6 +92,10 @@ _Avoid_: Pending transaction, reserved
 **Transaction date** (sv: _Transaktionsdatum_):
 The day the owner made the transaction, e.g. paid in a shop. Transactions are listed under this day.
 _Avoid_: Purchase date, date (unqualified)
+
+**Counts in month** (sv: _Räknas i månad_):
+The month a transaction counts in for the overview: its date's month, unless the owner moved it to the month just before or after, such as a monthly bill paid on the 1st instead of the 31st. Only overview totals and drill-downs move; the transaction keeps its date everywhere else, and the settlement balance has no months (ADR 0010).
+_Avoid_: Budget month, period, accounting month
 
 **Booking date** (sv: _Bokföringsdatum_):
 The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
@@ -152,13 +168,29 @@ _Avoid_: Match, link (in the UI), reconcile, refund category
 ### Sharing
 
 **Share** (sv: _Andel_):
-The part of a transaction the owner bears, as a percentage; the rest is borne by the other party the owner splits costs with, who is not modelled. 100% means not shared. A share is a whole percentage from 0 to 100. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise 100%; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
+The part of a transaction the owner bears, as a percentage; the rest is borne by the partner. 100% means not shared. A share is a whole percentage from 0 to 100. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise 100%; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
 _Avoid_: Split, ratio, portion, my part
+
+**Partner** (sv: _Partner_):
+The one other person the owner splits costs with. The partner has no access to the app and no accounts in it; they appear only as who paid a manual transaction and as the sender of settlements.
+_Avoid_: Wife, spouse, other party, co-owner
 
 **Shared transaction** (sv: _Delad_):
 A transaction whose share is below 100%.
 _Avoid_: Split transaction, joint transaction
 
 **Settlement** (sv: _Avräkning_):
-A transfer from the other party paying back their part of a month's shared transactions. It is a transfer, so it counts in no total; otherwise the owner's share would be reduced twice.
+A transfer from the partner paying down the settlement balance, categorised Överföring › Avräkning delade utgifter. It is a transfer, so it counts in no overview total; otherwise the owner's share would be reduced twice. One sent by the owner to the partner has a negative amount and raises the balance.
 _Avoid_: Repayment, refund, income, offset
+
+**Settlement balance** (sv: _Avräkningssaldo_):
+What the partner owes the owner right now, negative when the owner owes the partner. It starts from the latest balance setting and is worked out live from every transaction since: up by the partner's part, 100% − share, of each transaction paid by the owner (a purchase raises it, a refund or income lowers it); down by the owner's part of each one paid by the partner; and down by each settlement. Transfers, hidden accounts and transactions dated before their account was first connected do not count; pending transactions do, so the balance follows them as they change, book or disappear, and any difference is simply settled next time. It has no months and no cutoff (ADR 0008).
+_Avoid_: Debt, owed amount, settlement total, avräkning (for the balance)
+
+**Balance setting** (sv: _Inställt saldo_):
+The owner stating that the settlement balance was a given amount as of a given day (today by default). Transactions dated before that day count as included in it; those dated on or after it count on top. The latest setting wins; earlier ones stay in the history. Until the first one, there is no settlement balance.
+_Avoid_: Reset, opening balance, adjustment, manual entry
+
+**Settlement period** (sv: _Avräkningsperiod_):
+The stretch between two settlements, as shown on the Avräkning page: the balance carried in, the partner's part of each transaction dated in it, what the settlement paid and the balance carried out. A transaction that books late can still change an old period; what was paid never does.
+_Avoid_: Month, statement, invoice
