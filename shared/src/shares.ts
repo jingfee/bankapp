@@ -53,3 +53,8 @@ export interface SubcategorySharesResponse {
 export interface SetSubcategoryShareRequest {
   share: ShareOption;
 }
+
+/** Request body of `PUT /api/transactions/:id/share`; null removes the transaction's own share. */
+export interface SetTransactionShareRequest {
+  share: ShareOption | null;
+}

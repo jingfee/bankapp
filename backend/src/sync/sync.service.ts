@@ -43,10 +43,15 @@ const INSERT_BATCH_SIZE = 50;
 
 type AccountRow = typeof accounts.$inferSelect;
 
-/** A stored transaction's category, as handed from a removed pending row to its replacement. */
-type StoredCategory = Pick<
-  typeof transactions.$inferSelect,
-  'subcategoryId' | 'categoryConfirmed' | 'categoryConfirmedAt'
+/**
+ * What the owner decided about a stored transaction, a category and a share, as handed from a
+ * removed pending row to its replacement.
+ */
+type StoredCategory = Partial<
+  Pick<
+    typeof transactions.$inferSelect,
+    'subcategoryId' | 'categoryConfirmed' | 'categoryConfirmedAt' | 'share'
+  >
 >;
 
 @Injectable()
@@ -377,13 +382,18 @@ export class SyncService implements OnModuleInit {
     const handedOn: { signature: TwinSignature; category: StoredCategory }[] = [];
     const remove = (row: (typeof stored)[number]) => {
       // Also when the owner removed the category: their twin must not be guessed either.
-      if (row.subcategoryId !== null || row.categoryConfirmed) {
+      const hasCategory = row.subcategoryId !== null || row.categoryConfirmed;
+      if (hasCategory || row.share !== null) {
         handedOn.push({
           signature: twinSignature(row),
+          // Only what the owner decided: a share alone must not wipe a guessed category.
           category: {
-            subcategoryId: row.subcategoryId,
-            categoryConfirmed: row.categoryConfirmed,
-            categoryConfirmedAt: row.categoryConfirmedAt,
+            ...(hasCategory && {
+              subcategoryId: row.subcategoryId,
+              categoryConfirmed: row.categoryConfirmed,
+              categoryConfirmedAt: row.categoryConfirmedAt,
+            }),
+            ...(row.share !== null && { share: row.share }),
           },
         });
       }
@@ -413,8 +423,18 @@ export class SyncService implements OnModuleInit {
         // The booked transaction is already stored, so the pending transaction is just a leftover.
         remove(merge.stored);
         const category = takeHandedOn(merge.stored);
-        if (category && !exists.categoryConfirmed) {
-          tx.update(transactions).set(category).where(eq(transactions.id, exists.id)).run();
+        if (category) {
+          const { share, ...decided } = category;
+          if (decided.categoryConfirmed !== undefined && !exists.categoryConfirmed) {
+            tx.update(transactions).set(decided).where(eq(transactions.id, exists.id)).run();
+          }
+          // A share the owner already set on the booked twin is theirs to keep.
+          if (share !== undefined && share !== null) {
+            tx.update(transactions)
+              .set({ share })
+              .where(and(eq(transactions.id, exists.id), isNull(transactions.share)))
+              .run();
+          }
         }
       } else {
         // The reservation is dated when the purchase was made; the booked entry may carry a later

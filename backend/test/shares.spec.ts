@@ -238,6 +238,76 @@ describe('shares', () => {
     });
   });
 
+  describe('a transaction’s own share', () => {
+    const setOwn = (id: number, share: ShareOption | null) =>
+      request(server()).put(`/api/transactions/${id}/share`).send({ share });
+
+    it('beats its account’s share, and removing it restores the inherited one', async () => {
+      await setAccountShare(2, 'half').expect(200);
+      const id = store(2, -100, '2026-11-10');
+      expect(await share(id)).toEqual({ option: 'half', percent: 50, source: 'account' });
+
+      const set = await setOwn(id, 'partner').expect(200);
+      expect((set.body as TransactionDetails).share).toEqual({
+        option: 'partner',
+        percent: 0,
+        source: 'transaction',
+      });
+      expect(await share(id)).toEqual({ option: 'partner', percent: 0, source: 'transaction' });
+
+      const removed = await setOwn(id, null).expect(200);
+      expect((removed.body as TransactionDetails).share).toEqual({
+        option: 'half',
+        percent: 50,
+        source: 'account',
+      });
+    });
+
+    it('can be Jag, which differs from having none', async () => {
+      await setAccountShare(2, 'half').expect(200);
+      const id = store(2, -100, '2026-11-10');
+      await setOwn(id, 'me').expect(200);
+      expect(await share(id)).toEqual({ option: 'me', percent: 100, source: 'transaction' });
+    });
+
+    it('accepts all four options, Hushåll once a household ratio exists', async () => {
+      const id = store(1, -100, '2026-11-10');
+      await setOwn(id, 'household').expect(409);
+      await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
+      for (const option of ['me', 'half', 'household', 'partner'] as const) {
+        await setOwn(id, option).expect(200);
+      }
+    });
+
+    it('rejects an unknown option, a missing one and an unknown transaction', async () => {
+      const id = store(1, -100, '2026-11-10');
+      await setOwn(id, 'most' as ShareOption).expect(400);
+      await request(server()).put(`/api/transactions/${id}/share`).send({}).expect(400);
+      await setOwn(999, 'half').expect(404);
+      await setOwn(999, 'household').expect(404);
+    });
+
+    it('cannot be set on an offset refund, which takes its purchase’s share', async () => {
+      await setAccountShare(2, 'half').expect(200);
+      const purchase = store(2, -200, '2026-11-01');
+      const refund = store(1, 200, '2026-11-12');
+      await request(server())
+        .put(`/api/transactions/${refund}/offset`)
+        .send({ purchaseId: purchase })
+        .expect(200);
+      await setOwn(refund, 'partner').expect(409);
+      await setOwn(refund, null).expect(409);
+      expect(await share(refund)).toEqual({ option: 'half', percent: 50, source: 'purchase' });
+    });
+
+    it('survives when the pending transaction books', async () => {
+      const id = store(1, -100, '2026-11-10', { status: 'pending' });
+      await setOwn(id, 'half').expect(200);
+      db.update(transactions).set({ status: 'booked' }).where(eq(transactions.id, id)).run();
+      expect(await share(id)).toEqual({ option: 'half', percent: 50, source: 'transaction' });
+    });
+  });
+
   describe('Hushåll', () => {
     it('uses the ratio in force on the transaction date', async () => {
       await setRatio([

@@ -3,7 +3,14 @@ import request from 'supertest';
 import type { AccountsResponse, ConnectedAccount, TransactionDetails } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
-import { accounts, balances, syncAccountResults, syncRuns, transactions } from '../src/db/schema';
+import {
+  accounts,
+  balances,
+  syncAccountResults,
+  subcategories,
+  syncRuns,
+  transactions,
+} from '../src/db/schema';
 import type {
   EnableBankingAccount,
   EnableBankingBalance,
@@ -814,6 +821,85 @@ describe('the initial sync', () => {
           { status: 'booked', subcategoryId: cafe, categoryConfirmed: true },
         ]);
       });
+    });
+
+    describe('that are pending with a share set by hand', () => {
+      const shareOf = async (id: number) =>
+        (
+          (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200))
+            .body as TransactionDetails
+        ).share;
+
+      it('keep it when they book, in place or by being replaced by their booked twin', async () => {
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+          transaction(-20, { status: 'pending', description: 'Kiosk', entryReference: null }),
+        ]);
+        await connect('Swedbank', [account('u1', 'Lönekonto')]);
+        await settled();
+        for (const row of stored()) {
+          await request(app.getHttpServer())
+            .put(`/api/transactions/${row.id}/share`)
+            .send({ share: 'half' })
+            .expect(200);
+        }
+
+        enableBanking.transactions.set('u1', [
+          transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+          transaction(-20, { description: 'Kiosk', entryReference: 'b2' }),
+        ]);
+        await app.get(SyncService).start('manual').finished;
+
+        expect(stored()).toHaveLength(2);
+        for (const row of stored()) {
+          expect(row.status).toBe('booked');
+          expect(await shareOf(row.id)).toEqual({
+            option: 'half',
+            percent: 50,
+            source: 'transaction',
+          });
+        }
+      });
+    });
+
+    it('that are pending with only a share set leave the guessed category of an already stored booked twin', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { status: 'pending', description: 'Cafe', entryReference: 'p1' }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+      const [pending] = stored();
+      await request(app.getHttpServer())
+        .put(`/api/transactions/${pending!.id}/share`)
+        .send({ share: 'half' })
+        .expect(200);
+      const subcategoryId = db().select({ id: subcategories.id }).from(subcategories).get()!.id;
+      db()
+        .insert(transactions)
+        .values({
+          accountId: pending!.accountId,
+          status: 'booked',
+          amount: -10,
+          currency: 'SEK',
+          date: '2026-11-09',
+          description: 'Cafe',
+          entryReference: 'b1',
+          dedupKey: 'ref:b1',
+          raw: '{}',
+          fetchedAt: START,
+          subcategoryId,
+          categoryConfirmed: false,
+        })
+        .run();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-10, { description: 'Cafe', entryReference: 'b1' }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([
+        { status: 'booked', subcategoryId, categoryConfirmed: false, share: 'half' },
+      ]);
     });
 
     it('that are pending are updated in place when they book after the bank stopped returning them', async () => {

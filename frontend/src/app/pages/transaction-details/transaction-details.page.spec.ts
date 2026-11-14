@@ -103,6 +103,171 @@ describe('TransactionDetailsPage', () => {
     expect(shown).toEqual(['status', 'bank', 'account']);
   });
 
+  describe('share', () => {
+    const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim();
+    const shareText = (page: HTMLElement, key: string) =>
+      text(page.querySelector(`[data-share-${key}]`));
+
+    it('shows the effective share, where it comes from and the owner’s part in kr', async () => {
+      const { page } = await render(
+        details({
+          amount: { amount: -250, currency: 'SEK' },
+          share: { option: 'half', percent: 50, source: 'account' },
+        }),
+      );
+
+      expect(shareText(page, 'name')).toBe('50/50');
+      expect(shareText(page, 'source')).toBe('från konto Lönekonto');
+      expect(shareText(page, 'part')).toMatch(/^−125,00\skr$/);
+    });
+
+    it('names the household ratio and the other sources', async () => {
+      const household = details({ share: { option: 'household', percent: 60, source: 'default' } });
+      expect(shareText((await render(household)).page, 'name')).toBe('Hushåll (60/40)');
+    });
+
+    it.each([
+      [
+        'subcategory',
+        'från underkategori Livsmedel',
+        {
+          category: {
+            category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
+            subcategory: { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+            confirmed: true,
+          } as TransactionCategory,
+        },
+      ],
+      ['transaction', 'satt manuellt', {}],
+    ] as const)('says a share from the %s is %s', async (source, expected, extra) => {
+      const { page } = await render(
+        details({ ...extra, share: { option: 'partner', percent: 0, source } }),
+      );
+      expect(shareText(page, 'source')).toBe(expected);
+    });
+
+    async function openChoices(response: TransactionDetails) {
+      const rendered = await render(response);
+      const http = TestBed.inject(HttpTestingController);
+      (rendered.page.querySelector('[data-share-toggle]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/household-ratio').flush({
+        entries: [{ from: '2026-01-01', percent: 60 }],
+      });
+      await rendered.fixture.whenStable();
+      return { ...rendered, http };
+    }
+
+    const optionButtons = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll<HTMLButtonElement>('[data-share-option]'));
+
+    it('offers the four options, marking the current one', async () => {
+      const { page } = await openChoices(
+        details({ share: { option: 'half', percent: 50, source: 'account' } }),
+      );
+
+      expect(optionButtons(page).map((b) => [b.dataset['shareOption'], text(b)])).toEqual([
+        ['me', 'Jag'],
+        ['half', '50/50'],
+        ['household', 'Hushåll (60/40)'],
+        ['partner', 'Partner betalar allt'],
+      ]);
+      expect(optionButtons(page).map((b) => b.getAttribute('aria-pressed'))).toEqual([
+        'false',
+        'true',
+        'false',
+        'false',
+      ]);
+    });
+
+    it('sets the chosen option and shows the new share', async () => {
+      const { page, fixture, http } = await openChoices(details());
+      const service = TestBed.inject(TransactionsService);
+      service.listed = { transactions: [], cursor: null };
+
+      optionButtons(page)[3]!.click();
+      const put = http.expectOne('/api/transactions/5/share');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ share: 'partner' });
+      put.flush(details({ share: { option: 'partner', percent: 0, source: 'transaction' } }));
+      await fixture.whenStable();
+
+      expect(shareText(page, 'name')).toBe('Partner betalar allt');
+      expect(shareText(page, 'source')).toBe('satt manuellt');
+      expect(optionButtons(page)).toHaveLength(0);
+      expect(service.listed).toBeNull();
+    });
+
+    it('removes the own share to go back to the inherited one', async () => {
+      const { page, fixture } = await render(
+        details({ share: { option: 'partner', percent: 0, source: 'transaction' } }),
+      );
+      const http = TestBed.inject(HttpTestingController);
+
+      (page.querySelector('[data-remove-share]') as HTMLButtonElement).click();
+      const put = http.expectOne('/api/transactions/5/share');
+      expect(put.request.body).toEqual({ share: null });
+      put.flush(details({ share: { option: 'half', percent: 50, source: 'account' } }));
+      await fixture.whenStable();
+
+      expect(shareText(page, 'name')).toBe('50/50');
+      expect(page.querySelector('[data-remove-share]')).toBeNull();
+    });
+
+    it('offers no removal while the share is inherited', async () => {
+      const { page } = await render(details());
+      expect(page.querySelector('[data-remove-share]')).toBeNull();
+    });
+
+    it('disables Hushåll while there is no household ratio', async () => {
+      const rendered = await render(details());
+      const http = TestBed.inject(HttpTestingController);
+      (rendered.page.querySelector('[data-share-toggle]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      http.expectOne('/api/household-ratio').flush({ entries: [] });
+      await rendered.fixture.whenStable();
+
+      const household = optionButtons(rendered.page).find(
+        (b) => b.dataset['shareOption'] === 'household',
+      );
+      expect(household?.disabled).toBe(true);
+    });
+
+    it('shows an error when saving fails', async () => {
+      const { page, fixture, http } = await openChoices(details());
+      optionButtons(page)[1]!.click();
+      http
+        .expectOne('/api/transactions/5/share')
+        .flush('', { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+
+      expect(page.querySelector('[data-share-error]')?.textContent).toContain('kunde inte sparas');
+      expect(shareText(page, 'name')).toBe('Jag');
+    });
+
+    it('is locked on an offset refund, which links to its purchase', async () => {
+      const { page } = await render(
+        details({
+          amount: { amount: 50, currency: 'SEK' },
+          share: { option: 'half', percent: 50, source: 'purchase' },
+          offsets: {
+            id: 3,
+            description: 'Kläder',
+            amount: { amount: -200, currency: 'SEK' },
+            date: '2026-11-01',
+          } as TransactionDetails['offsets'],
+        }),
+      );
+
+      expect(shareText(page, 'source')).toBe('andel från köpet');
+      expect(page.querySelector('[data-share-purchase]')?.getAttribute('href')).toBe(
+        '/transaktioner/3',
+      );
+      expect(page.querySelector('[data-share-toggle]')).toBeNull();
+      expect(page.querySelector('[data-remove-share]')).toBeNull();
+    });
+  });
+
   describe('category', () => {
     const livsmedel: TransactionCategory = {
       category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
