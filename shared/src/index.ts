@@ -31,12 +31,14 @@ export type {
   TransactionsResponse,
 } from './accounts';
 export type { StartConnectionRequest, StartConnectionResponse } from './connections';
-export type {
-  OverviewCategory,
-  OverviewResponse,
-  OverviewSubcategory,
-  OverviewTotals,
-  OverviewTransactionsResponse,
+export {
+  OVERVIEW_VIEWS,
+  type OverviewCategory,
+  type OverviewResponse,
+  type OverviewSubcategory,
+  type OverviewTotals,
+  type OverviewTransactionsResponse,
+  type OverviewView,
 } from './overview';
 export {
   SHARE_OPTIONS,

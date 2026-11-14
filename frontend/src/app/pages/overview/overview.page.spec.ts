@@ -17,6 +17,7 @@ import { OverviewPage } from './overview.page';
 
 describe('OverviewPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     TestBed.configureTestingModule({
@@ -168,6 +169,106 @@ describe('OverviewPage', () => {
       expect(text(page.querySelector('[data-total="income"] [data-change]'))).toContain(
         'Oförändrat',
       );
+    });
+  });
+
+  describe('Min andel / Hela beloppet', () => {
+    const body = () =>
+      overview({
+        totals: totals(0, 200),
+        categories: [category(1, 'Mat & Dryck', 200, [[12, 'Livsmedel', 200]])],
+      });
+    const toggle = (page: HTMLElement, view: string) =>
+      page.querySelector<HTMLButtonElement>(`[data-view-toggle] [data-view="${view}"]`);
+
+    it('defaults to Min andel and asks the backend for it', async () => {
+      const fixture = TestBed.createComponent(OverviewPage);
+      await fixture.whenStable();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/accounts').flush(accountsOf([]));
+      const request = http.expectOne((r) => r.url === '/api/overview');
+      expect(request.request.params.get('view')).toBe('mine');
+      request.flush(overview());
+      await fixture.whenStable();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(toggle(page, 'mine')?.getAttribute('aria-pressed')).toBe('true');
+      expect(toggle(page, 'full')?.getAttribute('aria-pressed')).toBe('false');
+      expect(text(toggle(page, 'mine'))).toBe('Min andel');
+      expect(text(toggle(page, 'full'))).toBe('Hela beloppet');
+    });
+
+    it('refetches with the other view and remembers the choice on the device', async () => {
+      const { fixture, page, http } = await render();
+
+      await click(fixture, toggle(page, 'full'));
+      const request = http.expectOne((r) => r.url === '/api/overview');
+      expect(request.request.params.get('view')).toBe('full');
+      request.flush(overview({ totals: totals(0, 200) }));
+      await fixture.whenStable();
+      expect(text(page.querySelector('[data-total="spending"] [data-amount]'))).toBe(
+        '200,00\u00a0kr',
+      );
+      expect(localStorage.getItem('overview-view')).toBe('full');
+      expect(toggle(page, 'full')?.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('starts in the remembered view', async () => {
+      localStorage.setItem('overview-view', 'full');
+      const fixture = TestBed.createComponent(OverviewPage);
+      await fixture.whenStable();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/accounts').flush(accountsOf([]));
+      const request = http.expectOne((r) => r.url === '/api/overview');
+      expect(request.request.params.get('view')).toBe('full');
+      request.flush(overview());
+      await fixture.whenStable();
+    });
+
+    it('shows din andel on shared drill-down rows in Min andel, with real amounts', async () => {
+      const { fixture, page, http } = await render(body());
+      await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
+      await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
+      http
+        .expectOne((r) => r.url === '/api/overview/transactions')
+        .flush({
+          transactions: [
+            transaction(1, {
+              amount: { amount: -200, currency: 'SEK' },
+              share: { option: 'half', percent: 50, source: 'account' },
+            }),
+            transaction(2),
+          ],
+        } satisfies OverviewTransactionsResponse);
+      await fixture.whenStable();
+
+      const rows = page.querySelectorAll('li[data-transaction]');
+      expect(text(rows[0]?.querySelector('[data-amount]'))).toBe('−200,00\u00a0kr');
+      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('din andel −100,00\u00a0kr');
+      expect(rows[1]?.querySelector('[data-own-share]')).toBeNull();
+    });
+
+    it('leaves out din andel in Hela beloppet', async () => {
+      localStorage.setItem('overview-view', 'full');
+      const fixture = TestBed.createComponent(OverviewPage);
+      await fixture.whenStable();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/accounts').flush(accountsOf([]));
+      http.expectOne((r) => r.url === '/api/overview').flush(body());
+      await fixture.whenStable();
+      const page = fixture.nativeElement as HTMLElement;
+      await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
+      await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
+      http
+        .expectOne((r) => r.url === '/api/overview/transactions')
+        .flush({
+          transactions: [
+            transaction(1, { share: { option: 'half', percent: 50, source: 'account' } }),
+          ],
+        } satisfies OverviewTransactionsResponse);
+      await fixture.whenStable();
+
+      expect(page.querySelector('[data-own-share]')).toBeNull();
+      expect(text(page.querySelector('[data-share-badge]'))).toBe('50/50');
     });
   });
 

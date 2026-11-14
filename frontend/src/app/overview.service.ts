@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { OverviewResponse, OverviewTransactionsResponse } from '@bankapp/shared';
+import type { OverviewResponse, OverviewTransactionsResponse, OverviewView } from '@bankapp/shared';
 import type { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -8,8 +8,8 @@ export class OverviewService {
   private readonly http = inject(HttpClient);
 
   /** Totals and breakdown of one month (`YYYY-MM`), with the month before for comparison. */
-  get(month: string): Observable<OverviewResponse> {
-    return this.http.get<OverviewResponse>('/api/overview', { params: { month } });
+  get(month: string, view: OverviewView): Observable<OverviewResponse> {
+    return this.http.get<OverviewResponse>('/api/overview', { params: { month, view } });
   }
 
   /** The transactions of one subcategory in one month, newest first. */
