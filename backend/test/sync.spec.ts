@@ -611,6 +611,18 @@ describe('the initial sync', () => {
       expect(stored().map((row) => row.status)).toEqual(['booked']);
     });
 
+    it('that are pending match their booked twin when booking appends a reference to the description', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-1762, { status: 'pending', description: 'lufthansa.com' }),
+        transaction(-1762, { description: 'Lufthansa.com 22041073' }),
+      ]);
+
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      expect(stored().map((row) => [row.status, row.amount])).toEqual([['booked', -1762]]);
+    });
+
     it('that are pending match their booked twin when the bank reserved it with the opposite sign', async () => {
       enableBanking.transactions.set('u1', [
         transaction(-350, { status: 'pending', description: 'Fake.com' }),
