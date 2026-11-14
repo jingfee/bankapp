@@ -45,6 +45,7 @@ export {
   type HouseholdRatioResponse,
   type SetAccountShareRequest,
   type SetSubcategoryShareRequest,
+  type SetTransactionShareRequest,
   type SetHouseholdRatioRequest,
   type ShareOption,
   type ShareSource,

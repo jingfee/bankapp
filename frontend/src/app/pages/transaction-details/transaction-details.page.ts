@@ -8,7 +8,9 @@ import type { Subscription } from 'rxjs';
 import type {
   AccountType,
   Category,
+  HouseholdRatioEntry,
   Money,
+  ShareOption,
   Transaction,
   TransactionDetails,
 } from '@bankapp/shared';
@@ -18,6 +20,7 @@ import { TransactionCategoryBadge } from '../../category-icon/transaction-catego
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { SharesService } from '../../shares.service';
 import { TransactionsService } from '../../transactions.service';
 
 type State =
@@ -35,6 +38,24 @@ const ACCOUNT_TYPES: Record<AccountType, string> = {
   savings: 'Sparkonto',
   card: 'Kortkonto',
 };
+
+const SHARE_OPTION_ORDER: ShareOption[] = ['me', 'half', 'household', 'partner'];
+
+/** What each option is called when choosing; Hushåll adds the ratio, so it is built separately. */
+const SHARE_CHOICE_LABELS: Record<Exclude<ShareOption, 'household'>, string> = {
+  me: 'Jag',
+  half: '50/50',
+  partner: 'Partner betalar allt',
+};
+
+/** The household ratio in force on `date`: the latest entry from then or before, else the first. */
+function ratioOn(entries: HouseholdRatioEntry[], date: string | null): number | null {
+  const inForce = entries.filter((e) => date !== null && e.from <= date).at(-1) ?? entries[0];
+  return inForce?.percent ?? null;
+}
+
+const householdLabel = (percent: number | null) =>
+  percent === null ? 'Hushåll' : `Hushåll (${percent}/${100 - percent})`;
 
 /** The bank's currency code is not ours to trust: an unknown one is shown as sent. */
 function formatOriginal({ amount, currency }: Money): string {
@@ -172,6 +193,87 @@ function formatOriginal({ amount, currency }: Money): string {
                 } @else {
                   <p aria-live="polite">Hämtar kategorier…</p>
                 }
+              }
+            </section>
+            <section
+              data-share
+              class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <h2 class="font-semibold">Andel</h2>
+              <div class="flex justify-between gap-3">
+                <span class="flex flex-col">
+                  <span data-share-name class="font-medium">
+                    {{ shareName() }}
+                  </span>
+                  <span data-share-source class="text-sm text-zinc-500 dark:text-zinc-400">
+                    {{ shareSource() }}
+                  </span>
+                </span>
+                <span class="flex flex-col items-end">
+                  <span class="text-sm text-zinc-500 dark:text-zinc-400">Din del</span>
+                  <span data-share-part class="tabular-nums">{{
+                    ownerPart() | money: t.amount.currency
+                  }}</span>
+                </span>
+              </div>
+              @if (t.offsets; as purchase) {
+                <a
+                  data-share-purchase
+                  [routerLink]="['/transaktioner', purchase.id]"
+                  class="self-start text-sm font-medium underline"
+                >
+                  {{ purchase.description }}
+                </a>
+              } @else {
+                <div class="flex items-center gap-4">
+                  <button
+                    type="button"
+                    data-share-toggle
+                    class="font-medium underline"
+                    [attr.aria-expanded]="choosingShare()"
+                    (click)="toggleShareChoices()"
+                  >
+                    {{ choosingShare() ? 'Stäng' : 'Ändra' }}
+                  </button>
+                  @if (t.share.source === 'transaction') {
+                    <button
+                      type="button"
+                      data-remove-share
+                      class="text-sm font-medium underline"
+                      [disabled]="saving()"
+                      (click)="setShare(null)"
+                    >
+                      Ta bort egen andel
+                    </button>
+                  }
+                </div>
+                @if (choosingShare()) {
+                  <div role="group" aria-label="Välj andel" class="flex flex-col gap-1">
+                    @for (choice of shareChoices(); track choice.option) {
+                      <button
+                        type="button"
+                        [attr.data-share-option]="choice.option"
+                        class="rounded-lg px-3 py-2 text-left hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800"
+                        [class.font-semibold]="choice.current"
+                        [attr.aria-pressed]="choice.current"
+                        [disabled]="saving() || choice.disabled"
+                        (click)="setShare(choice.option)"
+                      >
+                        {{ choice.label }}
+                      </button>
+                    }
+                  </div>
+                  @if (ratio() !== null && ratio()!.length === 0) {
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                      Hushåll kan väljas först när en hushållsandel har ställts in.
+                    </p>
+                  }
+                }
+              }
+              @if (shareError(); as error) {
+                <p data-share-error role="alert" class="text-sm text-red-700 dark:text-red-400">
+                  {{ error }}
+                </p>
               }
             </section>
             @if (t.offsets; as purchase) {
@@ -328,6 +430,7 @@ export class TransactionDetailsPage {
   private readonly location = inject(Location);
   private readonly transactions = inject(TransactionsService);
   private readonly categoryList = inject(CategoriesService);
+  private readonly sharesService = inject(SharesService);
 
   protected readonly picking = signal(false);
   protected readonly saving = signal(false);
@@ -336,6 +439,13 @@ export class TransactionDetailsPage {
   /** Fetched the first time the picker opens. */
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
+
+  protected readonly choosingShare = signal(false);
+  protected readonly shareError = signal<string | null>(null);
+  /** The household ratio, fetched when the options are first opened; null until then. */
+  protected readonly ratio = signal<HouseholdRatioEntry[] | null>(null);
+  private loadingRatio = false;
+  private shareRequest: Subscription | undefined;
 
   protected readonly offsetting = signal(false);
   protected readonly offsetSearch = signal('');
@@ -429,17 +539,100 @@ export class TransactionDetailsPage {
     this.state.set({ status: 'loading' });
     this.candidateRequest?.unsubscribe();
     this.loadRequest?.unsubscribe();
+    this.shareRequest?.unsubscribe();
+    this.saving.set(false);
     this.offsetting.set(false);
     this.offsetCandidates.set(null);
     this.categoryError.set(null);
     this.similarNote.set(null);
     this.picking.set(false);
+    this.choosingShare.set(false);
+    this.shareError.set(null);
     this.loadRequest = this.transactions.get(id).subscribe({
       next: (details) => this.state.set({ status: 'ready', details }),
       error: (error: unknown) =>
         this.state.set({
           status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
         }),
+    });
+  }
+
+  /** The effective share, named the way the options are: Hushåll shows its ratio. */
+  protected readonly shareName = computed(() => {
+    const share = this.details()?.share;
+    if (share === undefined) return '';
+    return share.option === 'household'
+      ? householdLabel(share.percent)
+      : SHARE_CHOICE_LABELS[share.option];
+  });
+
+  protected readonly shareSource = computed(() => {
+    const t = this.details();
+    if (t === null) return '';
+    switch (t.share.source) {
+      case 'account':
+        return `från konto ${t.account.name}`;
+      case 'subcategory':
+        return `från underkategori ${t.category?.subcategory.name ?? ''}`;
+      case 'transaction':
+        return 'satt manuellt';
+      case 'purchase':
+        return 'andel från köpet';
+      case 'default':
+        return 'ingen andel vald';
+    }
+  });
+
+  /** The owner's part of the amount, signed like the amount. */
+  protected readonly ownerPart = computed(() => {
+    const t = this.details();
+    return t === null ? 0 : Math.round(t.amount.amount * t.share.percent) / 100 + 0;
+  });
+
+  protected readonly shareChoices = computed(() => {
+    const t = this.details();
+    const entries = this.ratio();
+    const percent = t === null || entries === null ? null : ratioOn(entries, t.transactionDate);
+    return SHARE_OPTION_ORDER.map((option) => ({
+      option,
+      current: t?.share.option === option,
+      label: option === 'household' ? householdLabel(percent) : SHARE_CHOICE_LABELS[option],
+      disabled: option === 'household' && (entries === null || entries.length === 0),
+    }));
+  });
+
+  protected toggleShareChoices(): void {
+    this.choosingShare.update((open) => !open);
+    this.shareError.set(null);
+    if (!this.choosingShare() || this.ratio() !== null || this.loadingRatio) return;
+    this.loadingRatio = true;
+    this.sharesService.householdRatio().subscribe({
+      next: (entries) => {
+        this.ratio.set(entries);
+        this.loadingRatio = false;
+      },
+      error: () => {
+        this.loadingRatio = false;
+      },
+    });
+  }
+
+  /** Sets the transaction's own share; null removes it so the inherited share applies. */
+  protected setShare(share: ShareOption | null): void {
+    const details = this.details();
+    if (details === null || this.saving()) return;
+    this.saving.set(true);
+    this.shareError.set(null);
+    this.shareRequest = this.transactions.setShare(details.id, share).subscribe({
+      next: (updated) => {
+        this.state.set({ status: 'ready', details: updated });
+        this.choosingShare.set(false);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.shareError.set('Andelen kunde inte sparas. Försök igen.');
+        this.saving.set(false);
+      },
     });
   }
 

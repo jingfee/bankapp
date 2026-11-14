@@ -182,6 +182,25 @@ export class TransactionsController {
     return result;
   }
 
+  /** Sets the transaction's own share, or removes it with `share: null`. */
+  @Put(':id/share')
+  setShare(@Param('id') id: string, @Body() body: unknown): TransactionDetails {
+    if (!isId(id)) throw new NotFoundException('There is no such transaction');
+    const { share } = (body ?? {}) as { share?: unknown };
+    if (share !== null && !SHARE_OPTIONS.includes(share as ShareOption)) {
+      throw new BadRequestException(`share must be one of ${SHARE_OPTIONS.join(', ')} or null`);
+    }
+    const result = this.accounts.setTransactionShare(Number(id), share as ShareOption | null);
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'offset') {
+      throw new ConflictException('A kvittad refund follows its purchase; change the purchase');
+    }
+    if (result === 'no-ratio') {
+      throw new ConflictException('Set a household ratio before choosing Hushåll');
+    }
+    return result;
+  }
+
   /** Purchases the money-in transaction could be offset against, ranked, or found by `q`. */
   @Get(':id/offset-candidates')
   offsetCandidates(@Param('id') id: string, @Query('q') q?: string): OffsetCandidatesResponse {

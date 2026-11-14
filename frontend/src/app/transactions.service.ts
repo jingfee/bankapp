@@ -4,6 +4,8 @@ import type {
   OffsetCandidatesResponse,
   SetTransactionCategoryRequest,
   SetTransactionOffsetRequest,
+  SetTransactionShareRequest,
+  ShareOption,
   Transaction,
   TransactionCategoryResponse,
   TransactionDetails,
@@ -111,5 +113,16 @@ export class TransactionsService {
         this.refreshReviewCount();
       }),
     );
+  }
+
+  /**
+   * Sets the transaction's own share, or removes it with null so the inherited one applies. The
+   * list kept for the way back shows shares, so it is dropped.
+   */
+  setShare(id: number, share: ShareOption | null): Observable<TransactionDetails> {
+    const body: SetTransactionShareRequest = { share };
+    return this.http
+      .put<TransactionDetails>(`/api/transactions/${id}/share`, body)
+      .pipe(tap(() => (this.listed = null)));
   }
 }

@@ -400,6 +400,27 @@ export class AccountsService {
     };
   }
 
+  /**
+   * Sets the transaction's own share, or removes it with null so the account's and subcategory's
+   * apply again. An offset refund takes its purchase's share and cannot have its own. Hushåll
+   * needs a household ratio first (ADR 0011).
+   */
+  setTransactionShare(
+    id: number,
+    share: ShareOption | null,
+  ): TransactionDetails | 'no-transaction' | 'offset' | 'no-ratio' {
+    const current = this.db
+      .select({ offsets: transactions.offsetsTransactionId })
+      .from(transactions)
+      .where(eq(transactions.id, id))
+      .get();
+    if (current === undefined) return 'no-transaction';
+    if (current.offsets !== null) return 'offset';
+    if (share !== null && !canChoose(this.db, share)) return 'no-ratio';
+    this.db.update(transactions).set({ share }).where(eq(transactions.id, id)).run();
+    return this.getTransaction(id) ?? 'no-transaction';
+  }
+
   private offsetTransaction(id: number): OffsetTransaction | null {
     const row = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
     return row === undefined ? null : toOffsetTransaction(row);
