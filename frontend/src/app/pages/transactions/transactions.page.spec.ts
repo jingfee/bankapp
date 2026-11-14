@@ -140,6 +140,23 @@ describe('TransactionsPage', () => {
     expect(confirmed?.querySelector('[data-guessed]')).toBeNull();
   });
 
+  it('marks shared transactions with a badge, and leaves Jag ones without', async () => {
+    const { page } = await render(
+      response([
+        transaction(1, { share: { option: 'half', percent: 50, source: 'account' } }),
+        transaction(2, { share: { option: 'household', percent: 60, source: 'subcategory' } }),
+        transaction(3, { share: { option: 'partner', percent: 0, source: 'transaction' } }),
+        transaction(4),
+      ]),
+    );
+
+    const badges = Array.from(page.querySelectorAll('li[data-transaction]')).map((li) =>
+      li.querySelector('[data-share-badge]')?.textContent?.trim(),
+    );
+    expect(badges).toEqual(['50/50', 'Hushåll', 'Partner', undefined]);
+    expect(page.querySelector('[data-own-share]')).toBeNull();
+  });
+
   it('links each transaction to its page', async () => {
     const { page } = await render(response([transaction(3), transaction(2)]));
 

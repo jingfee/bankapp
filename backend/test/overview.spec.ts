@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type {
   CategoriesResponse,
@@ -196,5 +197,148 @@ describe('overview of a month', () => {
       .get('/api/overview/transactions')
       .query({ month: '2026-11', subcategoryId: 'x' })
       .expect(400);
+  });
+
+  describe('Min andel and Hela beloppet', () => {
+    beforeEach(() => {
+      db.insert(accounts)
+        .values({
+          connectionId: 1,
+          identificationHash: 'h2',
+          uid: 'u2',
+          name: 'Coop Mastercard',
+          type: 'card',
+          currency: 'SEK',
+        })
+        .run();
+    });
+
+    const storeOn = (
+      accountId: number,
+      amount: number,
+      date: string,
+      subcategory: string,
+      values: Partial<typeof transactions.$inferInsert> = {},
+    ): number => {
+      const id = store(amount, date, subcategory);
+      db.update(transactions)
+        .set({ accountId, ...values })
+        .where(eq(transactions.id, id))
+        .run();
+      return id;
+    };
+
+    const view = async (month: string, which?: string) =>
+      (
+        await request(server())
+          .get('/api/overview')
+          .query(which === undefined ? { month } : { month, view: which })
+          .expect(200)
+      ).body as OverviewResponse;
+
+    const setAccountShare = (id: number, share: string) =>
+      request(server()).put(`/api/accounts/${id}/share`).send({ share }).expect(200);
+
+    it('counts a 50/50 card purchase of 200 kr as 100 kr in Min andel and 200 kr in Hela beloppet', async () => {
+      await setAccountShare(2, 'half');
+      storeOn(2, -200, '2026-11-03', 'Livsmedel');
+      expect((await view('2026-11', 'mine')).totals.spending).toBe(100);
+      expect((await view('2026-11', 'full')).totals.spending).toBe(200);
+    });
+
+    it('shows Hela beloppet when no view is given', async () => {
+      await setAccountShare(2, 'half');
+      storeOn(2, -200, '2026-11-03', 'Livsmedel');
+      expect((await view('2026-11')).totals.spending).toBe(200);
+    });
+
+    it('weights income, spending, net, the bars and the previous month by share, from every source', async () => {
+      await setAccountShare(2, 'half');
+      await request(server())
+        .put(`/api/subcategories/${ids.get('Restaurang')}/share`)
+        .send({ share: 'partner' })
+        .expect(200);
+      storeOn(1, 30000, '2026-11-25', 'Lön');
+      storeOn(2, -200, '2026-11-03', 'Livsmedel'); // account: 50%
+      storeOn(1, -100, '2026-11-04', 'Restaurang'); // subcategory: 0%
+      storeOn(1, -80, '2026-11-05', 'Livsmedel', { share: 'half' }); // own: 50%
+      storeOn(1, -60, '2026-11-06', 'Livsmedel'); // default: 100%
+      storeOn(2, -400, '2026-10-03', 'Livsmedel'); // previous month: 50%
+
+      const mine = await view('2026-11', 'mine');
+      expect(mine.totals).toEqual({ income: 30000, spending: 200, net: 29800 });
+      expect(mine.previous.spending).toBe(200);
+      const food = mine.categories.find((c) => c.name === 'Mat & Dryck');
+      expect(food?.total).toBe(200);
+      expect(food?.subcategories.map((s) => [s.name, s.total])).toEqual([
+        ['Livsmedel', 200],
+        ['Restaurang', 0],
+      ]);
+
+      const full = await view('2026-11', 'full');
+      expect(full.totals).toEqual({ income: 30000, spending: 440, net: 29560 });
+      expect(full.previous.spending).toBe(400);
+    });
+
+    it('nets a fully refunded shared purchase to 0 kr in both views, in the purchase’s month', async () => {
+      await setAccountShare(2, 'half');
+      const purchase = storeOn(2, -200, '2026-10-30', 'Livsmedel');
+      const refund = storeOn(2, 200, '2026-11-05', 'Livsmedel');
+      await request(server())
+        .put(`/api/transactions/${refund}/offset`)
+        .send({ purchaseId: purchase })
+        .expect(200);
+      for (const which of ['mine', 'full']) {
+        expect((await view('2026-10', which)).totals.spending).toBe(0);
+        expect((await view('2026-11', which)).totals.spending).toBe(0);
+        expect((await view('2026-12', which)).previous.spending).toBe(0);
+      }
+    });
+
+    it('weights a partial refund on a Jag account by its purchase’s share', async () => {
+      await setAccountShare(2, 'half');
+      const purchase = storeOn(2, -200, '2026-10-30', 'Livsmedel');
+      const refund = storeOn(1, 50, '2026-11-05', 'Livsmedel');
+      await request(server())
+        .put(`/api/transactions/${refund}/offset`)
+        .send({ purchaseId: purchase })
+        .expect(200);
+      expect((await view('2026-10', 'mine')).totals.spending).toBe(75);
+      expect((await view('2026-10', 'full')).totals.spending).toBe(150);
+      expect((await view('2026-11', 'mine')).totals.spending).toBe(0);
+    });
+
+    it('leaves transfers, including Avräkning, out of both views', async () => {
+      await setAccountShare(2, 'half');
+      storeOn(1, 1000, '2026-11-02', 'Avräkning delade utgifter');
+      storeOn(2, -5000, '2026-11-02', 'Kortbetalning');
+      storeOn(2, -200, '2026-11-03', 'Livsmedel');
+      for (const which of ['mine', 'full']) {
+        const body = await view('2026-11', which);
+        expect(body.totals.income).toBe(0);
+        expect(body.categories.map((c) => c.name)).toEqual(['Mat & Dryck']);
+      }
+    });
+
+    it('keeps real amounts in the drill-down, with each transaction’s share', async () => {
+      await setAccountShare(2, 'half');
+      const id = storeOn(2, -200, '2026-11-03', 'Livsmedel');
+      const body = (
+        await request(server())
+          .get('/api/overview/transactions')
+          .query({ month: '2026-11', subcategoryId: ids.get('Livsmedel') })
+          .expect(200)
+      ).body as OverviewTransactionsResponse;
+      expect(body.transactions).toHaveLength(1);
+      expect(body.transactions[0]).toMatchObject({
+        id,
+        amount: { amount: -200 },
+        share: { option: 'half', percent: 50 },
+      });
+    });
+
+    it('rejects an unknown view', async () => {
+      await request(server()).get('/api/overview').query({ view: 'x' }).expect(400);
+    });
   });
 });

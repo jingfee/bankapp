@@ -6,6 +6,7 @@ import type {
   OverviewCategory,
   OverviewResponse,
   OverviewTotals,
+  OverviewView,
   Transaction,
 } from '@bankapp/shared';
 import { type Subscription, catchError, of } from 'rxjs';
@@ -38,6 +39,24 @@ function labelOf(kind: TotalKind): string {
 }
 
 const money = new MoneyPipe();
+
+const VIEWS: { view: OverviewView; label: string }[] = [
+  { view: 'mine', label: 'Min andel' },
+  { view: 'full', label: 'Hela beloppet' },
+];
+
+/** Where the chosen view is remembered on this device. */
+const VIEW_KEY = 'overview-view';
+
+function storedView(): OverviewView {
+  try {
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === 'mine' || stored === 'full') return stored;
+  } catch {
+    // Storage can be blocked; the default then applies.
+  }
+  return 'mine';
+}
 
 /** `YYYY-MM` of a date in the owner's own time. */
 function monthOf(date: Date): string {
@@ -116,6 +135,28 @@ function bars<T extends { id: number; name: string; total: number }>(
           ›
         </button>
       </header>
+
+      <div
+        role="group"
+        aria-label="Visa"
+        data-view-toggle
+        class="flex self-center rounded-lg bg-zinc-200/60 p-1 dark:bg-zinc-800"
+      >
+        @for (option of views; track option.view) {
+          <button
+            type="button"
+            [attr.data-view]="option.view"
+            [attr.aria-pressed]="view() === option.view"
+            class="rounded-md px-4 py-1.5 text-sm font-medium"
+            [class.bg-white]="view() === option.view"
+            [class.shadow-sm]="view() === option.view"
+            [class.dark:bg-zinc-600]="view() === option.view"
+            (click)="setView(option.view)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
 
       @switch (status()) {
         @case ('loading') {
@@ -201,6 +242,7 @@ function bars<T extends { id: number; name: string; total: number }>(
                                       <app-transaction-list
                                         [transactions]="subTransactions()"
                                         [compact]="true"
+                                        [showOwnShare]="view() === 'mine'"
                                       />
                                     </div>
                                   }
@@ -257,6 +299,9 @@ export class OverviewPage {
 
   private readonly currentMonth = monthOf(new Date());
   protected readonly month = signal(this.currentMonth);
+  protected readonly views = VIEWS;
+  /** Min andel by default; remembered per device. */
+  protected readonly view = signal<OverviewView>(storedView());
   protected readonly status = signal<Status>('loading');
   protected readonly overview = signal<OverviewResponse | null>(null);
   protected readonly openCategory = signal<number | null>(null);
@@ -315,6 +360,17 @@ export class OverviewPage {
     return bars(category.subcategories, category.total);
   }
 
+  protected setView(view: OverviewView): void {
+    if (view === this.view()) return;
+    this.view.set(view);
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // Not remembered, but the choice still applies to this visit.
+    }
+    this.load();
+  }
+
   protected go(by: number): void {
     const next = shiftMonth(this.month(), by);
     if (next > this.currentMonth) return;
@@ -354,7 +410,7 @@ export class OverviewPage {
     this.closeSubcategory();
     this.openCategory.set(null);
     this.status.set('loading');
-    this.overviewRequest = this.service.get(this.month()).subscribe({
+    this.overviewRequest = this.service.get(this.month(), this.view()).subscribe({
       next: (overview) => {
         this.overview.set(overview);
         this.status.set('ready');

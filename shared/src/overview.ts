@@ -31,7 +31,14 @@ export interface OverviewCategory {
   subcategories: OverviewSubcategory[];
 }
 
-/** Response body of `GET /api/overview?month=YYYY-MM`. */
+/**
+ * Whose money the overview totals: the owner's share of each transaction (`mine`, Min andel) or
+ * its full amount (`full`, Hela beloppet). See ADR 0007.
+ */
+export const OVERVIEW_VIEWS = ['mine', 'full'] as const;
+export type OverviewView = (typeof OVERVIEW_VIEWS)[number];
+
+/** Response body of `GET /api/overview?month=YYYY-MM&view=`; `view` defaults to `full`. */
 export interface OverviewResponse {
   month: string;
   totals: OverviewTotals;

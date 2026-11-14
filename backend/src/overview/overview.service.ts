@@ -7,6 +7,7 @@ import type {
   OverviewResponse,
   OverviewTotals,
   OverviewTransactionsResponse,
+  OverviewView,
 } from '@bankapp/shared';
 import { categoryColumns, onVisibleAccount, toTransaction } from '../accounts/transaction-rows';
 import { effectiveShares } from '../accounts/shares';
@@ -49,14 +50,15 @@ export class OverviewService {
   /**
    * Income, spending and net of `month` and the month before, with the breakdown by category.
    * Transfers and uncategorised transactions are in no total; pending ones are, by their date.
-   * A kvittad refund counts in its purchase's month.
+   * A kvittad refund counts in its purchase's month. In `mine` every amount is weighted by its
+   * effective share, a refund's being its purchase's (ADR 0007); in `full` amounts are as stored.
    */
-  overview(month: string): OverviewResponse {
-    const current = this.summarise(month);
+  overview(month: string, view: OverviewView = 'full'): OverviewResponse {
+    const current = this.summarise(month, view);
     return {
       month,
       totals: current.totals,
-      previous: this.summarise(shiftMonth(month, -1)).totals,
+      previous: this.summarise(shiftMonth(month, -1), view).totals,
       categories: current.categories,
       uncategorised: current.uncategorised,
     };
@@ -102,10 +104,11 @@ export class OverviewService {
 
   private summarise(
     month: string,
+    view: OverviewView,
   ): Pick<OverviewResponse, 'totals' | 'categories' | 'uncategorised'> {
     const rows = this.db
       .select({
-        amount: transactions.amount,
+        transaction: transactions,
         subcategoryId: subcategories.id,
         subcategoryName: subcategories.name,
         subcategoryIcon: subcategories.icon,
@@ -123,6 +126,14 @@ export class OverviewService {
       .where(and(onVisibleAccount(this.db), this.inMonth(month)))
       .all();
 
+    const shares =
+      view === 'mine'
+        ? effectiveShares(
+            this.db,
+            rows.map((row) => row.transaction),
+          )
+        : undefined;
+
     let uncategorised = 0;
     const byCategory = new Map<number, OverviewCategory>();
     for (const row of rows) {
@@ -132,7 +143,10 @@ export class OverviewService {
       }
       if (row.kind === 'transfer') continue;
       // Spending is money out, so expenses are negated; income is counted as it is.
-      const value = row.kind === 'expense' ? -row.amount : row.amount;
+      const amount = shares
+        ? (row.transaction.amount * shares.get(row.transaction.id)!.percent) / 100
+        : row.transaction.amount;
+      const value = row.kind === 'expense' ? -amount : amount;
       let category = byCategory.get(row.categoryId);
       if (category === undefined) {
         category = {
