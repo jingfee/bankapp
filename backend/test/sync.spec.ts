@@ -623,6 +623,39 @@ describe('the initial sync', () => {
       expect(stored().map((row) => [row.status, row.amount])).toEqual([['booked', -1762]]);
     });
 
+    it('that are pending keep their transaction date when they book with a later one', async () => {
+      enableBanking.transactions.set('u1', [
+        transaction(-1762, {
+          status: 'pending',
+          description: 'lufthansa.com',
+          transactionDate: '2026-11-12',
+          bookingDate: null,
+          entryReference: 'p1',
+        }),
+      ]);
+      await connect('Swedbank', [account('u1', 'Lönekonto')]);
+      await settled();
+
+      enableBanking.transactions.set('u1', [
+        transaction(-1762, {
+          description: 'Lufthansa.com 22041073',
+          transactionDate: '2026-11-13',
+          bookingDate: '2026-11-16',
+          entryReference: 'b1',
+        }),
+      ]);
+      await app.get(SyncService).start('manual').finished;
+
+      expect(stored()).toMatchObject([
+        {
+          status: 'booked',
+          date: '2026-11-12',
+          transactionDate: '2026-11-12',
+          bookingDate: '2026-11-16',
+        },
+      ]);
+    });
+
     it('that are pending match their booked twin when the bank reserved it with the opposite sign', async () => {
       enableBanking.transactions.set('u1', [
         transaction(-350, { status: 'pending', description: 'Fake.com' }),

@@ -417,8 +417,14 @@ export class SyncService implements OnModuleInit {
           tx.update(transactions).set(category).where(eq(transactions.id, exists.id)).run();
         }
       } else {
+        // The reservation is dated when the purchase was made; the booked entry may carry a later
+        // transaction date, so the reservation's day stays.
+        const day =
+          merge.stored.transactionDate === null
+            ? {}
+            : { transactionDate: merge.stored.transactionDate, date: merge.stored.date };
         tx.update(transactions)
-          .set(merge.booked.row)
+          .set({ ...merge.booked.row, ...day })
           .where(eq(transactions.id, merge.stored.id))
           .run();
         added += 1;
