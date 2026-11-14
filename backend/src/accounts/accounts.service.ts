@@ -20,10 +20,13 @@ import {
 } from 'drizzle-orm';
 import type {
   AccountsResponse,
+  HouseholdRatioEntry,
   Money,
   OffsetTransaction,
+  ShareOption,
   SyncSummary,
   TransactionCategory,
+  Transaction,
   TransactionDetails,
   OffsetCandidatesResponse,
   TransactionReviewResponse,
@@ -36,6 +39,7 @@ import {
   balances,
   categories,
   connections,
+  householdRatios,
   subcategories,
   syncAccountResults,
   syncRuns,
@@ -45,7 +49,14 @@ import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
-import { categoryColumns, onVisibleAccount, toCategory, toTransaction } from './transaction-rows';
+import {
+  categoryColumns,
+  onVisibleAccount,
+  toCategory,
+  toTransaction,
+  type ListedRow,
+} from './transaction-rows';
+import { canChoose, effectiveShares, loadHouseholdRatio } from './shares';
 import { parseTransactionDetails } from './transaction-details';
 import {
   SEARCH_LIMIT,
@@ -101,6 +112,7 @@ export class AccountsService {
         type: accounts.type,
         closed: accounts.closed,
         hidden: accounts.hidden,
+        share: accounts.share,
         validUntil: connections.validUntil,
       })
       .from(accounts)
@@ -119,7 +131,7 @@ export class AccountsService {
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
     const now = this.now();
-    for (const { id, bank, name, type, closed, hidden, validUntil } of rows) {
+    for (const { id, bank, name, type, closed, hidden, share, validUntil } of rows) {
       const group = byBank.get(bank) ?? {
         bank,
         status: connectionStatus(validUntil, now),
@@ -133,6 +145,7 @@ export class AccountsService {
         type,
         balance: shown.get(id) ?? null,
         hidden,
+        share: share ?? 'me',
         lastSyncedAt: lastSynced.get(id)?.toISOString() ?? null,
       });
       byBank.set(bank, group);
@@ -153,6 +166,44 @@ export class AccountsService {
       .returning({ id: accounts.id })
       .get();
     return updated === undefined ? 'no-account' : 'ok';
+  }
+
+  /**
+   * Sets the share the owner bears of an account's transactions; Jag clears it, so the
+   * subcategory's share can apply. Hushåll needs a household ratio first (ADR 0011).
+   */
+  setShare(id: number, share: ShareOption): 'ok' | 'no-account' | 'no-ratio' {
+    if (!canChoose(this.db, share)) return 'no-ratio';
+    const updated = this.db
+      .update(accounts)
+      .set({ share: share === 'me' ? null : share })
+      .where(eq(accounts.id, id))
+      .returning({ id: accounts.id })
+      .get();
+    return updated === undefined ? 'no-account' : 'ok';
+  }
+
+  /** The household ratio, earliest entry first. */
+  householdRatio(): HouseholdRatioEntry[] {
+    return loadHouseholdRatio(this.db);
+  }
+
+  /** Replaces the household ratio with `entries`, which the caller has validated. */
+  setHouseholdRatio(entries: HouseholdRatioEntry[]): HouseholdRatioEntry[] {
+    this.db.transaction((tx) => {
+      tx.delete(householdRatios).run();
+      tx.insert(householdRatios).values(entries).run();
+    });
+    return this.householdRatio();
+  }
+
+  /** The listed transactions with their effective shares. */
+  private toTransactions(rows: ListedRow[]): Transaction[] {
+    const shares = effectiveShares(
+      this.db,
+      rows.map((row) => row.transaction),
+    );
+    return rows.map((row) => toTransaction(row, shares.get(row.transaction.id)!));
   }
 
   /** How the most recent finished sync went, or null if none has finished. */
@@ -214,7 +265,7 @@ export class AccountsService {
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1)?.transaction;
     return {
-      transactions: page.map(toTransaction),
+      transactions: this.toTransactions(page),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
     };
   }
@@ -263,7 +314,7 @@ export class AccountsService {
       .where(this.needsReview)
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
-    return { transactions: rows.map(toTransaction), count: rows.length };
+    return { transactions: this.toTransactions(rows), count: rows.length };
   }
 
   /** How many transactions are waiting for review. */
@@ -305,6 +356,7 @@ export class AccountsService {
       description: row.description,
       account: { id: row.accountId, name: accountName, bank, type: accountType },
       category: toCategory(category),
+      share: effectiveShares(this.db, [row]).get(row.id)!,
       transactionDate: row.transactionDate,
       bookingDate: row.bookingDate,
       ...parseTransactionDetails(row.raw, row.amount),
@@ -414,7 +466,7 @@ export class AccountsService {
         .orderBy(desc(transactions.date), desc(transactions.id))
         .limit(SEARCH_LIMIT)
         .all();
-      return { transactions: rows.map(toTransaction) };
+      return { transactions: this.toTransactions(rows) };
     }
 
     if (refund.amount <= 0) return { transactions: [] };
@@ -449,7 +501,7 @@ export class AccountsService {
           b.row.transaction.id - a.row.transaction.id,
       )
       .slice(0, SUGGESTION_LIMIT);
-    return { transactions: ranked.map(({ row }) => toTransaction(row)) };
+    return { transactions: this.toTransactions(ranked.map(({ row }) => row)) };
   }
 
   /**

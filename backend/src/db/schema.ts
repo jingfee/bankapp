@@ -8,6 +8,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import { SHARE_OPTIONS } from '@bankapp/shared';
 
 /** Cached list of banks Enable Banking supports, replaced wholesale on every refresh. */
 export const banks = sqliteTable('banks', {
@@ -40,6 +41,11 @@ export const accounts = sqliteTable('accounts', {
   closed: integer('closed', { mode: 'boolean' }).notNull().default(false),
   /** The owner hid the account: it is left off the overview and its transactions are not shown. */
   hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
+  /**
+   * The share the owner bears of the account's transactions (ADR 0007); null when not set, which
+   * shows as Jag but lets the subcategory's share apply. Choosing Jag on Banker clears it.
+   */
+  share: text('share', { enum: SHARE_OPTIONS }),
   /** The account as Enable Banking last returned it, as JSON; empty until first seen (ADR 0001). */
   raw: text('raw'),
 });
@@ -143,6 +149,8 @@ export const transactions = sqliteTable(
     offsetsTransactionId: integer('offsets_transaction_id').references(
       (): AnySQLiteColumn => transactions.id,
     ),
+    /** The owner's own share for this transaction; null defers to the account and subcategory. */
+    share: text('share', { enum: SHARE_OPTIONS }),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
@@ -188,9 +196,20 @@ export const subcategories = sqliteTable(
     name: text('name').notNull(),
     icon: text('icon').notNull(),
     sortOrder: integer('sort_order').notNull(),
+    /** The share of its transactions the owner bears; null defers to the default, Jag. */
+    share: text('share', { enum: SHARE_OPTIONS }),
   },
   (table) => [index('subcategories_category_id').on(table.categoryId)],
 );
+
+/**
+ * The household ratio (ADR 0011): the owner's whole percentage of costs shared as Hushåll, in
+ * force from `from` (`YYYY-MM-DD`) until the next entry.
+ */
+export const householdRatios = sqliteTable('household_ratios', {
+  from: text('from').primaryKey(),
+  percent: integer('percent').notNull(),
+});
 
 /** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
 export const startupTasks = sqliteTable('startup_tasks', {

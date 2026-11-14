@@ -408,6 +408,7 @@ describe('the initial sync', () => {
           categoryConfirmed: false,
           categoryConfirmedAt: null,
           offsetsTransactionId: null,
+          share: null,
         },
       ]);
     });

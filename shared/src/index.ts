@@ -38,3 +38,13 @@ export type {
   OverviewTotals,
   OverviewTransactionsResponse,
 } from './overview';
+export {
+  SHARE_OPTIONS,
+  type EffectiveShare,
+  type HouseholdRatioEntry,
+  type HouseholdRatioResponse,
+  type SetAccountShareRequest,
+  type SetHouseholdRatioRequest,
+  type ShareOption,
+  type ShareSource,
+} from './shares';

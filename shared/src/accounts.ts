@@ -1,5 +1,6 @@
 import type { Subcategory } from './categories';
 import type { CategoryColour } from './category-palette';
+import type { EffectiveShare, ShareOption } from './shares';
 
 export type AccountType = 'payment' | 'savings' | 'card';
 
@@ -15,6 +16,8 @@ export interface ConnectedAccount {
   type: AccountType;
   /** The owner hid it: it is left off the overview and its transactions are not shown. */
   hidden: boolean;
+  /** The share the owner bears of the account's transactions. */
+  share: ShareOption;
   /** The balance shown on the overview, or null when none has been fetched yet. */
   balance: Money | null;
   /** When the account was last synced successfully (ISO 8601), or null if it never was. */
@@ -85,6 +88,8 @@ export interface Transaction {
   account: TransactionAccount;
   /** The assigned subcategory, or null when the transaction is uncategorised. */
   category: TransactionCategory | null;
+  /** The share the owner bears of it, and where that comes from. */
+  share: EffectiveShare;
 }
 
 /** The subcategory a transaction is assigned, with its category's name and colour. */
@@ -161,6 +166,8 @@ export interface TransactionDetails {
   account: TransactionAccount;
   /** The assigned subcategory, or null when the transaction is uncategorised. */
   category: TransactionCategory | null;
+  /** The share the owner bears of it, and where that comes from. */
+  share: EffectiveShare;
   /** `YYYY-MM-DD`: the day the owner made the transaction. */
   transactionDate: string | null;
   /** `YYYY-MM-DD`: the day the bank booked it; pending transactions have none. */

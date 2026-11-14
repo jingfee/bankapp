@@ -1,7 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type { AccountType, AccountsResponse, BankAccounts, SyncSummary } from '@bankapp/shared';
+import {
+  SHARE_OPTIONS,
+  type AccountType,
+  type AccountsResponse,
+  type BankAccounts,
+  type ConnectedAccount,
+  type ShareOption,
+  type SyncSummary,
+} from '@bankapp/shared';
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
 import { ConnectionsService } from '../../connections.service';
@@ -16,6 +24,13 @@ type Loaded = AccountsResponse | { failed: true };
 export const SYNC_POLL_INTERVAL_MS = 2000;
 
 const DAY_MS = 24 * 3600 * 1000;
+
+const SHARE_LABELS: Record<ShareOption, string> = {
+  me: 'Jag',
+  half: '50/50',
+  household: 'Hushåll',
+  partner: 'Partner',
+};
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   payment: 'Betalkonto',
@@ -83,6 +98,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           <p role="alert" class="text-sm text-red-700 dark:text-red-400">
             Kontot kunde inte ändras. Försök igen senare.
           </p>
+        }
+        @if (shareFailed(); as message) {
+          <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ message }}</p>
         }
         @if (startFailed()) {
           <p role="alert" class="text-sm text-red-700 dark:text-red-400">
@@ -159,6 +177,22 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     >
                       {{ account.hidden ? 'Visa konto' : 'Dölj konto' }}
                     </button>
+                    <label class="flex items-center gap-2 text-sm">
+                      Andel
+                      <select
+                        data-share
+                        class="rounded-lg border border-zinc-300 bg-transparent px-2 py-1 disabled:opacity-50 dark:border-zinc-700"
+                        [value]="account.share"
+                        [disabled]="savingShare()"
+                        (change)="setShare(account, $event)"
+                      >
+                        @for (option of shareOptions; track option) {
+                          <option [value]="option" [selected]="option === account.share">
+                            {{ shareLabel(option) }}
+                          </option>
+                        }
+                      </select>
+                    </label>
                   </span>
                   <span class="flex flex-col items-end">
                     <span class="font-medium tabular-nums" data-balance>{{
@@ -213,6 +247,9 @@ export class BankerPage {
   protected readonly renewFailed = signal(false);
   protected readonly togglingHidden = signal(false);
   protected readonly hideFailed = signal(false);
+  protected readonly savingShare = signal(false);
+  protected readonly shareFailed = signal<string | null>(null);
+  protected readonly shareOptions = SHARE_OPTIONS;
   /** Emits to start (or restart) fetching the accounts. */
   private readonly refresh = new BehaviorSubject<void>(undefined);
   /** What the page currently shows, kept across refreshes. */
@@ -281,6 +318,33 @@ export class BankerPage {
         this.hideFailed.set(true);
       },
     });
+  }
+
+  /** Saves the share chosen for an account, then fetches the accounts again. */
+  protected setShare(account: ConnectedAccount, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    this.savingShare.set(true);
+    this.shareFailed.set(null);
+    this.accounts.setShare(account.id, select.value as ShareOption).subscribe({
+      next: () => {
+        this.savingShare.set(false);
+        this.refresh.next();
+      },
+      error: (error: unknown) => {
+        this.savingShare.set(false);
+        this.shareFailed.set(
+          (error as { status?: number }).status === 409
+            ? 'Hushåll kan väljas först när en hushållsandel har ställts in.'
+            : 'Andelen kunde inte sparas. Försök igen senare.',
+        );
+        // Put the control back on what is stored.
+        select.value = account.share;
+      },
+    });
+  }
+
+  protected shareLabel(option: ShareOption): string {
+    return SHARE_LABELS[option];
   }
 
   /** Sends the owner to BankID to renew the bank's connection. */
