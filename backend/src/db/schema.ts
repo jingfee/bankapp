@@ -8,7 +8,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
-import { SHARE_OPTIONS } from '@bankapp/shared';
+import { SHARE_OPTIONS } from './share-options';
 
 /** Cached list of banks Enable Banking supports, replaced wholesale on every refresh. */
 export const banks = sqliteTable('banks', {

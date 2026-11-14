@@ -20,7 +20,8 @@ import type {
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
-import { SHARE_OPTIONS, type ShareOption } from '@bankapp/shared';
+import type { ShareOption } from '@bankapp/shared';
+import { SHARE_OPTIONS } from '../db/share-options';
 import { AccountsService } from './accounts.service';
 
 @Controller('accounts')
