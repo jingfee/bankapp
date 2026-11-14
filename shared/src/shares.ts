@@ -37,3 +37,19 @@ export type SetHouseholdRatioRequest = HouseholdRatioResponse;
 export interface SetAccountShareRequest {
   share: ShareOption;
 }
+
+/** A subcategory whose share is not Jag. */
+export interface SubcategoryShare {
+  subcategoryId: number;
+  share: ShareOption;
+}
+
+/** Response body of `GET /api/subcategory-shares`: only subcategories not at Jag. */
+export interface SubcategorySharesResponse {
+  shares: SubcategoryShare[];
+}
+
+/** Request body of `PUT /api/subcategories/:id/share`. */
+export interface SetSubcategoryShareRequest {
+  share: ShareOption;
+}

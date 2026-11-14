@@ -235,6 +235,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         }
         <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
       }
+      <a routerLink="/andelar" data-andelar-link class="font-medium underline">Andelar</a>
     </main>
   `,
 })
