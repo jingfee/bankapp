@@ -90,12 +90,8 @@ A payment the bank has scheduled but that has not happened yet, such as an invoi
 _Avoid_: Pending transaction, reserved
 
 **Transaction date** (sv: _Transaktionsdatum_):
-The day the owner made the transaction, e.g. paid in a shop. Transactions are listed under this day.
+The day the owner made the transaction, e.g. paid in a shop. Transactions are listed under this day, and the overview counts each one in this day's month (a kvittad refund follows its purchase, ADR 0006); the owner cannot move a transaction to another month (ADR 0010).
 _Avoid_: Purchase date, date (unqualified)
-
-**Counts in month** (sv: _Räknas i månad_):
-The month a transaction counts in for the overview: its date's month, unless the owner moved it to the month just before or after, such as a monthly bill paid on the 1st instead of the 31st. Only overview totals and drill-downs move; the transaction keeps its date everywhere else, and the settlement balance has no months (ADR 0010).
-_Avoid_: Budget month, period, accounting month
 
 **Booking date** (sv: _Bokföringsdatum_):
 The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
