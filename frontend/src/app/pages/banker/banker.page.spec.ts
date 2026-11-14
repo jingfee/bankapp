@@ -74,6 +74,12 @@ describe('BankerPage', () => {
   const noAccounts: Respond = (request) =>
     request.flush({ banks: [], syncing: false, lastSync: null } satisfies AccountsResponse);
 
+  it('links to the Andelar page', async () => {
+    const page = await render();
+
+    expect(page.querySelector('[data-andelar-link]')?.getAttribute('href')).toBe('/andelar');
+  });
+
   it('has an empty state with a way to connect a bank', async () => {
     const page = await render();
 

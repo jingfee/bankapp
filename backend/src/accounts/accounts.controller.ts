@@ -13,6 +13,7 @@ import type {
   AccountsResponse,
   HouseholdRatioResponse,
   OffsetCandidatesResponse,
+  SubcategorySharesResponse,
   TransactionCategoryResponse,
   TransactionDetails,
   TransactionReviewCountResponse,
@@ -52,6 +53,33 @@ export class AccountsController {
       ? this.accounts.setShare(Number(id), share as ShareOption)
       : 'no-account';
     if (result === 'no-account') throw new NotFoundException('There is no such account');
+    if (result === 'no-ratio') {
+      throw new ConflictException('Set a household ratio before choosing Hushåll');
+    }
+  }
+}
+
+@Controller()
+export class SubcategorySharesController {
+  constructor(private readonly accounts: AccountsService) {}
+
+  /** The subcategories whose share is not Jag. */
+  @Get('subcategory-shares')
+  list(): SubcategorySharesResponse {
+    return { shares: this.accounts.subcategoryShares() };
+  }
+
+  /** Sets the subcategory's share option; Jag clears it. Hushåll needs a household ratio first. */
+  @Put('subcategories/:id/share')
+  setShare(@Param('id') id: string, @Body() body: unknown): void {
+    const { share } = (body ?? {}) as { share?: unknown };
+    if (!SHARE_OPTIONS.includes(share as ShareOption)) {
+      throw new BadRequestException(`share must be one of ${SHARE_OPTIONS.join(', ')}`);
+    }
+    const result = isId(id)
+      ? this.accounts.setSubcategoryShare(Number(id), share as ShareOption)
+      : 'no-subcategory';
+    if (result === 'no-subcategory') throw new NotFoundException('There is no such subcategory');
     if (result === 'no-ratio') {
       throw new ConflictException('Set a household ratio before choosing Hushåll');
     }

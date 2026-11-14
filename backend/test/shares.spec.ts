@@ -5,6 +5,7 @@ import type {
   CategoriesResponse,
   HouseholdRatioResponse,
   ShareOption,
+  SubcategorySharesResponse,
   TransactionDetails,
   TransactionsResponse,
 } from '@bankapp/shared';
@@ -84,6 +85,15 @@ describe('shares', () => {
     request(server()).put(`/api/accounts/${id}/share`).send({ share });
   const setRatio = (entries: HouseholdRatioResponse['entries']) =>
     request(server()).put('/api/household-ratio').send({ entries });
+  const setSubcategoryShare = (name: string, share: ShareOption) =>
+    request(server())
+      .put(`/api/subcategories/${subcategoryIds.get(name)}/share`)
+      .send({ share });
+  const subcategoryShares = async () =>
+    (
+      (await request(server()).get('/api/subcategory-shares').expect(200))
+        .body as SubcategorySharesResponse
+    ).shares;
   const share = async (id: number) =>
     (
       (await request(server()).get(`/api/transactions/${id}`).expect(200))
@@ -116,6 +126,67 @@ describe('shares', () => {
       await setAccountShare(1, 'household').expect(409);
       await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
       await setAccountShare(1, 'household').expect(200);
+    });
+  });
+
+  describe('the subcategory share', () => {
+    it('is Jag, and so not listed, until the owner sets one', async () => {
+      expect(await subcategoryShares()).toEqual([]);
+    });
+
+    it('is stored when set and listed with its subcategory', async () => {
+      await setSubcategoryShare('Kortbetalning', 'half').expect(200);
+      expect(await subcategoryShares()).toEqual([
+        { subcategoryId: subcategoryIds.get('Kortbetalning'), share: 'half' },
+      ]);
+    });
+
+    it('is cleared by choosing Jag', async () => {
+      await setSubcategoryShare('Kortbetalning', 'partner').expect(200);
+      await setSubcategoryShare('Kortbetalning', 'me').expect(200);
+      expect(await subcategoryShares()).toEqual([]);
+    });
+
+    it('rejects an unknown option and an unknown subcategory', async () => {
+      await request(server()).put('/api/subcategories/1/share').send({ share: 'most' }).expect(400);
+      await request(server())
+        .put('/api/subcategories/9999/share')
+        .send({ share: 'half' })
+        .expect(404);
+      await request(server())
+        .put('/api/subcategories/abc/share')
+        .send({ share: 'half' })
+        .expect(404);
+    });
+
+    it('cannot be Hushåll until a household ratio exists', async () => {
+      await setSubcategoryShare('Kortbetalning', 'household').expect(409);
+      await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
+      await setSubcategoryShare('Kortbetalning', 'household').expect(200);
+    });
+
+    it('applies Hushåll on a Jag account, and loses to a card account’s 50/50', async () => {
+      await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
+      await setSubcategoryShare('Kortbetalning', 'household').expect(200);
+      const subcategoryId = subcategoryIds.get('Kortbetalning')!;
+      const onJagAccount = store(1, -100, '2026-11-10', { subcategoryId });
+      const onCard = store(2, -100, '2026-11-10', { subcategoryId });
+      await setAccountShare(2, 'half').expect(200);
+      expect(await share(onJagAccount)).toEqual({
+        option: 'household',
+        percent: 60,
+        source: 'subcategory',
+      });
+      expect(await share(onCard)).toEqual({ option: 'half', percent: 50, source: 'account' });
+    });
+
+    it('applies to transactions in every month', async () => {
+      await setSubcategoryShare('Kortbetalning', 'partner').expect(200);
+      const subcategoryId = subcategoryIds.get('Kortbetalning')!;
+      const old = store(1, -100, '2025-03-10', { subcategoryId });
+      const recent = store(1, -100, '2026-11-10', { subcategoryId });
+      expect((await share(old)).option).toBe('partner');
+      expect((await share(recent)).option).toBe('partner');
     });
   });
 
@@ -208,6 +279,20 @@ describe('shares', () => {
             .body as HouseholdRatioResponse
         ).entries,
       ).toEqual(body.entries);
+    });
+
+    it('a new entry changes only transactions dated from it', async () => {
+      await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
+      await setSubcategoryShare('Kortbetalning', 'household').expect(200);
+      const subcategoryId = subcategoryIds.get('Kortbetalning')!;
+      const before = store(1, -100, '2026-08-31', { subcategoryId });
+      const from = store(1, -100, '2026-09-01', { subcategoryId });
+      await setRatio([
+        { from: '2026-01-01', percent: 60 },
+        { from: '2026-09-01', percent: 50 },
+      ]).expect(200);
+      expect((await share(before)).percent).toBe(60);
+      expect((await share(from)).percent).toBe(50);
     });
 
     it('cannot lose its last entry while Hushåll is in use', async () => {

@@ -24,6 +24,7 @@ import type {
   Money,
   OffsetTransaction,
   ShareOption,
+  SubcategoryShare,
   SyncSummary,
   TransactionCategory,
   Transaction,
@@ -181,6 +182,29 @@ export class AccountsService {
       .returning({ id: accounts.id })
       .get();
     return updated === undefined ? 'no-account' : 'ok';
+  }
+
+  /** Sets the subcategory's share option; Jag clears it. */
+  setSubcategoryShare(id: number, share: ShareOption): 'ok' | 'no-subcategory' | 'no-ratio' {
+    if (!canChoose(this.db, share)) return 'no-ratio';
+    const updated = this.db
+      .update(subcategories)
+      .set({ share: share === 'me' ? null : share })
+      .where(eq(subcategories.id, id))
+      .returning({ id: subcategories.id })
+      .get();
+    return updated === undefined ? 'no-subcategory' : 'ok';
+  }
+
+  /** The subcategories whose share is not Jag. */
+  subcategoryShares(): SubcategoryShare[] {
+    return this.db
+      .select({ subcategoryId: subcategories.id, share: subcategories.share })
+      .from(subcategories)
+      .where(isNotNull(subcategories.share))
+      .orderBy(asc(subcategories.id))
+      .all()
+      .flatMap(({ subcategoryId, share }) => (share === null ? [] : [{ subcategoryId, share }]));
   }
 
   /** The household ratio, earliest entry first. */
