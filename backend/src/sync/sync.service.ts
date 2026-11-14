@@ -355,7 +355,7 @@ export class SyncService implements OnModuleInit {
     const merges: { stored: (typeof stored)[number]; booked: (typeof entries)[number] }[] = [];
     for (const entry of booked) {
       const signature = twinSignature(entry.row);
-      const twin = pending.find((p) => !p.claimed && twinSignature(p.row) === signature);
+      const twin = pending.find((p) => !p.claimed && areTwins(twinSignature(p.row), signature));
       let row = twin ? storedByKey.get(twin.row.dedupKey) : undefined;
       if (twin) twin.claimed = true;
       else {
@@ -363,7 +363,7 @@ export class SyncService implements OnModuleInit {
           (candidate) =>
             !kept.has(candidate.id) &&
             !fetchedPendingKeys.has(candidate.dedupKey) &&
-            twinSignature(candidate) === signature,
+            areTwins(twinSignature(candidate), signature),
         );
       }
       if (row && !kept.has(row.id)) {
@@ -374,7 +374,7 @@ export class SyncService implements OnModuleInit {
 
     // A pending row that is removed hands its category on to the row that replaces it, so a
     // category the owner set is not lost when the pending row cannot be kept.
-    const handedOn: { signature: string; category: StoredCategory }[] = [];
+    const handedOn: { signature: TwinSignature; category: StoredCategory }[] = [];
     const remove = (row: (typeof stored)[number]) => {
       // Also when the owner removed the category: their twin must not be guessed either.
       if (row.subcategoryId !== null || row.categoryConfirmed) {
@@ -390,7 +390,8 @@ export class SyncService implements OnModuleInit {
       tx.delete(transactions).where(eq(transactions.id, row.id)).run();
     };
     const takeHandedOn = (row: { amount: number; currency: string; description: string }) => {
-      const index = handedOn.findIndex((entry) => entry.signature === twinSignature(row));
+      const signature = twinSignature(row);
+      const index = handedOn.findIndex((entry) => areTwins(entry.signature, signature));
       return index === -1 ? undefined : handedOn.splice(index, 1)[0]!.category;
     };
 
@@ -493,14 +494,33 @@ function isUpcoming(transaction: EnableBankingTransaction): boolean {
 /**
  * Banks keep returning a pending transaction alongside the booked transaction it turned into, and may
  * hold a refund as pending with the wrong sign and describe the merchant differently. So two transactions
- * are twins when currency, size of the amount and the description's letters and digits agree.
+ * are twins when currency and size of the amount agree and the description's letters and digits agree,
+ * or one only adds to the other, such as a reference number the bank appends when booking
+ * ("lufthansa.com" becomes "Lufthansa.com 22041073").
  */
-function twinSignature(row: { amount: number; currency: string; description: string }): string {
-  return JSON.stringify([
-    Math.abs(row.amount),
-    row.currency,
-    row.description.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''),
-  ]);
+interface TwinSignature {
+  size: number;
+  currency: string;
+  text: string;
+}
+
+function twinSignature(row: {
+  amount: number;
+  currency: string;
+  description: string;
+}): TwinSignature {
+  return {
+    size: Math.abs(row.amount),
+    currency: row.currency,
+    text: row.description.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''),
+  };
+}
+
+function areTwins(a: TwinSignature, b: TwinSignature): boolean {
+  if (a.size !== b.size || a.currency !== b.currency) return false;
+  if (a.text === b.text) return true;
+  const [short, long] = a.text.length <= b.text.length ? [a.text, b.text] : [b.text, a.text];
+  return short !== '' && long.startsWith(short);
 }
 
 /**
