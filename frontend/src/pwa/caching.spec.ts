@@ -50,6 +50,7 @@ describe('service worker caching', () => {
       '/styles-5INURTSO.css',
       '/manifest.webmanifest',
       '/icons/icon-192.png',
+      '/media/inter-latin-wght-normal-NRMW37G5.woff2',
       '/favicon.ico',
     ])('includes %s', (path) => {
       expect(isCached(path)).toBe(true);

@@ -14,6 +14,8 @@ interface Manifest {
   start_url: string;
   scope: string;
   display: string;
+  theme_color: string;
+  background_color: string;
   icons: ManifestIcon[];
 }
 
@@ -41,5 +43,10 @@ describe('web app manifest', () => {
 
   it('has a maskable icon so Android can shape it', () => {
     expect(manifest.icons.some((icon) => icon.purpose === 'maskable')).toBe(true);
+  });
+
+  it('uses the dark theme background for the splash screen and the browser bar', () => {
+    expect(manifest.theme_color).toBe('#0a0c11');
+    expect(manifest.background_color).toBe('#0a0c11');
   });
 });

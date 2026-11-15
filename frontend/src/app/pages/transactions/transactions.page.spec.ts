@@ -110,7 +110,7 @@ describe('TransactionsPage', () => {
     const [categorised, uncategorised] = Array.from(page.querySelectorAll('li[data-transaction]'));
     const badge = categorised?.querySelector('[data-badge]') as HTMLElement;
     expect(badge.getAttribute('aria-label')).toBe('Livsmedel');
-    expect(badge.style.getPropertyValue('--category-light')).toBe(CATEGORY_PALETTE.green.light);
+    expect(badge.style.getPropertyValue('--category-colour')).toBe(CATEGORY_PALETTE.green.colour);
     expect(badge.querySelector('path')?.getAttribute('d')).toBe(
       LUCIDE_ICONS['shopping-basket'].find(([tag]) => tag === 'path')?.[1]['d'],
     );

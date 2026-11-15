@@ -13,7 +13,8 @@
           "/manifest.webmanifest",
           "/icons/*",
           "/*.css",
-          "/*.js"
+          "/*.js",
+          "/media/*.woff2"
         ]
       }
     }

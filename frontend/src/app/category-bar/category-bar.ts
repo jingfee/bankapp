@@ -27,10 +27,9 @@ import { MoneyPipe } from '../formatting/money.pipe';
       <span class="mt-1 block h-2 rounded-full bg-zinc-100 dark:bg-zinc-800" aria-hidden="true">
         <span
           data-bar
-          class="block h-2 rounded-full bg-(--category-light) dark:bg-(--category-dark)"
+          class="block h-2 rounded-full bg-(--category-colour)"
           [style.width.%]="width()"
-          [style.--category-light]="palette().light"
-          [style.--category-dark]="palette().dark"
+          [style.--category-colour]="palette().colour"
         ></span>
       </span>
     </button>

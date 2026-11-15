@@ -112,7 +112,10 @@ type Status = 'loading' | 'ready' | 'failed';
                 @for (t of group.transactions; track t.id) {
                   <li data-transaction [attr.data-id]="t.id" class="py-3">
                     <div class="flex items-center gap-3">
-                      <app-transaction-category-badge [category]="t.category" />
+                      <app-transaction-category-badge
+                        [category]="t.category"
+                        [pending]="t.status === 'pending'"
+                      />
                       <a
                         [routerLink]="['/transaktioner', t.id]"
                         class="flex min-w-0 flex-1 flex-col"

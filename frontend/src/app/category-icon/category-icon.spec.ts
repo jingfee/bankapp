@@ -11,12 +11,22 @@ import { LUCIDE_ICONS } from './lucide-icons';
 
 @Component({
   imports: [CategoryIconComponent],
-  template: `<app-category-icon [icon]="icon()" [colour]="colour()" [label]="label()" />`,
+  template: `<app-category-icon
+    [icon]="icon()"
+    [colour]="colour()"
+    [label]="label()"
+    [size]="size()"
+    [guessed]="guessed()"
+    [pending]="pending()"
+  />`,
 })
 class Host {
   readonly icon = signal<CategoryIcon>('house');
   readonly colour = signal<CategoryColour>('orange');
   readonly label = signal<string | undefined>(undefined);
+  readonly size = signal<28 | 36 | 40 | 60>(40);
+  readonly guessed = signal(false);
+  readonly pending = signal(false);
 }
 
 describe('CategoryIconComponent', () => {
@@ -39,14 +49,14 @@ describe('CategoryIconComponent', () => {
     expect(element.querySelector('img, image, use, [src], [href]')).toBeNull();
   });
 
-  it('puts the icon on its category colour, for both light and dark mode', () => {
+  it('is flat: tinted by its category colour, with a lighter stroke and no light/dark pair', () => {
     const { element } = render();
 
     const badge = element.querySelector<HTMLElement>('[data-badge]')!;
-    expect(badge.style.getPropertyValue('--category-light')).toBe(CATEGORY_PALETTE.orange.light);
-    expect(badge.style.getPropertyValue('--category-dark')).toBe(CATEGORY_PALETTE.orange.dark);
-    expect(badge.className).toContain('bg-(--category-light)');
-    expect(badge.className).toContain('dark:bg-(--category-dark)');
+    expect(badge.style.getPropertyValue('--category-colour')).toBe(CATEGORY_PALETTE.orange.colour);
+    expect(badge.style.getPropertyValue('--category-tint')).toBe(CATEGORY_PALETTE.orange.tint);
+    expect(badge.classList).toContain('category-icon');
+    expect(badge.className).not.toMatch(/shadow|gradient/);
   });
 
   it('follows its inputs', () => {
@@ -57,10 +67,49 @@ describe('CategoryIconComponent', () => {
     TestBed.tick();
 
     const badge = element.querySelector<HTMLElement>('[data-badge]')!;
-    expect(badge.style.getPropertyValue('--category-light')).toBe(CATEGORY_PALETTE.teal.light);
+    expect(badge.style.getPropertyValue('--category-colour')).toBe(CATEGORY_PALETTE.teal.colour);
     expect(element.querySelector('svg')?.innerHTML).toContain(
       String(LUCIDE_ICONS['zap'][0][1]['d']),
     );
+  });
+
+  it('comes in the sizes 28, 36, 40 and 60, 40 by default', () => {
+    const { host, element } = render();
+    const badge = () => element.querySelector<HTMLElement>('[data-badge]')!;
+
+    expect(badge().style.getPropertyValue('--size')).toBe('40px');
+    for (const size of [28, 36, 60] as const) {
+      host.size.set(size);
+      TestBed.tick();
+      expect(badge().style.getPropertyValue('--size')).toBe(`${size}px`);
+      expect(badge().querySelector('svg')?.getAttribute('width')).toBe(
+        String(Math.round(size * 0.45)),
+      );
+    }
+  });
+
+  it('marks a guess with a "?" badge at every size', () => {
+    const { host, element } = render();
+    host.guessed.set(true);
+    TestBed.tick();
+
+    expect(element.querySelector('[data-badge]')?.classList).toContain('category-icon-guessed');
+    expect(element.querySelector('[data-guess-mark]')?.textContent?.trim()).toBe('?');
+
+    for (const size of [28, 36, 60] as const) {
+      host.size.set(size);
+      TestBed.tick();
+      expect(element.querySelector('[data-guess-mark]')).not.toBeNull();
+    }
+  });
+
+  it('marks a pending transaction with a dashed outline', () => {
+    const { host, element } = render();
+    expect(element.querySelector('[data-badge]')?.classList).not.toContain('category-icon-pending');
+
+    host.pending.set(true);
+    TestBed.tick();
+    expect(element.querySelector('[data-badge]')?.classList).toContain('category-icon-pending');
   });
 
   it('is hidden from assistive technology unless it has a label', () => {
