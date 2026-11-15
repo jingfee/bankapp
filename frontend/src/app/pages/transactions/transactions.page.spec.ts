@@ -67,7 +67,7 @@ describe('TransactionsPage', () => {
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Transaktioner');
     const groups = Array.from(page.querySelectorAll('section[data-date]')).map((group) => ({
-      heading: group.querySelector('h2')?.textContent?.trim(),
+      heading: group.querySelector('h2 > span')?.textContent?.trim(),
       descriptions: Array.from(group.querySelectorAll('[data-description]')).map((d) =>
         d.textContent?.trim(),
       ),
@@ -88,9 +88,9 @@ describe('TransactionsPage', () => {
 
     const [incoming, outgoing] = Array.from(page.querySelectorAll('[data-amount]'));
     expect(incoming?.textContent?.trim()).toBe('1 500,00 kr');
-    expect(incoming?.classList.contains('text-emerald-600')).toBe(true);
+    expect(incoming?.classList.contains('text-positive')).toBe(true);
     expect(outgoing?.textContent?.trim()).toBe('−1 234,50 kr');
-    expect(outgoing?.classList.contains('text-emerald-600')).toBe(false);
+    expect(outgoing?.classList.contains('text-positive')).toBe(false);
   });
 
   it('shows the subcategory icon on the category colour, and a placeholder when uncategorised', async () => {
@@ -203,7 +203,7 @@ describe('TransactionsPage', () => {
     expect(booked?.textContent).not.toContain('Reserverad');
   });
 
-  it('names the account and bank of each transaction', async () => {
+  it('names the account of each transaction', async () => {
     const { page } = await render(
       response([
         transaction(2, {
@@ -215,7 +215,7 @@ describe('TransactionsPage', () => {
 
     expect(
       Array.from(page.querySelectorAll('[data-account]')).map((a) => a.textContent?.trim()),
-    ).toEqual(['Sparkonto · Skandia', 'Lönekonto · Swedbank']);
+    ).toEqual(['Sparkonto', 'Lönekonto']);
   });
 
   it('says so when there are no transactions yet', async () => {
@@ -269,5 +269,115 @@ describe('TransactionsPage', () => {
 
     expect(page.querySelector('[data-account]')?.textContent?.trim()).toBe('Manuell');
     expect(page.querySelector('[data-add]')?.getAttribute('href')).toBe('/transaktioner/ny');
+  });
+
+  describe('rows', () => {
+    const guessed = (overrides: Partial<Transaction> = {}) =>
+      transaction(1, {
+        category: {
+          category: { id: 1, name: 'Nöje', colour: 'violet' },
+          subcategory: {
+            id: 5,
+            name: 'Streaming & prenumerationer',
+            icon: 'tv',
+            sortOrder: 1,
+            share: null,
+          },
+          confirmed: false,
+        },
+        ...overrides,
+      } as Partial<Transaction>);
+
+    it('shows the day’s sum beside its heading', async () => {
+      const { page } = await render(
+        response([
+          transaction(3, { amount: { amount: -100.5, currency: 'SEK' }, date: '2026-11-10' }),
+          transaction(2, { amount: { amount: 20, currency: 'SEK' }, date: '2026-11-10' }),
+          transaction(1, { amount: { amount: -5, currency: 'EUR' }, date: '2026-11-09' }),
+          transaction(0, { amount: { amount: -5, currency: 'SEK' }, date: '2026-11-09' }),
+        ]),
+      );
+
+      const sums = Array.from(page.querySelectorAll('section[data-date]')).map((section) =>
+        section.querySelector('[data-day-sum]')?.textContent?.trim().replace(/\s/g, ' '),
+      );
+      expect(sums).toEqual(['−80,50 kr', undefined]); // a day mixing currencies has no sum
+    });
+
+    it('shows the subcategory in full, in its category colour, and the description', async () => {
+      const { page } = await render(
+        response([guessed({ description: 'Systembolaget Sveavägen' })]),
+      );
+
+      const sub = page.querySelector('[data-subcategory]') as HTMLElement;
+      expect(sub.textContent?.trim()).toBe('Streaming & prenumerationer');
+      expect(sub.classList.contains('truncate')).toBe(false);
+      expect(sub.style.color).not.toBe('');
+      expect(page.querySelector('[data-description]')?.textContent?.trim()).toBe(
+        'Systembolaget Sveavägen',
+      );
+    });
+
+    it('says Okategoriserad in muted italic when there is no category', async () => {
+      const { page } = await render(response([transaction(1)]));
+
+      const sub = page.querySelector('[data-subcategory]') as HTMLElement;
+      expect(sub.textContent?.trim()).toBe('Okategoriserad');
+      expect(sub.classList.contains('italic')).toBe(true);
+    });
+
+    it('keeps Reserverad, 50/50 and Gissad on one line, in that fixed group', async () => {
+      const { page } = await render(
+        response([
+          guessed({
+            status: 'pending',
+            share: { option: 'half', percent: 50, source: 'transaction' },
+          }),
+        ]),
+      );
+
+      const pills = page.querySelector('[data-pills]') as HTMLElement;
+      expect(Array.from(pills.children).map((c) => c.textContent?.trim())).toEqual([
+        '50/50',
+        'Gissad',
+        'Reserverad',
+      ]);
+      expect(pills.classList.contains('flex-nowrap')).toBe(true);
+      expect(pills.classList.contains('shrink-0')).toBe(true);
+    });
+
+    it('makes a pending transaction recognisable: light-blue amount, dashed ring and pill', async () => {
+      const { page } = await render(
+        response([
+          transaction(2, { status: 'pending', amount: { amount: 50, currency: 'SEK' } }),
+          transaction(1),
+        ]),
+      );
+
+      const [pending, booked] = Array.from(page.querySelectorAll('li[data-transaction]'));
+      expect(pending.querySelector('[data-amount]')?.classList.contains('text-pending')).toBe(true);
+      // Pending wins over the positive colour.
+      expect(pending.querySelector('[data-amount]')?.classList.contains('text-positive')).toBe(
+        false,
+      );
+      expect(pending.querySelector('[data-pending]')).not.toBeNull();
+      expect(pending.querySelector('.pill-pending')?.textContent?.trim()).toBe('Reserverad');
+      expect(booked.querySelector('[data-amount]')?.classList.contains('text-pending')).toBe(false);
+      expect(booked.querySelector('[data-pending]')).toBeNull();
+      expect(booked.querySelector('.pill-pending')).toBeNull();
+    });
+
+    it('says who paid a manual transaction', async () => {
+      const { page } = await render(
+        response([
+          transaction(2, { account: null, paidBy: 'partner' }),
+          transaction(1, { account: null }),
+        ]),
+      );
+
+      expect(
+        Array.from(page.querySelectorAll('[data-account]')).map((a) => a.textContent?.trim()),
+      ).toEqual(['Manuell · partner betalade', 'Manuell']);
+    });
   });
 });
