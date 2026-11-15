@@ -3,8 +3,9 @@ import type { TransactionCategory } from '@bankapp/shared';
 import { CategoryIconComponent } from './category-icon';
 
 /**
- * What a transaction is categorised as, at a glance: its subcategory's icon on its category's
- * colour, dimmed while it is only a guess, or a neutral placeholder when it is uncategorised.
+ * What a transaction is categorised as, at a glance: its subcategory's icon, with a "?" badge
+ * while it is only a guess, or striped placeholder when it is uncategorised. A pending
+ * transaction gets a dashed outline either way.
  */
 @Component({
   selector: 'app-transaction-category-badge',
@@ -13,10 +14,13 @@ import { CategoryIconComponent } from './category-icon';
   template: `
     @if (category(); as c) {
       <app-category-icon
-        [class.opacity-45]="!c.confirmed"
         [attr.data-guessed]="c.confirmed ? null : ''"
+        [attr.data-pending]="pending() ? '' : null"
         [icon]="c.subcategory.icon"
         [colour]="c.category.colour"
+        [guessed]="!c.confirmed"
+        [pending]="pending()"
+        [size]="size()"
         [label]="c.confirmed ? c.subcategory.name : c.subcategory.name + ' (gissad)'"
       />
     } @else {
@@ -24,11 +28,16 @@ import { CategoryIconComponent } from './category-icon';
         data-uncategorised
         role="img"
         aria-label="Okategoriserad"
-        class="inline-flex size-8 shrink-0 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-600"
+        class="category-icon category-icon-uncategorised"
+        [class.category-icon-pending]="pending()"
+        [attr.data-pending]="pending() ? '' : null"
+        [style.--size.px]="size()"
       ></span>
     }
   `,
 })
 export class TransactionCategoryBadge {
   readonly category = input.required<TransactionCategory | null>();
+  readonly pending = input(false);
+  readonly size = input<28 | 36 | 40 | 60>(40);
 }

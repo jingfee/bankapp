@@ -6,6 +6,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { App } from './app';
 import { routes } from './app.routes';
+import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
   beforeEach(() => {
@@ -15,52 +16,124 @@ describe('App', () => {
     });
   });
 
-  it('shows a header with the name and a Banker link on every page', async () => {
+  const html = (fixture: { nativeElement: unknown }) => fixture.nativeElement as HTMLElement;
+  const sidebar = (fixture: { nativeElement: unknown }) =>
+    html(fixture).querySelector('aside nav') as HTMLElement;
+  const tabs = (fixture: { nativeElement: unknown }) =>
+    html(fixture).querySelector('[data-tabs]') as HTMLElement;
+
+  async function navigate(
+    fixture: { whenStable: () => Promise<unknown> },
+    url: string,
+    reviewCount?: number,
+  ) {
+    await TestBed.inject(Router).navigateByUrl(url);
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .match('/api/transactions/review/count')
+      .forEach((r) => r.flush({ count: reviewCount ?? 0 }));
+    await fixture.whenStable();
+  }
+
+  it('has the five destinations in the sidebar and the bottom tabs, on every page', async () => {
     const fixture = TestBed.createComponent(App);
-    const router = TestBed.inject(Router);
     for (const url of ['/', '/banker', '/anslut-bank']) {
-      await router.navigateByUrl(url);
-      await fixture.whenStable();
-      const header = (fixture.nativeElement as HTMLElement).querySelector('header');
-      expect(header?.textContent).toContain('Bankapp');
-      expect(header?.querySelector('a[href="/banker"]')?.getAttribute('aria-label')).toBe('Banker');
-      expect(header?.querySelector('a[href="/transaktioner"]')?.getAttribute('aria-label')).toBe(
-        'Transaktioner',
-      );
+      await navigate(fixture, url);
+      for (const [nav, labels] of [
+        [sidebar(fixture), ['Översikt', 'Transaktioner', 'Att granska', 'Delat', 'Banker']],
+        [tabs(fixture), ['Översikt', 'Transaktioner', 'Granska', 'Delat', 'Banker']],
+      ] as const) {
+        const links = [...nav.querySelectorAll('a')];
+        expect(links.map((a) => a.textContent?.replace(/\d+/, '').trim())).toEqual([...labels]);
+        expect(links.map((a) => a.getAttribute('href'))).toEqual([
+          '/',
+          '/transaktioner',
+          '/granska',
+          '/avrakning',
+          '/banker',
+        ]);
+      }
     }
+    TestBed.inject(HttpTestingController).match(() => true);
   });
 
-  describe('Granska icon', () => {
-    const header = (fixture: { nativeElement: unknown }) =>
-      (fixture.nativeElement as HTMLElement).querySelector('header') as HTMLElement;
+  it('shows the brand and a logout button in the sidebar, and the brand in a mobile header', async () => {
+    const fixture = TestBed.createComponent(App);
+    await navigate(fixture, '/banker');
 
-    it('is in the header on every page, with the count as a badge', async () => {
-      const fixture = TestBed.createComponent(App);
-      const router = TestBed.inject(Router);
-      const http = TestBed.inject(HttpTestingController);
-      for (const url of ['/', '/banker', '/anslut-bank']) {
-        await router.navigateByUrl(url);
-        http.match('/api/transactions/review/count').forEach((r) => r.flush({ count: 3 }));
-        await fixture.whenStable();
-        const link = header(fixture).querySelector('a[href="/granska"]');
-        expect(link?.getAttribute('aria-label')).toBe('Granska, 3 att granska');
-        expect(link?.querySelector('[data-review-badge]')?.textContent?.trim()).toBe('3');
+    expect(html(fixture).querySelector('aside')?.textContent).toContain('Bankapp');
+    expect(html(fixture).querySelector('aside button[aria-label="Logga ut"]')).not.toBeNull();
+    const header = html(fixture).querySelector('header') as HTMLElement;
+    expect(header.textContent).toContain('Bankapp');
+    expect(header.querySelector('button[aria-label="Logga ut"]')).not.toBeNull();
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  it('marks the item of the current route as active, in both navigations', async () => {
+    const fixture = TestBed.createComponent(App);
+    for (const [url, active] of [
+      ['/', 'Översikt'],
+      ['/transaktioner', 'Transaktioner'],
+      ['/transaktioner/7', 'Transaktioner'],
+      ['/banker', 'Banker'],
+      ['/avrakning', 'Delat'],
+    ] as const) {
+      await navigate(fixture, url);
+      for (const nav of [sidebar(fixture), tabs(fixture)]) {
+        const current = [...nav.querySelectorAll('a.active')];
+        expect(current).toHaveLength(1);
+        expect(current[0].textContent).toContain(active);
+        expect(current[0].getAttribute('aria-current')).toBe('page');
       }
-      http.match(() => true);
+    }
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  describe('Granska count', () => {
+    it('is a badge on Granska in the sidebar and on its tab', async () => {
+      const fixture = TestBed.createComponent(App);
+      for (const url of ['/', '/banker', '/anslut-bank']) {
+        await navigate(fixture, url, 3);
+        for (const nav of [sidebar(fixture), tabs(fixture)]) {
+          const link = nav.querySelector('a[href="/granska"]');
+          expect(link?.getAttribute('aria-label')).toBe('Granska, 3 att granska');
+          expect(link?.querySelector('[data-review-badge]')?.textContent?.trim()).toBe('3');
+        }
+      }
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('is capped at 99+', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/banker', 250);
+
+      const badge = tabs(fixture).querySelector('[data-review-badge]');
+      expect(badge?.textContent?.trim()).toBe('99+');
+      TestBed.inject(HttpTestingController).match(() => true);
     });
 
     it('has no badge when nothing needs review', async () => {
       const fixture = TestBed.createComponent(App);
-      const http = TestBed.inject(HttpTestingController);
-      await TestBed.inject(Router).navigateByUrl('/banker');
-      http.match('/api/transactions/review/count').forEach((r) => r.flush({ count: 0 }));
-      await fixture.whenStable();
+      await navigate(fixture, '/banker', 0);
 
-      const link = header(fixture).querySelector('a[href="/granska"]');
-      expect(link?.getAttribute('aria-label')).toBe('Granska');
-      expect(link?.querySelector('[data-review-badge]')).toBeNull();
-      http.match(() => true);
+      for (const nav of [sidebar(fixture), tabs(fixture)]) {
+        const link = nav.querySelector('a[href="/granska"]');
+        expect(link?.getAttribute('aria-label')).toBe('Granska');
+        expect(link?.querySelector('[data-review-badge]')).toBeNull();
+      }
+      TestBed.inject(HttpTestingController).match(() => true);
     });
+  });
+
+  it('shows a toast from the ToastService', async () => {
+    const fixture = TestBed.createComponent(App);
+    await navigate(fixture, '/banker');
+
+    TestBed.inject(ToastService).show('Sparat');
+    await fixture.whenStable();
+
+    expect(html(fixture).querySelector('[data-toast]')?.textContent).toContain('Sparat');
+    TestBed.inject(HttpTestingController).match(() => true);
   });
 
   it('starts on the overview and has a Banker page of its own', async () => {

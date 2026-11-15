@@ -122,7 +122,10 @@ function formatOriginal({ amount, currency }: Money): string {
                   [disabled]="saving() || t.offsets !== null"
                   (click)="togglePicker()"
                 >
-                  <app-transaction-category-badge [category]="t.category" />
+                  <app-transaction-category-badge
+                    [category]="t.category"
+                    [pending]="t.status === 'pending'"
+                  />
                   <span class="flex flex-1 flex-col">
                     <span
                       data-category-name

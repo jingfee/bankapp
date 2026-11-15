@@ -40,7 +40,10 @@ interface DayGroup {
                 [routerLink]="['/transaktioner', transaction.id]"
                 class="flex items-center gap-3 py-2"
               >
-                <app-transaction-category-badge [category]="transaction.category" />
+                <app-transaction-category-badge
+                  [category]="transaction.category"
+                  [pending]="transaction.status === 'pending'"
+                />
                 <span class="flex min-w-0 flex-1 flex-col">
                   <span data-description>{{ transaction.description }}</span>
                   <span data-account class="text-sm text-zinc-500 dark:text-zinc-400">{{

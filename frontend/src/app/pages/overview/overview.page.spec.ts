@@ -374,7 +374,7 @@ describe('OverviewPage', () => {
       expect(rows[0]?.querySelector<HTMLElement>('[data-bar]')?.style.width).toBe('100%');
       expect(rows[1]?.querySelector<HTMLElement>('[data-bar]')?.style.width).toBe('67%');
       expect(rows[0]?.querySelector('[data-bar]')?.getAttribute('style')).toContain(
-        '--category-light',
+        '--category-colour',
       );
       expect(rows[0]?.querySelector('[data-badge]')).not.toBeNull();
     });

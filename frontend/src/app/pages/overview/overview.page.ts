@@ -131,7 +131,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           type="button"
           data-previous-month
           aria-label="Föregående månad"
-          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-zinc-200/60"
+          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-surface-2"
           (click)="go(-1)"
         >
           ‹
@@ -141,7 +141,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           type="button"
           data-next-month
           aria-label="Nästa månad"
-          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-zinc-200/60 disabled:opacity-30"
+          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-surface-2 disabled:opacity-30"
           [disabled]="!canGoForward()"
           (click)="go(1)"
         >

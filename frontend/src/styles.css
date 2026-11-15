@@ -1,3 +1,640 @@
 @import 'tailwindcss';
 
-/* Tailwind's `dark:` variant follows the operating system's light/dark setting (prefers-color-scheme). */
+/*
+ * The app is dark only. Existing pages still carry `dark:` classes next to their light ones, so the
+ * `dark` variant is always on instead of following the operating system's colour scheme.
+ */
+@custom-variant dark (&);
+
+/* Self-hosted, so the fonts work offline in the PWA. Swedish needs only latin and latin-ext. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500 700;
+  src: url('@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2')
+    format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500 700;
+  src: url('@fontsource-variable/space-grotesk/files/space-grotesk-latin-ext-wght-normal.woff2')
+    format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #0a0c11;
+  --color-sidebar: #0d1016;
+  --color-surface-1: #12151c;
+  --color-surface-2: #181c25;
+  --color-surface-3: #20252f;
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-line-strong: rgba(255, 255, 255, 0.14);
+  --color-ink: #edeff5;
+  --color-muted: #8e95a6;
+  --color-accent: #a497ff;
+  --color-on-accent: #0e0b24;
+  --color-positive: #5ee6a0;
+  --color-warning: #ffb547;
+  --color-danger: #ff7a7a;
+  --color-pending: #7dd3fc;
+
+  /* Pages not yet redesigned use Tailwind's zinc scale; line it up with the dark theme. */
+  --color-zinc-950: #0a0c11;
+  --color-zinc-900: #12151c;
+  --color-zinc-800: #20252f;
+  --color-zinc-700: #2d3340;
+  --color-zinc-400: #8e95a6;
+  --color-zinc-300: #c3c8d4;
+  --color-zinc-100: #edeff5;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Cards */
+  .card {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-line);
+    border-radius: 20px;
+  }
+
+  /* Amounts and big numbers */
+  .amount {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 46px;
+    padding: 0 20px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 0.12s ease,
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 88%, white);
+  }
+  .btn-secondary {
+    background: var(--color-surface-2);
+    border-color: var(--color-line-strong);
+    color: var(--color-ink);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-surface-3);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+  }
+  .btn-sm {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  /* Text input, date input and select share one look. `.field` wraps an input with an optional
+     leading icon (`.field-icon`) and trailing suffix (`.field-suffix`, e.g. "kr"). */
+  .input,
+  .field {
+    height: 46px;
+    width: 100%;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 12px;
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+    font-size: 15px;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .input {
+    padding: 0 14px;
+  }
+  .input::placeholder,
+  .field-control::placeholder {
+    color: var(--color-muted);
+  }
+  .input:focus,
+  .field:focus-within {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+  }
+  .field-control {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    outline: none;
+  }
+  .field-icon,
+  .field-suffix {
+    flex: none;
+    color: var(--color-muted);
+  }
+  .field-suffix {
+    font-size: 14px;
+  }
+  select.input {
+    appearance: none;
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e95a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+  }
+  input[type='date'].input {
+    color-scheme: dark;
+    appearance: none;
+  }
+
+  /* Segmented control: buttons in a row, one pressed (`aria-pressed="true"` or `.on`) */
+  .segmented {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background: var(--color-surface-1);
+  }
+  .segmented > button {
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 9px;
+    color: var(--color-muted);
+    font-size: 14px;
+    font-weight: 500;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .segmented > button:hover {
+    color: var(--color-ink);
+  }
+  .segmented > button.on,
+  .segmented > button[aria-pressed='true'] {
+    background: var(--color-surface-3);
+    color: var(--color-ink);
+  }
+
+  /* Chip */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 999px;
+    background: var(--color-surface-1);
+    color: var(--color-muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      transform 0.12s ease,
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .chip:active {
+    transform: scale(0.96);
+  }
+  .chip.on,
+  .chip[aria-pressed='true'] {
+    border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-1));
+    color: var(--color-accent);
+  }
+
+  /* Switch: `<input type="checkbox" role="switch" class="switch" />` */
+  .switch {
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 44px;
+    height: 26px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 999px;
+    background: var(--color-surface-3);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--color-ink);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .switch:checked {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+  .switch:checked::after {
+    transform: translateX(18px);
+    background: var(--color-on-accent);
+  }
+  .switch:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Checkbox card: a label around a visually hidden checkbox, highlighted when checked */
+  .check-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 14px;
+    background: var(--color-surface-1);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .check-card:has(input:checked) {
+    border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-1));
+  }
+  .check-card:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .check-card > input[type='checkbox'] {
+    appearance: none;
+    flex: none;
+    display: grid;
+    place-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid var(--color-line-strong);
+    border-radius: 6px;
+    background: transparent;
+  }
+  .check-card > input[type='checkbox']:checked {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+  .check-card > input[type='checkbox']:checked::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    margin-top: -2px;
+    border-left: 2px solid var(--color-on-accent);
+    border-bottom: 2px solid var(--color-on-accent);
+    transform: rotate(-45deg);
+  }
+
+  /* Pill: a small label. Variants are `pill-*`, so no row class can collide with them. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .pill-neutral {
+    background: var(--color-surface-3);
+    color: var(--color-muted);
+  }
+  .pill-accent {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+  }
+  .pill-guess {
+    background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+    color: var(--color-warning);
+  }
+  .pill-pending {
+    background: color-mix(in srgb, var(--color-pending) 16%, transparent);
+    color: var(--color-pending);
+  }
+  .pill-pending::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+
+  /* Toast: bottom centre, slides up. Hidden by the app's ToastComponent when empty. */
+  .toast {
+    position: fixed;
+    left: 50%;
+    /* Clear of the bottom tab bar on mobile */
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: 50;
+    transform: translateX(-50%);
+    padding: 12px 18px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 14px;
+    background: var(--color-surface-3);
+    color: var(--color-ink);
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: none;
+    animation: toast-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @media (min-width: 640px) {
+    .toast {
+      bottom: 24px;
+    }
+  }
+
+  /* Category icon: flat, a rounded square tinted by `--category-colour`. */
+  .category-icon {
+    --size: 40px;
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--size);
+    height: var(--size);
+    border-radius: calc(var(--size) * 0.325);
+    background: color-mix(in srgb, var(--category-colour) 20%, var(--color-surface-1));
+    color: var(--category-tint);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--category-colour) 34%, transparent);
+  }
+  .category-icon-uncategorised {
+    --category-colour: var(--color-muted);
+    --category-tint: var(--color-muted);
+    background: repeating-linear-gradient(
+      135deg,
+      var(--color-surface-2) 0 4px,
+      var(--color-surface-3) 4px 8px
+    );
+    box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  }
+  .category-icon-pending::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 1.5px dashed var(--color-pending);
+    border-radius: calc(var(--size) * 0.325 + 3px);
+    pointer-events: none;
+  }
+  .category-icon-mark {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    display: grid;
+    place-content: center;
+    width: max(12px, calc(var(--size) * 0.4));
+    height: max(12px, calc(var(--size) * 0.4));
+    border: 2px solid var(--color-bg);
+    border-radius: 999px;
+    background: var(--color-warning);
+    color: #1a1204;
+    font-size: max(8px, calc(var(--size) * 0.25));
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  /* Navigation (the sidebar and the bottom tabs share these) */
+  .nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: var(--color-muted);
+    font-size: 15px;
+    font-weight: 500;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .nav-link:hover {
+    color: var(--color-ink);
+  }
+  .nav-link.active {
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+  }
+  .nav-link.active .nav-icon {
+    color: var(--color-accent);
+  }
+  .nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .tab-link {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 0 8px;
+    min-width: 0;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .tab-link.active {
+    color: var(--color-ink);
+  }
+  .tab-link.active .nav-icon {
+    color: var(--color-accent);
+  }
+  .tab-link.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 24px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--color-accent);
+    box-shadow: 0 0 12px 1px var(--color-accent);
+    transform: translateX(-50%);
+  }
+}
+
+/* Motion: a routed page fades in with a short rise and blur, its children following one by one. */
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* The routed page is inserted right after the outlet, freshly on every navigation. */
+router-outlet + * {
+  display: block;
+  animation: route-enter 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.stagger > * {
+  animation: route-enter 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+.stagger > :nth-child(2) {
+  --stagger-index: 1;
+}
+.stagger > :nth-child(3) {
+  --stagger-index: 2;
+}
+.stagger > :nth-child(4) {
+  --stagger-index: 3;
+}
+.stagger > :nth-child(5) {
+  --stagger-index: 4;
+}
+.stagger > :nth-child(6) {
+  --stagger-index: 5;
+}
+.stagger > :nth-child(7) {
+  --stagger-index: 6;
+}
+.stagger > :nth-child(8) {
+  --stagger-index: 7;
+}
+.stagger > :nth-child(n + 9) {
+  --stagger-index: 8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  router-outlet + *,
+  .stagger > *,
+  .toast {
+    animation: none;
+  }
+  .btn,
+  .chip,
+  .switch::after {
+    transition: none;
+  }
+  .btn:active:not(:disabled),
+  .chip:active {
+    transform: none;
+  }
+}
