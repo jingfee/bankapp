@@ -2,11 +2,13 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { hashPassword } from '../src/auth/password-hash';
 import { ConfigError, loadConfig } from '../src/config/config';
 
 describe('loadConfig', () => {
   let dir: string;
   let validEnv: NodeJS.ProcessEnv;
+  const hash = hashPassword('secret');
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'bankapp-config-'));
@@ -22,6 +24,8 @@ describe('loadConfig', () => {
       REDIRECT_URL: 'https://bankapp.example/callback',
       DATA_DIR: join(dir, 'data'),
       TIMEZONE: 'Europe/Stockholm',
+      BANKAPP_USERNAME: 'owner',
+      BANKAPP_PASSWORD_HASH: hash,
     };
   });
 
@@ -35,7 +39,20 @@ describe('loadConfig', () => {
       dataDir: join(dir, 'data'),
       timezone: 'Europe/Stockholm',
       scheduledSyncs: false,
+      username: 'owner',
+      passwordHash: hash,
     });
+  });
+
+  it.each(['BANKAPP_USERNAME', 'BANKAPP_PASSWORD_HASH'])('requires %s', (name) => {
+    const env = { ...validEnv, [name]: undefined };
+    expect(() => loadConfig(env)).toThrow(name);
+  });
+
+  it('rejects a password hash that is plain text', () => {
+    expect(() => loadConfig({ ...validEnv, BANKAPP_PASSWORD_HASH: 'hunter2' })).toThrow(
+      /BANKAPP_PASSWORD_HASH/,
+    );
   });
 
   it('turns scheduled syncs on with SCHEDULED_SYNCS=true', () => {

@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   TransactionCategory,
@@ -16,7 +15,7 @@ import { accounts, connections, transactions } from '../src/db/schema';
 import type { EnableBankingTransaction } from '../src/enable-banking/enable-banking-client';
 import { MIN_TRAINING_EXAMPLES } from '../src/categories/guessing/text-classifier';
 import { SyncService } from '../src/sync/sync.service';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 let nextReference = 1;
 
@@ -77,12 +76,9 @@ describe('guessing categories', () => {
         },
       ],
     };
-    await request(app.getHttpServer()).post('/api/connections').send({ bank: 'Coop Mastercard' });
+    await api(app).post('/api/connections').send({ bank: 'Coop Mastercard' });
     const { state } = enableBanking.authorisations.at(-1)!;
-    await request(app.getHttpServer())
-      .get('/api/connections/callback')
-      .query({ code: 'code', state })
-      .expect(302);
+    await api(app).get('/api/connections/callback').query({ code: 'code', state }).expect(302);
     await sync();
   });
 
@@ -101,29 +97,26 @@ describe('guessing categories', () => {
 
   /** Every transaction's description and category as listed, oldest first. */
   async function listed(): Promise<[string, string | null][]> {
-    const body = (await request(app.getHttpServer()).get('/api/transactions').expect(200))
-      .body as TransactionsResponse;
+    const body = (await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse;
     return body.transactions
       .map((t): [string, string | null] => [t.description, shown(t.category)])
       .reverse();
   }
 
   async function idOf(description: string): Promise<number> {
-    const body = (await request(app.getHttpServer()).get('/api/transactions').expect(200))
-      .body as TransactionsResponse;
+    const body = (await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse;
     return body.transactions.find((t) => t.description === description)!.id;
   }
 
   async function subcategoryId(category: string, subcategory: string): Promise<number> {
-    const body = (await request(app.getHttpServer()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     return body.categories
       .find((c) => c.name === category)!
       .subcategories.find((s) => s.name === subcategory)!.id;
   }
 
   async function confirm(description: string, category: string, subcategory: string) {
-    await request(app.getHttpServer())
+    await api(app)
       .put(`/api/transactions/${await idOf(description)}/category`)
       .send({ subcategoryId: await subcategoryId(category, subcategory) })
       .expect(200);
@@ -195,7 +188,7 @@ describe('guessing categories', () => {
     for (const entryReference of [null, 'p9']) {
       const description = `Trattoria ${entryReference ?? 'Utan'}`;
       await syncWith(transaction(description, { status: 'pending', entryReference, mcc: '5812' }));
-      await request(app.getHttpServer())
+      await api(app)
         .put(`/api/transactions/${await idOf(description)}/category`)
         .send({ subcategoryId: null })
         .expect(200);
@@ -295,7 +288,7 @@ describe('guessing categories', () => {
     const other = transaction('Willys Haninge', { status: 'pending', entryReference: 'p2' });
     await syncWith(pending, other);
     await confirm('ICA Nära Vega', 'Mat & Dryck', 'Alkohol');
-    await request(app.getHttpServer())
+    await api(app)
       .put(`/api/transactions/${await idOf('Willys Haninge')}/category`)
       .send({ subcategoryId: null })
       .expect(200);
@@ -316,7 +309,7 @@ describe('guessing categories', () => {
     await syncWith(transaction('Willys Haninge'));
 
     const details = (
-      await request(app.getHttpServer())
+      await api(app)
         .get(`/api/transactions/${await idOf('Willys Haninge')}`)
         .expect(200)
     ).body as TransactionDetails;
@@ -475,8 +468,7 @@ describe('guessing categories for the transactions already stored', () => {
 
   const categories = async (app: INestApplication) =>
     (
-      (await request(app.getHttpServer()).get('/api/transactions').expect(200))
-        .body as TransactionsResponse
+      (await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse
     ).transactions
       .map((t): [string, string | null] => [t.description, shown(t.category)])
       .sort(([a], [b]) => a.localeCompare(b));
@@ -518,10 +510,9 @@ describe('guessing categories for the transactions already stored', () => {
 
     // Not again: what the owner made uncategorised stays so across restarts.
     const willys = (
-      (await request(app.getHttpServer()).get('/api/transactions').expect(200))
-        .body as TransactionsResponse
+      (await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse
     ).transactions.find((t) => t.description === 'Willys Haninge')!;
-    await request(app.getHttpServer())
+    await api(app)
       .put(`/api/transactions/${willys.id}/category`)
       .send({ subcategoryId: null })
       .expect(200);

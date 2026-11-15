@@ -1,9 +1,11 @@
-import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Location, NgTemplateOutlet } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
+import { AuthService } from './auth/auth.service';
 import { Toast } from './toast/toast';
+import { ToastService } from './toast/toast.service';
 import { TransactionsService } from './transactions.service';
 
 interface NavItem {
@@ -82,11 +84,80 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
       </svg>
     </ng-template>
 
-    <aside
-      class="fixed inset-y-0 left-0 z-20 hidden w-[236px] flex-col border-r border-line bg-sidebar px-3 py-5 sm:flex"
+    @if (!onLoginPage()) {
+      <aside
+        class="fixed inset-y-0 left-0 z-20 hidden w-[236px] flex-col border-r border-line bg-sidebar px-3 py-5 sm:flex"
+      >
+        <a routerLink="/" class="mb-6 px-3 font-display text-xl font-bold tracking-tight"
+          >Bankapp</a
+        >
+        <nav aria-label="Huvudmeny" class="flex flex-1 flex-col gap-1">
+          @for (item of items; track item.path) {
+            <a
+              [routerLink]="item.path"
+              routerLinkActive="active"
+              ariaCurrentWhenActive="page"
+              [routerLinkActiveOptions]="{ exact: item.exact }"
+              [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
+              class="nav-link"
+            >
+              <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 20 }" />
+              <span class="flex-1">{{ item.label }}</span>
+              @if (item.reviewCount && reviewCount() > 0) {
+                <span data-review-badge aria-hidden="true" class="nav-badge">{{
+                  reviewBadge()
+                }}</span>
+              }
+            </a>
+          }
+        </nav>
+        <div class="flex items-center gap-3 border-t border-line px-3 pt-4">
+          <span
+            class="grid size-8 place-content-center rounded-full bg-surface-3 text-sm font-semibold"
+            aria-hidden="true"
+            >Ä</span
+          >
+          <span class="flex-1 text-sm text-muted">Ägare</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm size-9 px-0"
+            aria-label="Logga ut"
+            (click)="logout()"
+          >
+            <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
+          </button>
+        </div>
+      </aside>
+
+      <header
+        class="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
+      >
+        <a routerLink="/" class="font-display text-lg font-bold tracking-tight">Bankapp</a>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm size-9 px-0"
+          aria-label="Logga ut"
+          (click)="logout()"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
+        </button>
+      </header>
+    }
+
+    <div
+      [class]="
+        onLoginPage() ? '' : 'pb-[calc(76px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[236px]'
+      "
     >
-      <a routerLink="/" class="mb-6 px-3 font-display text-xl font-bold tracking-tight">Bankapp</a>
-      <nav aria-label="Huvudmeny" class="flex flex-1 flex-col gap-1">
+      <router-outlet />
+    </div>
+
+    @if (!onLoginPage()) {
+      <nav
+        data-tabs
+        aria-label="Flikar"
+        class="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
+      >
         @for (item of items; track item.path) {
           <a
             [routerLink]="item.path"
@@ -94,84 +165,34 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
             ariaCurrentWhenActive="page"
             [routerLinkActiveOptions]="{ exact: item.exact }"
             [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
-            class="nav-link"
+            class="tab-link"
           >
-            <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 20 }" />
-            <span class="flex-1">{{ item.label }}</span>
-            @if (item.reviewCount && reviewCount() > 0) {
-              <span data-review-badge aria-hidden="true" class="nav-badge">{{
-                reviewBadge()
-              }}</span>
-            }
+            <span class="relative">
+              <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 24 }" />
+              @if (item.reviewCount && reviewCount() > 0) {
+                <span
+                  data-review-badge
+                  aria-hidden="true"
+                  class="nav-badge absolute -top-1.5 left-3 h-4 min-w-4 px-1 text-[10px]"
+                  >{{ reviewBadge() }}</span
+                >
+              }
+            </span>
+            <span>{{ item.tabLabel }}</span>
           </a>
         }
       </nav>
-      <div class="flex items-center gap-3 border-t border-line px-3 pt-4">
-        <span
-          class="grid size-8 place-content-center rounded-full bg-surface-3 text-sm font-semibold"
-          aria-hidden="true"
-          >Ä</span
-        >
-        <span class="flex-1 text-sm text-muted">Ägare</span>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm size-9 px-0"
-          aria-label="Logga ut"
-          disabled
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
-        </button>
-      </div>
-    </aside>
-
-    <header
-      class="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
-    >
-      <a routerLink="/" class="font-display text-lg font-bold tracking-tight">Bankapp</a>
-      <button type="button" class="btn btn-ghost btn-sm size-9 px-0" aria-label="Logga ut" disabled>
-        <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
-      </button>
-    </header>
-
-    <div class="pb-[calc(76px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[236px]">
-      <router-outlet />
-    </div>
-
-    <nav
-      data-tabs
-      aria-label="Flikar"
-      class="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
-    >
-      @for (item of items; track item.path) {
-        <a
-          [routerLink]="item.path"
-          routerLinkActive="active"
-          ariaCurrentWhenActive="page"
-          [routerLinkActiveOptions]="{ exact: item.exact }"
-          [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
-          class="tab-link"
-        >
-          <span class="relative">
-            <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 24 }" />
-            @if (item.reviewCount && reviewCount() > 0) {
-              <span
-                data-review-badge
-                aria-hidden="true"
-                class="nav-badge absolute -top-1.5 left-3 h-4 min-w-4 px-1 text-[10px]"
-                >{{ reviewBadge() }}</span
-              >
-            }
-          </span>
-          <span>{{ item.tabLabel }}</span>
-        </a>
-      }
-    </nav>
+    }
 
     <app-toast />
   `,
 })
 export class App {
   private readonly transactions = inject(TransactionsService);
+  private readonly auth = inject(AuthService);
+  private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
+  protected readonly onLoginPage = signal(inject(Location).path().startsWith('/logga-in'));
   protected readonly reviewCount = this.transactions.reviewCount;
   protected readonly items = NAV_ITEMS;
   protected readonly logoutIcon = LOGOUT_ICON;
@@ -185,11 +206,24 @@ export class App {
   constructor() {
     // The count changes with syncs and with what the owner categorises, so ask again on every
     // page change; it is a single cheap query.
-    inject(Router)
-      .events.pipe(
+    this.router.events
+      .pipe(
         filter((event) => event instanceof NavigationEnd),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.transactions.refreshReviewCount());
+      .subscribe((event) => {
+        this.onLoginPage.set(event.urlAfterRedirects.startsWith('/logga-in'));
+        if (!this.onLoginPage()) this.transactions.refreshReviewCount();
+      });
+  }
+
+  protected logout(): void {
+    this.auth.logout().subscribe({
+      next: () => {
+        this.transactions.reviewCount.set(0);
+        void this.router.navigateByUrl('/logga-in');
+      },
+      error: () => this.toast.show('Det gick inte att logga ut. Försök igen.'),
+    });
   }
 }

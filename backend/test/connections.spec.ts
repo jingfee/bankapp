@@ -1,12 +1,11 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { AccountsResponse, StartConnectionResponse } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections } from '../src/db/schema';
 import type { EnableBankingSession } from '../src/enable-banking/enable-banking-client';
 import { createApp } from '../src/app';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 const START = new Date('2026-11-10T12:00:00.000Z');
 const MINUTE = 60 * 1000;
@@ -35,7 +34,7 @@ describe('connecting a bank', () => {
   }
 
   const startConnection = (bankName: string) =>
-    request(app.getHttpServer()).post('/api/connections').send({ bank: bankName });
+    api(app).post('/api/connections').send({ bank: bankName });
 
   describe('starting', () => {
     it('requests the maximum consent the bank allows and returns its authorisation URL', async () => {
@@ -99,9 +98,7 @@ describe('connecting a bank', () => {
   const getAccounts = async (): Promise<{
     banks: { bank: string; accounts: { name: string; type: string }[] }[];
   }> => {
-    const { banks }: AccountsResponse = (
-      await request(app.getHttpServer()).get('/api/accounts').expect(200)
-    ).body;
+    const { banks }: AccountsResponse = (await api(app).get('/api/accounts').expect(200)).body;
     return {
       banks: banks.map(({ bank, accounts }) => ({
         bank,
@@ -117,7 +114,7 @@ describe('connecting a bank', () => {
   }
 
   const callback = (query: Record<string, string>) =>
-    request(app.getHttpServer()).get('/api/connections/callback').query(query);
+    api(app).get('/api/connections/callback').query(query);
 
   describe('returning from BankID', () => {
     it('stores the connection and its accounts and lands on the success page', async () => {
@@ -210,9 +207,7 @@ describe('connecting a bank', () => {
       });
 
       it('treats a repeated state parameter as unknown', async () => {
-        await request(app.getHttpServer())
-          .get('/api/connections/callback?state=a&state=b')
-          .expect(400);
+        await api(app).get('/api/connections/callback?state=a&state=b').expect(400);
       });
 
       it('reports a cancelled BankID login and creates nothing', async () => {

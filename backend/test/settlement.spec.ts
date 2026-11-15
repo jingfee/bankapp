@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   HouseholdRatioResponse,
@@ -11,7 +10,7 @@ import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db/database';
 import { DATABASE } from '../src/db/database.module';
 import { accounts, connections, transactions } from '../src/db/schema';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('the settlement balance', () => {
   let app: INestApplication;
@@ -44,16 +43,13 @@ describe('the settlement balance', () => {
         })),
       )
       .run();
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     subcategoryIds = new Map(
       body.categories.flatMap((c) => c.subcategories).map((s) => [s.name, s.id]),
     );
   });
 
   afterEach(() => app.close());
-
-  const server = () => app.getHttpServer();
 
   let counter = 0;
   function store(
@@ -89,15 +85,15 @@ describe('the settlement balance', () => {
     store(1, amount, date, { ...inCategory('Avräkning delade utgifter'), ...values });
 
   const setBalance = (amount: number, asOf?: string) =>
-    request(server()).post('/api/settlement/balance-settings').send({ amount, asOf });
+    api(app).post('/api/settlement/balance-settings').send({ amount, asOf });
   const get = async () =>
-    (await request(server()).get('/api/settlement').expect(200)).body as SettlementResponse;
+    (await api(app).get('/api/settlement').expect(200)).body as SettlementResponse;
   const balance = async () => (await get()).balance;
 
   it('has no balance until the first balance setting', async () => {
     store(2, -1000, '2026-11-10');
     expect(await get()).toEqual({ balance: null, periods: [], balanceSettings: [] });
-    expect((await request(server()).get('/api/settlement/balance').expect(200)).body).toEqual({
+    expect((await api(app).get('/api/settlement/balance').expect(200)).body).toEqual({
       balance: null,
     });
   });
@@ -176,7 +172,7 @@ describe('the settlement balance', () => {
   });
 
   it('applies the share chosen for the transaction, including Hushåll and Partner', async () => {
-    await request(server())
+    await api(app)
       .put('/api/household-ratio')
       .send({ entries: [{ from: '2026-01-01', percent: 60 }] } satisfies HouseholdRatioResponse)
       .expect(200);

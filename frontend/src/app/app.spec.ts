@@ -4,15 +4,25 @@ import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { of, throwError } from 'rxjs';
 import { App } from './app';
+import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
+  const signedIn = { check: () => of(true), logout: () => of(undefined) };
+
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes)],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter(routes),
+        // Signed in; the guard and the login page have their own tests.
+        { provide: AuthService, useValue: signedIn },
+      ],
     });
   });
 
@@ -165,5 +175,86 @@ describe('App', () => {
     expect(http.match((r) => r.url === '/api/transactions').length).toBeGreaterThan(0);
     expect(http.match((r) => r.url === '/api/accounts')).toHaveLength(0);
     http.match(() => true);
+  });
+});
+
+describe('App logout', () => {
+  let logouts: number;
+
+  beforeEach(() => {
+    logouts = 0;
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter(routes),
+        {
+          provide: AuthService,
+          useValue: {
+            check: () => of(true),
+            logout: () => {
+              logouts++;
+              return of(undefined);
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  it.each(['aside', 'header'])(
+    'signs out from the %s button and shows the login page',
+    async (where) => {
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/banker');
+      TestBed.inject(HttpTestingController)
+        .match('/api/transactions/review/count')
+        .forEach((r) => r.flush({ count: 0 }));
+      await fixture.whenStable();
+      const html = fixture.nativeElement as HTMLElement;
+
+      (html.querySelector(`${where} button[aria-label="Logga ut"]`) as HTMLButtonElement).click();
+      await fixture.whenStable();
+
+      expect(logouts).toBe(1);
+      expect(router.url).toBe('/logga-in');
+      // The login page has no navigation around it.
+      expect(html.querySelector('aside')).toBeNull();
+      expect(html.querySelector('[data-tabs]')).toBeNull();
+      expect(html.querySelector('input[name="password"]')).not.toBeNull();
+    },
+  );
+});
+
+describe('App logout failure', () => {
+  it('stays put and says so when the server could not end the session', async () => {
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter(routes),
+        {
+          provide: AuthService,
+          useValue: { check: () => of(true), logout: () => throwError(() => new Error('offline')) },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/banker');
+    TestBed.inject(HttpTestingController)
+      .match('/api/transactions/review/count')
+      .forEach((r) => r.flush({ count: 0 }));
+    await fixture.whenStable();
+    const html = fixture.nativeElement as HTMLElement;
+
+    (html.querySelector('aside button[aria-label="Logga ut"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/banker');
+    expect(html.querySelector('[data-toast]')?.textContent).toContain('Det gick inte att logga ut');
   });
 });

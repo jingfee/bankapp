@@ -1,11 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { TransactionDetails, TransactionsResponse } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 type Row = typeof transactions.$inferInsert;
 
@@ -70,7 +69,7 @@ describe('GET /api/transactions', () => {
       .run();
   }
 
-  const get = (query = '') => request(app.getHttpServer()).get(`/api/transactions${query}`);
+  const get = (query = '') => api(app).get(`/api/transactions${query}`);
   const list = async (query = ''): Promise<TransactionsResponse> =>
     (await get(query).expect(200)).body;
 
@@ -156,7 +155,7 @@ describe('GET /api/transactions', () => {
 
   describe('GET /api/transactions/:id', () => {
     const detail = async (id: number): Promise<TransactionDetails> =>
-      (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200)).body;
+      (await api(app).get(`/api/transactions/${id}`).expect(200)).body;
 
     it('returns the details parsed from the raw response', async () => {
       const raw = {
@@ -241,8 +240,8 @@ describe('GET /api/transactions', () => {
     });
 
     it('answers 404 for an unknown or non-numeric id', async () => {
-      await request(app.getHttpServer()).get('/api/transactions/99').expect(404);
-      await request(app.getHttpServer()).get('/api/transactions/abc').expect(404);
+      await api(app).get('/api/transactions/99').expect(404);
+      await api(app).get('/api/transactions/abc').expect(404);
     });
   });
 });

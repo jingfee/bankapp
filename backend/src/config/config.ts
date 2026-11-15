@@ -1,6 +1,7 @@
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createPrivateKey } from 'node:crypto';
 import { z } from 'zod';
+import { isPasswordHash } from '../auth/password-hash';
 
 export interface AppConfig {
   /** Enable Banking application id; used as the `kid` of the signed JWTs. */
@@ -15,6 +16,10 @@ export interface AppConfig {
   timezone: string;
   /** Whether syncs run on a schedule; off in development, which shares the banks' request limit. */
   scheduledSyncs: boolean;
+  /** The owner's username; there is no registration. */
+  username: string;
+  /** scrypt hash of the owner's password, made with `pnpm hash-password`; never the password itself. */
+  passwordHash: string;
 }
 
 export class ConfigError extends Error {
@@ -40,6 +45,10 @@ const schema = z.object({
   SCHEDULED_SYNCS: z
     .enum(['true', 'false', ''], { error: 'SCHEDULED_SYNCS must be true or false' })
     .optional(),
+  BANKAPP_USERNAME: required('BANKAPP_USERNAME'),
+  BANKAPP_PASSWORD_HASH: required('BANKAPP_PASSWORD_HASH').refine(isPasswordHash, {
+    error: 'BANKAPP_PASSWORD_HASH is not a hash made by `pnpm hash-password`',
+  }),
   TIMEZONE: required('TIMEZONE').refine(isTimeZone, {
     error: 'TIMEZONE must be an IANA time zone such as Europe/Stockholm',
   }),
@@ -92,6 +101,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
     scheduledSyncs: values.SCHEDULED_SYNCS === 'true',
+    username: values.BANKAPP_USERNAME,
+    passwordHash: values.BANKAPP_PASSWORD_HASH,
   };
 }
 

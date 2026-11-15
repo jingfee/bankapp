@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   OverviewResponse,
@@ -10,7 +9,7 @@ import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('overview of a month', () => {
   let app: INestApplication;
@@ -39,14 +38,11 @@ describe('overview of a month', () => {
         currency: 'SEK',
       })
       .run();
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     ids = new Map(body.categories.flatMap((c) => c.subcategories).map((s) => [s.name, s.id]));
   });
 
   afterEach(() => app.close());
-
-  const server = () => app.getHttpServer();
 
   let counter = 0;
   function store(
@@ -78,7 +74,7 @@ describe('overview of a month', () => {
 
   const overview = async (month?: string) =>
     (
-      await request(server())
+      await api(app)
         .get('/api/overview')
         .query(month === undefined ? {} : { month })
         .expect(200)
@@ -101,7 +97,7 @@ describe('overview of a month', () => {
 
   it('rejects a month that is not YYYY-MM', async () => {
     for (const month of ['2026-13', '2026-1', 'november', '2026-11-01']) {
-      await request(server()).get('/api/overview').query({ month }).expect(400);
+      await api(app).get('/api/overview').query({ month }).expect(400);
     }
   });
 
@@ -183,7 +179,7 @@ describe('overview of a month', () => {
     store(-30, '2026-10-20', 'Livsmedel');
     store(-40, '2026-11-21', 'Restaurang');
     const body = (
-      await request(server())
+      await api(app)
         .get('/api/overview/transactions')
         .query({ month: '2026-11', subcategoryId: ids.get('Livsmedel') })
         .expect(200)
@@ -192,8 +188,8 @@ describe('overview of a month', () => {
   });
 
   it('rejects a transactions request without a valid month and subcategory', async () => {
-    await request(server()).get('/api/overview/transactions').expect(400);
-    await request(server())
+    await api(app).get('/api/overview/transactions').expect(400);
+    await api(app)
       .get('/api/overview/transactions')
       .query({ month: '2026-11', subcategoryId: 'x' })
       .expect(400);
@@ -230,14 +226,14 @@ describe('overview of a month', () => {
 
     const view = async (month: string, which?: string) =>
       (
-        await request(server())
+        await api(app)
           .get('/api/overview')
           .query(which === undefined ? { month } : { month, view: which })
           .expect(200)
       ).body as OverviewResponse;
 
     const setAccountShare = (id: number, share: string) =>
-      request(server()).put(`/api/accounts/${id}/share`).send({ share }).expect(200);
+      api(app).put(`/api/accounts/${id}/share`).send({ share }).expect(200);
 
     it('counts a 50/50 card purchase of 200 kr as 100 kr in Min andel and 200 kr in Hela beloppet', async () => {
       await setAccountShare(2, 'half');
@@ -254,7 +250,7 @@ describe('overview of a month', () => {
 
     it('weights income, spending, net, the bars and the previous month by share, from every source', async () => {
       await setAccountShare(2, 'half');
-      await request(server())
+      await api(app)
         .put(`/api/subcategories/${ids.get('Restaurang')}/share`)
         .send({ share: 'partner' })
         .expect(200);
@@ -284,7 +280,7 @@ describe('overview of a month', () => {
       await setAccountShare(2, 'half');
       const purchase = storeOn(2, -200, '2026-10-30', 'Livsmedel');
       const refund = storeOn(2, 200, '2026-11-05', 'Livsmedel');
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
@@ -299,7 +295,7 @@ describe('overview of a month', () => {
       await setAccountShare(2, 'half');
       const purchase = storeOn(2, -200, '2026-10-30', 'Livsmedel');
       const refund = storeOn(1, 50, '2026-11-05', 'Livsmedel');
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
@@ -324,7 +320,7 @@ describe('overview of a month', () => {
       await setAccountShare(2, 'half');
       const id = storeOn(2, -200, '2026-11-03', 'Livsmedel');
       const body = (
-        await request(server())
+        await api(app)
           .get('/api/overview/transactions')
           .query({ month: '2026-11', subcategoryId: ids.get('Livsmedel') })
           .expect(200)
@@ -338,7 +334,7 @@ describe('overview of a month', () => {
     });
 
     it('rejects an unknown view', async () => {
-      await request(server()).get('/api/overview').query({ view: 'x' }).expect(400);
+      await api(app).get('/api/overview').query({ view: 'x' }).expect(400);
     });
   });
 });

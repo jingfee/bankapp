@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { AccountsResponse, BankAccounts } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
@@ -9,7 +8,7 @@ import type {
   EnableBankingSession,
 } from '../src/enable-banking/enable-banking-client';
 import { createApp } from '../src/app';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 const START = new Date('2026-11-10T12:00:00.000Z');
 const DAY = 24 * 3600 * 1000;
@@ -58,9 +57,9 @@ describe('connection expiry and renewal', () => {
 
   async function connect(session: EnableBankingSession): Promise<void> {
     enableBanking.session = session;
-    await request(app.getHttpServer()).post('/api/connections').send({ bank: 'Swedbank' });
+    await api(app).post('/api/connections').send({ bank: 'Swedbank' });
     const state = enableBanking.authorisations.at(-1)!.state;
-    await request(app.getHttpServer())
+    await api(app)
       .get('/api/connections/callback')
       .query({ code: `code-${enableBanking.authorisations.length}`, state })
       .expect(302);
@@ -70,15 +69,14 @@ describe('connection expiry and renewal', () => {
   /** Lets the initial sync that follows a connection finish. */
   async function settle(): Promise<void> {
     for (let i = 0; i < 20; i++) {
-      const { body } = await request(app.getHttpServer()).get('/api/accounts');
+      const { body } = await api(app).get('/api/accounts');
       if (!(body as AccountsResponse).syncing) return;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
   }
 
   const overview = async (): Promise<BankAccounts> =>
-    ((await request(app.getHttpServer()).get('/api/accounts').expect(200)).body as AccountsResponse)
-      .banks[0]!;
+    ((await api(app).get('/api/accounts').expect(200)).body as AccountsResponse).banks[0]!;
 
   const session = (
     validUntil: Date,
@@ -86,8 +84,7 @@ describe('connection expiry and renewal', () => {
     sessionId = 'session-1',
   ): EnableBankingSession => ({ sessionId, validUntil, accounts: list });
 
-  const startRenewal = () =>
-    request(app.getHttpServer()).post('/api/connections').send({ bank: 'Swedbank' });
+  const startRenewal = () => api(app).post('/api/connections').send({ bank: 'Swedbank' });
 
   describe('status', () => {
     it.each([
@@ -126,7 +123,7 @@ describe('connection expiry and renewal', () => {
       enableBanking.requestedBalances = [];
       now = new Date(START.getTime() + 31 * DAY);
 
-      await request(app.getHttpServer()).post('/api/sync').expect(202);
+      await api(app).post('/api/sync').expect(202);
       await settle();
 
       expect(enableBanking.requestedBalances).toEqual([]);
@@ -147,13 +144,10 @@ describe('connection expiry and renewal', () => {
       await start();
       await connect(session(new Date(START.getTime() + 30 * DAY)));
 
-      await request(app.getHttpServer())
-        .post('/api/connections')
-        .send({ bank: 'Swedbank', renew: true })
-        .expect(201);
+      await api(app).post('/api/connections').send({ bank: 'Swedbank', renew: true }).expect(201);
       const state = enableBanking.authorisations.at(-1)!.state;
       enableBanking.session = session(FUTURE, [lonekonto, sparkonto], 'session-2');
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .get('/api/connections/callback')
         .query({ code: 'renew-code', state })
         .expect(302);
@@ -183,7 +177,7 @@ describe('connection expiry and renewal', () => {
       enableBanking.session = renewed;
       await startRenewal().expect(201);
       const state = enableBanking.authorisations.at(-1)!.state;
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .get('/api/connections/callback')
         .query({ code: 'renew-code', state })
         .expect(302);
@@ -316,7 +310,7 @@ describe('connection expiry and renewal', () => {
       await renew(session(FUTURE, [lonekonto]));
       enableBanking.requestedBalances = [];
 
-      await request(app.getHttpServer()).post('/api/sync').expect(202);
+      await api(app).post('/api/sync').expect(202);
       await settle();
       expect(enableBanking.requestedBalances).toEqual(['uid-1']);
 
@@ -344,7 +338,7 @@ describe('connection expiry and renewal', () => {
       await startRenewal().expect(201);
       enableBanking.session = undefined;
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .get('/api/connections/callback')
         .query({ code: 'bad', state: enableBanking.authorisations.at(-1)!.state })
         .expect(302);
@@ -362,12 +356,12 @@ describe('connection expiry and renewal', () => {
       await startRenewal().expect(201);
       const second = enableBanking.authorisations.at(-1)!.state;
       enableBanking.session = session(FUTURE);
-      await request(app.getHttpServer())
+      await api(app)
         .get('/api/connections/callback')
         .query({ code: 'c1', state: first })
         .expect(302);
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .get('/api/connections/callback')
         .query({ code: 'c2', state: second })
         .expect(302);

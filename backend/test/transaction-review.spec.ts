@@ -1,11 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { CategoriesResponse, TransactionReviewResponse } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('transactions to review', () => {
   let app: INestApplication;
@@ -36,8 +35,6 @@ describe('transactions to review', () => {
 
   afterEach(() => app.close());
 
-  const server = () => app.getHttpServer();
-
   let counter = 0;
   /** Stores an unconfirmed transaction and returns its id; `subcategoryId` makes it a guess. */
   function store(description: string, date: string, subcategoryId: number | null = null): number {
@@ -61,8 +58,7 @@ describe('transactions to review', () => {
   }
 
   async function livsmedel(): Promise<number> {
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     const found = body.categories
       .flatMap((c) => c.subcategories)
       .find((s) => s.name === 'Livsmedel');
@@ -71,14 +67,13 @@ describe('transactions to review', () => {
   }
 
   const review = async () =>
-    (await request(server()).get('/api/transactions/review').expect(200))
-      .body as TransactionReviewResponse;
+    (await api(app).get('/api/transactions/review').expect(200)).body as TransactionReviewResponse;
 
   it('is empty when there are no transactions', async () => {
     expect(await review()).toEqual({ count: 0, transactions: [], replacements: [] });
-    expect(
-      (await request(server()).get('/api/transactions/review/count').expect(200)).body,
-    ).toEqual({ count: 0 });
+    expect((await api(app).get('/api/transactions/review/count').expect(200)).body).toEqual({
+      count: 0,
+    });
   });
 
   it('lists uncategorised transactions newest first, and counts them', async () => {
@@ -91,7 +86,7 @@ describe('transactions to review', () => {
     expect(count).toBe(3);
     expect(listed.map((t) => t.id)).toEqual([sameDay, newer, older]);
     expect(listed.every((t) => t.category === null)).toBe(true);
-    expect((await request(server()).get('/api/transactions/review/count')).body).toEqual({
+    expect((await api(app).get('/api/transactions/review/count')).body).toEqual({
       count: 3,
     });
   });
@@ -112,13 +107,9 @@ describe('transactions to review', () => {
     const removed = store('Xyzzy A', '2026-11-07');
     const picked = store('Xyzzy B', '2026-11-06');
     store('Xyzzy C', '2026-11-05');
-    await request(server())
-      .put(`/api/transactions/${confirmed}/category`)
-      .send({ subcategoryId: id });
-    await request(server())
-      .put(`/api/transactions/${removed}/category`)
-      .send({ subcategoryId: null });
-    await request(server()).put(`/api/transactions/${picked}/category`).send({ subcategoryId: id });
+    await api(app).put(`/api/transactions/${confirmed}/category`).send({ subcategoryId: id });
+    await api(app).put(`/api/transactions/${removed}/category`).send({ subcategoryId: null });
+    await api(app).put(`/api/transactions/${picked}/category`).send({ subcategoryId: id });
 
     const { count, transactions: listed } = await review();
 
@@ -135,7 +126,7 @@ describe('transactions to review', () => {
 
     expect(count).toBe(1);
     expect(listed.map((t) => t.description)).toEqual(['Xyzzy New']);
-    expect((await request(server()).get('/api/transactions/review/count')).body).toEqual({
+    expect((await api(app).get('/api/transactions/review/count')).body).toEqual({
       count: 1,
     });
   });

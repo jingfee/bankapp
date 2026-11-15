@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   OverviewResponse,
@@ -13,7 +12,7 @@ import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db/database';
 import { DATABASE } from '../src/db/database.module';
 import { accounts, connections, transactions } from '../src/db/schema';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('manual transactions', () => {
   let app: INestApplication;
@@ -29,8 +28,7 @@ describe('manual transactions', () => {
     });
     await app.init();
     db = app.get<AppDatabase>(DATABASE);
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     subcategoryIds = new Map(
       body.categories.flatMap((c) => c.subcategories).map((s) => [s.name, s.id]),
     );
@@ -38,11 +36,10 @@ describe('manual transactions', () => {
 
   afterEach(() => app.close());
 
-  const server = () => app.getHttpServer();
   const groceries = () => subcategoryIds.get('Livsmedel')!;
 
   const add = (body: Record<string, unknown> = {}) =>
-    request(server())
+    api(app)
       .post('/api/transactions')
       .send({
         description: 'ICA Maxi',
@@ -55,14 +52,14 @@ describe('manual transactions', () => {
   const create = async (body: Record<string, unknown> = {}) =>
     (await add(body).expect(201)).body as Transaction;
   const overview = async (view: 'full' | 'mine') =>
-    (await request(server()).get('/api/overview').query({ month: '2026-11', view }).expect(200))
+    (await api(app).get('/api/overview').query({ month: '2026-11', view }).expect(200))
       .body as OverviewResponse;
   const settlement = async () =>
-    (await request(server()).get('/api/settlement').expect(200)).body as SettlementResponse;
+    (await api(app).get('/api/settlement').expect(200)).body as SettlementResponse;
   const listed = async () =>
-    (await request(server()).get('/api/transactions').expect(200)).body as TransactionsResponse;
+    (await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse;
   const setBalance = () =>
-    request(server())
+    api(app)
       .post('/api/settlement/balance-settings')
       .send({ amount: 0, asOf: '2026-11-01' })
       .expect(201);
@@ -82,12 +79,12 @@ describe('manual transactions', () => {
   });
 
   it('defaults to today and to the subcategory’s share', async () => {
-    await request(server())
+    await api(app)
       .put(`/api/subcategories/${groceries()}/share`)
       .send({ share: 'half' })
       .expect(200);
     const created = (
-      await request(server())
+      await api(app)
         .post('/api/transactions')
         .send({ description: 'Mjölk', amount: -20, subcategoryId: groceries() })
         .expect(201)
@@ -112,10 +109,10 @@ describe('manual transactions', () => {
 
   it('is never in Review', async () => {
     await create({ date: '2026-11-12' });
-    const review = (await request(server()).get('/api/transactions/review').expect(200))
+    const review = (await api(app).get('/api/transactions/review').expect(200))
       .body as TransactionReviewResponse;
     expect(review.count).toBe(0);
-    expect((await request(server()).get('/api/transactions/review/count')).body).toEqual({
+    expect((await api(app).get('/api/transactions/review/count')).body).toEqual({
       count: 0,
     });
   });
@@ -125,7 +122,7 @@ describe('manual transactions', () => {
     expect((await overview('full')).totals.spending).toBe(300);
     expect((await overview('mine')).totals.spending).toBe(150);
     const listedForSub = (
-      await request(server())
+      await api(app)
         .get('/api/overview/transactions')
         .query({ month: '2026-11', subcategoryId: groceries() })
         .expect(200)
@@ -168,7 +165,7 @@ describe('manual transactions', () => {
     const created = await create({ amount: -100 });
     expect((await settlement()).balance).toBe(50);
     const edited = (
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${created.id}`)
         .send({
           description: 'ICA Maxi',
@@ -186,7 +183,7 @@ describe('manual transactions', () => {
   it('keeps who paid when an edit leaves paidBy out', async () => {
     const created = await create({ paidBy: 'partner' });
     const edited = (
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${created.id}`)
         .send({ description: 'Ny text', amount: -300, subcategoryId: groceries() })
         .expect(200)
@@ -218,12 +215,12 @@ describe('manual transactions', () => {
     expect((await listed()).transactions.map((t) => t.id)).toEqual([created.id]);
     expect((await overview('full')).totals.spending).toBe(300);
     expect((await settlement()).balance).toBe(150);
-    await request(server()).get(`/api/transactions/${created.id}`).expect(200);
+    await api(app).get(`/api/transactions/${created.id}`).expect(200);
   });
 
   it('shows its details without an account', async () => {
     const created = await create();
-    const details = (await request(server()).get(`/api/transactions/${created.id}`).expect(200))
+    const details = (await api(app).get(`/api/transactions/${created.id}`).expect(200))
       .body as TransactionDetails;
     expect(details).toMatchObject({
       account: null,
@@ -236,7 +233,7 @@ describe('manual transactions', () => {
     await setBalance();
     const created = await create();
     const edited = (
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${created.id}`)
         .send({
           description: 'ICA Kvantum',
@@ -263,7 +260,7 @@ describe('manual transactions', () => {
   it('can be edited back to the subcategory’s share', async () => {
     const created = await create();
     const edited = (
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${created.id}`)
         .send({ description: 'ICA', amount: -300, subcategoryId: groceries(), share: null })
         .expect(200)
@@ -275,12 +272,12 @@ describe('manual transactions', () => {
   it('can be deleted, which updates the list, overview and settlement', async () => {
     await setBalance();
     const created = await create();
-    await request(server()).delete(`/api/transactions/${created.id}`).expect(204);
+    await api(app).delete(`/api/transactions/${created.id}`).expect(204);
     expect((await listed()).transactions).toEqual([]);
     expect((await overview('full')).totals.spending).toBe(0);
     expect((await settlement()).balance).toBe(0);
-    await request(server()).delete(`/api/transactions/${created.id}`).expect(404);
-    await request(server()).get(`/api/transactions/${created.id}`).expect(404);
+    await api(app).delete(`/api/transactions/${created.id}`).expect(404);
+    await api(app).get(`/api/transactions/${created.id}`).expect(404);
   });
 
   it('is the only kind of transaction that can be edited or deleted', async () => {
@@ -312,25 +309,25 @@ describe('manual transactions', () => {
       })
       .returning({ id: transactions.id })
       .get().id;
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${bank}`)
       .send({ description: 'x', amount: -1, subcategoryId: groceries() })
       .expect(409);
-    await request(server()).delete(`/api/transactions/${bank}`).expect(409);
+    await api(app).delete(`/api/transactions/${bank}`).expect(409);
   });
 
   it('ends the offset links of a transaction whose direction is edited', async () => {
     const purchase = await create({ share: null });
     const refund = await create({ amount: 100, description: 'Retur', share: null });
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${refund.id}/offset`)
       .send({ purchaseId: purchase.id })
       .expect(200);
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${purchase.id}`)
       .send({ description: 'Insättning', amount: 300, subcategoryId: groceries() })
       .expect(200);
-    const details = (await request(server()).get(`/api/transactions/${refund.id}`).expect(200))
+    const details = (await api(app).get(`/api/transactions/${refund.id}`).expect(200))
       .body as TransactionDetails;
     expect(details.offsets).toBeNull();
   });
@@ -338,12 +335,12 @@ describe('manual transactions', () => {
   it('deleting a purchase unlinks the refunds offset against it', async () => {
     const purchase = await create({ share: null });
     const refund = await create({ amount: 100, description: 'Retur', share: null });
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${refund.id}/offset`)
       .send({ purchaseId: purchase.id })
       .expect(200);
-    await request(server()).delete(`/api/transactions/${purchase.id}`).expect(204);
-    const details = (await request(server()).get(`/api/transactions/${refund.id}`).expect(200))
+    await api(app).delete(`/api/transactions/${purchase.id}`).expect(204);
+    const details = (await api(app).get(`/api/transactions/${refund.id}`).expect(200))
       .body as TransactionDetails;
     expect(details.offsets).toBeNull();
   });

@@ -7,6 +7,7 @@ export {
   type DefaultCategory,
   type DefaultSubcategory,
 } from './default-categories';
+export type { LoginRequest, MeResponse } from './auth';
 export type { HealthResponse } from './health';
 export type {
   AccountType,

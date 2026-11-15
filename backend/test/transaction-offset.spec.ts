@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   OffsetCandidatesResponse,
@@ -11,7 +10,7 @@ import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('kvitta a refund against its purchase', () => {
   let app: INestApplication;
@@ -40,14 +39,11 @@ describe('kvitta a refund against its purchase', () => {
         currency: 'SEK',
       })
       .run();
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     ids = new Map(body.categories.flatMap((c) => c.subcategories).map((s) => [s.name, s.id]));
   });
 
   afterEach(() => app.close());
-
-  const server = () => app.getHttpServer();
 
   let counter = 0;
   function store(
@@ -77,11 +73,11 @@ describe('kvitta a refund against its purchase', () => {
   }
 
   const link = (refund: number, purchaseId: number | null) =>
-    request(server()).put(`/api/transactions/${refund}/offset`).send({ purchaseId });
+    api(app).put(`/api/transactions/${refund}/offset`).send({ purchaseId });
   const detail = async (id: number) =>
-    (await request(server()).get(`/api/transactions/${id}`).expect(200)).body as TransactionDetails;
+    (await api(app).get(`/api/transactions/${id}`).expect(200)).body as TransactionDetails;
   const spending = async (month: string, subcategory = 'Kläder & skor') => {
-    const body = (await request(server()).get('/api/overview').query({ month }).expect(200))
+    const body = (await api(app).get('/api/overview').query({ month }).expect(200))
       .body as OverviewResponse;
     return {
       total: body.totals.spending,
@@ -91,13 +87,12 @@ describe('kvitta a refund against its purchase', () => {
   };
   const review = async () =>
     (
-      (await request(server()).get('/api/transactions/review').expect(200))
-        .body as TransactionReviewResponse
+      (await api(app).get('/api/transactions/review').expect(200)).body as TransactionReviewResponse
     ).transactions.map((t) => t.id);
   const candidates = async (id: number, q?: string) =>
     (
       (
-        await request(server())
+        await api(app)
           .get(`/api/transactions/${id}/offset-candidates`)
           .query(q === undefined ? {} : { q })
           .expect(200)
@@ -122,7 +117,7 @@ describe('kvitta a refund against its purchase', () => {
       date: '2026-11-10',
     });
 
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${purchase}/category`)
       .send({ subcategoryId: ids.get('Elektronik') })
       .expect(200);
@@ -137,7 +132,7 @@ describe('kvitta a refund against its purchase', () => {
     const refund = store(500, '2026-12-05', 'Zalando');
     await link(refund, purchase).expect(200);
 
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${refund}/category`)
       .send({ subcategoryId: ids.get('Elektronik') })
       .expect(409);
@@ -185,7 +180,7 @@ describe('kvitta a refund against its purchase', () => {
     await link(refund, purchase).expect(200);
 
     const body = (
-      await request(server())
+      await api(app)
         .get('/api/overview/transactions')
         .query({ month: '2026-11', subcategoryId: ids.get('Kläder & skor') })
         .expect(200)
@@ -228,7 +223,7 @@ describe('kvitta a refund against its purchase', () => {
     await link(refund, purchase).expect(200);
 
     expect(await review()).toEqual([purchase]);
-    await request(server())
+    await api(app)
       .put(`/api/transactions/${purchase}/category`)
       .send({ subcategoryId: ids.get('Kläder & skor') })
       .expect(200);

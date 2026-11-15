@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by [0012](0012-the-owner-logs-in-with-a-long-lived-session.md)
 ---
 
 # No login in the app for now; network access is the only protection

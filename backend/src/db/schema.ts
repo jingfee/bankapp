@@ -265,3 +265,13 @@ export const startupTasks = sqliteTable('startup_tasks', {
   name: text('name').primaryKey(),
   completedAt: integer('completed_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * A signed-in browser. Only a hash of the session id is stored, so a leaked database cannot be
+ * used to sign in; the id itself lives in the owner's cookie.
+ */
+export const sessions = sqliteTable('sessions', {
+  idHash: text('id_hash').primaryKey(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+});
