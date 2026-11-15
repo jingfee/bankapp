@@ -14,6 +14,7 @@ import type { EnableBankingClient } from './enable-banking/enable-banking-client
 import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
 import { OverviewModule } from './overview/overview.module';
+import { SettlementModule } from './settlement/settlement.module';
 
 export const API_PREFIX = 'api';
 
@@ -58,6 +59,7 @@ export class AppModule {
         ConnectionsModule,
         AccountsModule,
         OverviewModule,
+        SettlementModule,
         BackupModule,
         ...staticFrontendModules,
       ],
