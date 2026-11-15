@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import type { StartConnectionResponse } from '@bankapp/shared';
+import { Public } from '../auth/public.decorator';
 import { ConnectionsService } from './connections.service';
 
 @Controller('connections')
@@ -14,7 +15,12 @@ export class ConnectionsController {
     return this.connections.start(bank, renew === true);
   }
 
-  /** Where Enable Banking sends the owner back after BankID. */
+  /**
+   * Where Enable Banking sends the owner back after BankID. Public because that cross-site
+   * redirect never carries the SameSite=Strict session cookie; the unguessable `state` of a
+   * pending connection is what authorises it.
+   */
+  @Public()
   @Get('callback')
   async callback(
     @Query('state') state: string | undefined,

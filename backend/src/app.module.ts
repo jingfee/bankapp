@@ -2,6 +2,7 @@ import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AccountsModule } from './accounts/accounts.module';
+import { AuthModule } from './auth/auth.module';
 import { BackupModule } from './backup/backup.module';
 import { BanksModule } from './banks/banks.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -54,6 +55,7 @@ export class AppModule {
         DatabaseModule.register(options.database ?? { dataDir: options.config.dataDir }),
         EnableBankingModule.register(options.enableBanking),
         ScheduleModule.forRoot(),
+        AuthModule,
         BanksModule,
         CategoriesModule,
         ConnectionsModule,

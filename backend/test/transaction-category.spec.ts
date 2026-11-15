@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import request from 'supertest';
 import type {
   CategoriesResponse,
   TransactionCategory,
@@ -11,7 +10,7 @@ import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, transactions } from '../src/db/schema';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('categorising a transaction by hand', () => {
   let app: INestApplication;
@@ -55,11 +54,8 @@ describe('categorising a transaction by hand', () => {
 
   afterEach(() => app.close());
 
-  const server = () => app.getHttpServer();
-
   async function subcategoryId(name: string, category: string): Promise<number> {
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     const found = body.categories
       .find((c) => c.name === category)
       ?.subcategories.find((s) => s.name === name);
@@ -68,12 +64,12 @@ describe('categorising a transaction by hand', () => {
   }
 
   const detail = async (id = 1): Promise<TransactionDetails> =>
-    (await request(server()).get(`/api/transactions/${id}`).expect(200)).body;
+    (await api(app).get(`/api/transactions/${id}`).expect(200)).body;
   const listed = async () =>
-    ((await request(server()).get('/api/transactions').expect(200)).body as TransactionsResponse)
+    ((await api(app).get('/api/transactions').expect(200)).body as TransactionsResponse)
       .transactions[0];
   const put = (body: unknown, id: string | number = 1) =>
-    request(server())
+    api(app)
       .put(`/api/transactions/${id}/category`)
       .send(body as object);
 

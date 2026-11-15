@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "test": "vitest run",
+    "hash-password": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/hash-password.ts",
     "tune:classifier": "vitest run --config tools/vitest.config.mts"
   },
   "dependencies": {

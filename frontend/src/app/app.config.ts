@@ -1,4 +1,4 @@
-import { provideHttpClient, withFetch } from '@angular/common/http';
+import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import {
   type ApplicationConfig,
   LOCALE_ID,
@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
+import { authInterceptor } from './auth/auth.interceptor';
 import { AppUpdateService } from './app-update.service';
 import { routes } from './app.routes';
 import { APP_LOCALE } from './formatting/locale';
@@ -17,7 +18,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),
-    provideHttpClient(withFetch()),
+    provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
     { provide: LOCALE_ID, useValue: APP_LOCALE },
     // Only production builds run the service worker, so `ng serve` never serves stale files.
     provideServiceWorker('ngsw-worker.js', {

@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      # Caddy proxies https://bankapp.hew.ovh to this port. Keep it on the LAN/tailnet only (ADR 0002).
+      # Caddy proxies https://bankapp.hew.ovh to this port. Keep it on the LAN/tailnet only (ADR 0012).
       - '3000:3000'
     volumes:
       # Database and backups.

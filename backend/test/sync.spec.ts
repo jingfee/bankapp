@@ -1,5 +1,4 @@
 import { Logger, type INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { AccountsResponse, ConnectedAccount, TransactionDetails } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
@@ -19,7 +18,7 @@ import type {
 } from '../src/enable-banking/enable-banking-client';
 import { createApp } from '../src/app';
 import { SyncService } from '../src/sync/sync.service';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 const START = new Date('2026-11-10T12:00:00.000Z');
 
@@ -86,7 +85,7 @@ describe('the initial sync', () => {
   afterEach(() => app.close());
 
   const getAccounts = async (): Promise<AccountsResponse> =>
-    (await request(app.getHttpServer()).get('/api/accounts').expect(200)).body;
+    (await api(app).get('/api/accounts').expect(200)).body;
 
   const settled = () =>
     vi.waitFor(async () => expect((await getAccounts()).syncing).toBe(false), { timeout: 2000 });
@@ -99,12 +98,9 @@ describe('the initial sync', () => {
       accounts,
     };
     enableBanking.session = session;
-    await request(app.getHttpServer()).post('/api/connections').send({ bank: bankName });
+    await api(app).post('/api/connections').send({ bank: bankName });
     const { state } = enableBanking.authorisations.at(-1)!;
-    await request(app.getHttpServer())
-      .get('/api/connections/callback')
-      .query({ code: 'the-code', state })
-      .expect(302);
+    await api(app).get('/api/connections/callback').query({ code: 'the-code', state }).expect(302);
   }
 
   const accountNamed = async (name: string): Promise<ConnectedAccount> =>
@@ -368,7 +364,7 @@ describe('the initial sync', () => {
   });
 
   it('does not start when no connection was created', async () => {
-    await request(app.getHttpServer())
+    await api(app)
       .get('/api/connections/callback')
       .query({ state: 'made-up', code: 'c' })
       .expect(400);
@@ -484,7 +480,7 @@ describe('the initial sync', () => {
       await connect('Swedbank', [account('u1', 'Lönekonto')]);
       await settled();
 
-      const body = (await request(app.getHttpServer()).get('/api/transactions').expect(200)).body;
+      const body = (await api(app).get('/api/transactions').expect(200)).body;
       expect(
         body.transactions.map((t: { description: string; date: string }) => [
           t.description,
@@ -718,13 +714,13 @@ describe('the initial sync', () => {
     describe('that are pending with a category set by hand', () => {
       /** Sets Mat & Dryck / Café & fika on a transaction, as the owner would; returns its id. */
       async function categoriseByHand(id: number): Promise<number> {
-        const body = (await request(app.getHttpServer()).get('/api/categories')).body as {
+        const body = (await api(app).get('/api/categories')).body as {
           categories: { name: string; subcategories: { id: number; name: string }[] }[];
         };
         const cafe = body.categories
           .find((c) => c.name === 'Mat & Dryck')!
           .subcategories.find((s) => s.name === 'Café & fika')!;
-        await request(app.getHttpServer())
+        await api(app)
           .put(`/api/transactions/${id}/category`)
           .send({ subcategoryId: cafe.id })
           .expect(200);
@@ -732,10 +728,8 @@ describe('the initial sync', () => {
       }
 
       const categoryOf = async (id: number) =>
-        (
-          (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200))
-            .body as TransactionDetails
-        ).category;
+        ((await api(app).get(`/api/transactions/${id}`).expect(200)).body as TransactionDetails)
+          .category;
 
       it('keep it across a sync and when they book', async () => {
         enableBanking.transactions.set('u1', [
@@ -827,10 +821,8 @@ describe('the initial sync', () => {
 
     describe('that are pending with a share set by hand', () => {
       const shareOf = async (id: number) =>
-        (
-          (await request(app.getHttpServer()).get(`/api/transactions/${id}`).expect(200))
-            .body as TransactionDetails
-        ).share;
+        ((await api(app).get(`/api/transactions/${id}`).expect(200)).body as TransactionDetails)
+          .share;
 
       it('keep it when they book, in place or by being replaced by their booked twin', async () => {
         enableBanking.transactions.set('u1', [
@@ -840,7 +832,7 @@ describe('the initial sync', () => {
         await connect('Swedbank', [account('u1', 'Lönekonto')]);
         await settled();
         for (const row of stored()) {
-          await request(app.getHttpServer())
+          await api(app)
             .put(`/api/transactions/${row.id}/share`)
             .send({ share: 'half' })
             .expect(200);
@@ -871,7 +863,7 @@ describe('the initial sync', () => {
       await connect('Swedbank', [account('u1', 'Lönekonto')]);
       await settled();
       const [pending] = stored();
-      await request(app.getHttpServer())
+      await api(app)
         .put(`/api/transactions/${pending!.id}/share`)
         .send({ share: 'half' })
         .expect(200);

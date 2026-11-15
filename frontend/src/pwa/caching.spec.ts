@@ -94,6 +94,9 @@ describe('service worker caching', () => {
 
     it.each([
       '/api/connections',
+      '/api/auth/me',
+      '/api/auth/login',
+      '/api/auth/logout',
       '/api/banks',
       '/api/health',
       '/api/sync',

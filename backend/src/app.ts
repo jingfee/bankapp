@@ -4,6 +4,8 @@ import { API_PREFIX, AppModule, type AppOptions } from './app.module';
 
 export async function createApp(options: AppOptions): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule.register(options), { logger: ['error', 'warn'] });
+  // Behind the reverse proxy (Caddy), so logs show the client's address, not the proxy's.
+  app.getHttpAdapter().getInstance().set('trust proxy', 'loopback, linklocal, uniquelocal');
   app.setGlobalPrefix(API_PREFIX);
   app.enableShutdownHooks();
   return app;

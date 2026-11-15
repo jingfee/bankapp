@@ -1,10 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import request from 'supertest';
 import type { BanksResponse } from '@bankapp/shared';
 import { createApp } from '../src/app';
 import { BANK_REFRESH_JOB } from '../src/banks/bank-refresh.scheduler';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('bank list', () => {
   let app: INestApplication;
@@ -22,7 +21,7 @@ describe('bank list', () => {
   }
 
   const getBanks = async (): Promise<BanksResponse> =>
-    (await request(app.getHttpServer()).get('/api/banks').expect(200)).body;
+    (await api(app).get('/api/banks').expect(200)).body;
 
   it('lists the Swedish banks sorted by name, marking beta banks', async () => {
     enableBanking.banks = [

@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import {
   CATEGORY_COLOURS,
   CATEGORY_ICONS,
@@ -9,7 +8,7 @@ import {
 import { createApp } from '../src/app';
 import { openDatabase } from '../src/db/database';
 import { categories } from '../src/db/schema';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 const omitId = <T extends { id: number }>({ id, ...rest }: T): Omit<T, 'id'> => (void id, rest);
 
@@ -28,10 +27,7 @@ describe('categories', () => {
   afterEach(() => app.close());
 
   const getCategories = async (): Promise<CategoriesResponse['categories']> =>
-    (
-      (await request(app.getHttpServer()).get('/api/categories').expect(200))
-        .body as CategoriesResponse
-    ).categories;
+    ((await api(app).get('/api/categories').expect(200)).body as CategoriesResponse).categories;
 
   it('lists the default categories with their subcategories in order', async () => {
     const listed = await getCategories();

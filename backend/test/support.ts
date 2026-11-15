@@ -1,3 +1,8 @@
+import type { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { hashPassword } from '../src/auth/password-hash';
+import { SessionService } from '../src/auth/session.service';
+import { SESSION_COOKIE } from '../src/auth/session-cookie';
 import type { AppConfig } from '../src/config/config';
 import {
   RateLimitError,
@@ -12,6 +17,9 @@ import {
   type TransactionsRequestOptions,
 } from '../src/enable-banking/enable-banking-client';
 
+export const TEST_PASSWORD = 'correct horse';
+const TEST_PASSWORD_HASH = hashPassword(TEST_PASSWORD);
+
 export const testConfig: AppConfig = {
   applicationId: 'test-application-id',
   privateKeyPath: '/not/used/in/tests.pem',
@@ -19,6 +27,9 @@ export const testConfig: AppConfig = {
   dataDir: '/not/used/in/tests',
   timezone: 'Europe/Stockholm',
   scheduledSyncs: false,
+  username: 'owner',
+  // The hash of TEST_PASSWORD, made once so tests do not pay for scrypt on every start.
+  passwordHash: TEST_PASSWORD_HASH,
 };
 
 /** Stands in for Enable Banking in backend tests. */
@@ -113,5 +124,29 @@ export function bank(name: string, overrides: Partial<EnableBankingBank> = {}): 
     beta: false,
     maximumConsentSeconds: 90 * 24 * 3600,
     ...overrides,
+  };
+}
+
+const cookies = new WeakMap<INestApplication, string>();
+
+/**
+ * Requests to `app` as the signed-in owner; every route except login and health needs a session.
+ * Use plain supertest to test what happens without one.
+ */
+export function api(app: INestApplication) {
+  let cookie = cookies.get(app);
+  if (cookie === undefined) {
+    cookie = `${SESSION_COOKIE}=${app.get(SessionService).create()}`;
+    cookies.set(app, cookie);
+  }
+  const server = app.getHttpServer();
+  const signedIn = (method: 'get' | 'post' | 'put' | 'patch' | 'delete') => (url: string) =>
+    request(server)[method](url).set('Cookie', cookie);
+  return {
+    get: signedIn('get'),
+    post: signedIn('post'),
+    put: signedIn('put'),
+    patch: signedIn('patch'),
+    delete: signedIn('delete'),
   };
 }

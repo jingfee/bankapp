@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { AccountsResponse } from '@bankapp/shared';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
@@ -10,7 +9,7 @@ import type {
   EnableBankingTransaction,
 } from '../src/enable-banking/enable-banking-client';
 import { createApp } from '../src/app';
-import { bank, FakeEnableBankingClient, testConfig } from './support';
+import { bank, FakeEnableBankingClient, testConfig, api } from './support';
 
 const START = new Date('2026-11-10T12:00:00.000Z');
 const USER_AGENT = 'Mozilla/5.0 (Pixel)';
@@ -65,7 +64,7 @@ describe('the manual sync', () => {
   afterEach(() => app.close());
 
   const getAccounts = async (): Promise<AccountsResponse> =>
-    (await request(app.getHttpServer()).get('/api/accounts').expect(200)).body;
+    (await api(app).get('/api/accounts').expect(200)).body;
 
   const settled = () =>
     vi.waitFor(async () => expect((await getAccounts()).syncing).toBe(false), { timeout: 2000 });
@@ -81,17 +80,13 @@ describe('the manual sync', () => {
       accounts,
     };
     enableBanking.session = session;
-    await request(app.getHttpServer()).post('/api/connections').send({ bank: bankName });
+    await api(app).post('/api/connections').send({ bank: bankName });
     const { state } = enableBanking.authorisations.at(-1)!;
-    await request(app.getHttpServer())
-      .get('/api/connections/callback')
-      .query({ code: 'the-code', state })
-      .expect(302);
+    await api(app).get('/api/connections/callback').query({ code: 'the-code', state }).expect(302);
     await settled();
   }
 
-  const startManualSync = () =>
-    request(app.getHttpServer()).post('/api/sync').set('User-Agent', USER_AGENT);
+  const startManualSync = () => api(app).post('/api/sync').set('User-Agent', USER_AGENT);
 
   const runs = () => app.get<AppDatabase>(DATABASE).select().from(syncRuns).all();
 

@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type {
   AccountsResponse,
   CategoriesResponse,
@@ -14,7 +13,7 @@ import type { AppDatabase } from '../src/db/database';
 import { accounts, connections, subcategories, transactions } from '../src/db/schema';
 import { eq } from 'drizzle-orm';
 import { createApp } from '../src/app';
-import { FakeEnableBankingClient, testConfig } from './support';
+import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('shares', () => {
   let app: INestApplication;
@@ -44,16 +43,13 @@ describe('shares', () => {
         })),
       )
       .run();
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     subcategoryIds = new Map(
       body.categories.flatMap((c) => c.subcategories).map((s) => [s.name, s.id]),
     );
   });
 
   afterEach(() => app.close());
-
-  const server = () => app.getHttpServer();
 
   let counter = 0;
   function store(
@@ -82,35 +78,28 @@ describe('shares', () => {
   }
 
   const setAccountShare = (id: number, share: ShareOption) =>
-    request(server()).put(`/api/accounts/${id}/share`).send({ share });
+    api(app).put(`/api/accounts/${id}/share`).send({ share });
   const setRatio = (entries: HouseholdRatioResponse['entries']) =>
-    request(server()).put('/api/household-ratio').send({ entries });
+    api(app).put('/api/household-ratio').send({ entries });
   const setSubcategoryShare = (name: string, share: ShareOption) =>
-    request(server())
+    api(app)
       .put(`/api/subcategories/${subcategoryIds.get(name)}/share`)
       .send({ share });
   const subcategoryShares = async () =>
-    (
-      (await request(server()).get('/api/subcategory-shares').expect(200))
-        .body as SubcategorySharesResponse
-    ).shares;
+    ((await api(app).get('/api/subcategory-shares').expect(200)).body as SubcategorySharesResponse)
+      .shares;
   const share = async (id: number) =>
-    (
-      (await request(server()).get(`/api/transactions/${id}`).expect(200))
-        .body as TransactionDetails
-    ).share;
+    ((await api(app).get(`/api/transactions/${id}`).expect(200)).body as TransactionDetails).share;
 
   describe('the account share', () => {
     it('is Jag until the owner sets one, and is listed on Banker', async () => {
-      const body = (await request(server()).get('/api/accounts').expect(200))
-        .body as AccountsResponse;
+      const body = (await api(app).get('/api/accounts').expect(200)).body as AccountsResponse;
       expect(body.banks[0]?.accounts.map((a) => a.share)).toEqual(['me', 'me']);
     });
 
     it('is stored when set', async () => {
       await setAccountShare(2, 'half').expect(200);
-      const body = (await request(server()).get('/api/accounts').expect(200))
-        .body as AccountsResponse;
+      const body = (await api(app).get('/api/accounts').expect(200)).body as AccountsResponse;
       expect(body.banks[0]?.accounts.map((a) => [a.name, a.share])).toEqual([
         ['Coop Mastercard', 'half'],
         ['Lönekonto', 'me'],
@@ -118,7 +107,7 @@ describe('shares', () => {
     });
 
     it('rejects an unknown option and an unknown account', async () => {
-      await request(server()).put('/api/accounts/2/share').send({ share: 'most' }).expect(400);
+      await api(app).put('/api/accounts/2/share').send({ share: 'most' }).expect(400);
       await setAccountShare(99, 'half').expect(404);
     });
 
@@ -148,15 +137,9 @@ describe('shares', () => {
     });
 
     it('rejects an unknown option and an unknown subcategory', async () => {
-      await request(server()).put('/api/subcategories/1/share').send({ share: 'most' }).expect(400);
-      await request(server())
-        .put('/api/subcategories/9999/share')
-        .send({ share: 'half' })
-        .expect(404);
-      await request(server())
-        .put('/api/subcategories/abc/share')
-        .send({ share: 'half' })
-        .expect(404);
+      await api(app).put('/api/subcategories/1/share').send({ share: 'most' }).expect(400);
+      await api(app).put('/api/subcategories/9999/share').send({ share: 'half' }).expect(404);
+      await api(app).put('/api/subcategories/abc/share').send({ share: 'half' }).expect(404);
     });
 
     it('cannot be Hushåll until a household ratio exists', async () => {
@@ -229,7 +212,7 @@ describe('shares', () => {
       await setAccountShare(2, 'half').expect(200);
       store(2, -100, '2026-11-10');
       store(1, -100, '2026-11-09');
-      const body = (await request(server()).get('/api/transactions').expect(200))
+      const body = (await api(app).get('/api/transactions').expect(200))
         .body as TransactionsResponse;
       expect(body.transactions.map((t) => [t.share.option, t.share.source])).toEqual([
         ['half', 'account'],
@@ -240,7 +223,7 @@ describe('shares', () => {
 
   describe('a transaction’s own share', () => {
     const setOwn = (id: number, share: ShareOption | null) =>
-      request(server()).put(`/api/transactions/${id}/share`).send({ share });
+      api(app).put(`/api/transactions/${id}/share`).send({ share });
 
     it('beats its account’s share, and removing it restores the inherited one', async () => {
       await setAccountShare(2, 'half').expect(200);
@@ -282,7 +265,7 @@ describe('shares', () => {
     it('rejects an unknown option, a missing one and an unknown transaction', async () => {
       const id = store(1, -100, '2026-11-10');
       await setOwn(id, 'most' as ShareOption).expect(400);
-      await request(server()).put(`/api/transactions/${id}/share`).send({}).expect(400);
+      await api(app).put(`/api/transactions/${id}/share`).send({}).expect(400);
       await setOwn(999, 'half').expect(404);
       await setOwn(999, 'household').expect(404);
     });
@@ -291,7 +274,7 @@ describe('shares', () => {
       await setAccountShare(2, 'half').expect(200);
       const purchase = store(2, -200, '2026-11-01');
       const refund = store(1, 200, '2026-11-12');
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
@@ -344,10 +327,8 @@ describe('shares', () => {
       ).body as HouseholdRatioResponse;
       expect(body.entries.map((e) => e.from)).toEqual(['2026-01-01', '2026-07-01']);
       expect(
-        (
-          (await request(server()).get('/api/household-ratio').expect(200))
-            .body as HouseholdRatioResponse
-        ).entries,
+        ((await api(app).get('/api/household-ratio').expect(200)).body as HouseholdRatioResponse)
+          .entries,
       ).toEqual(body.entries);
     });
 
@@ -379,13 +360,13 @@ describe('shares', () => {
       const refund = store(1, 200, '2026-11-12');
       expect(await share(refund)).toEqual({ option: 'me', percent: 100, source: 'default' });
 
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
       expect(await share(refund)).toEqual({ option: 'half', percent: 50, source: 'purchase' });
 
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: null })
         .expect(200);
@@ -400,7 +381,7 @@ describe('shares', () => {
       await setAccountShare(2, 'household').expect(200);
       const purchase = store(2, -200, '2026-11-01');
       const refund = store(1, 200, '2026-11-20');
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
@@ -411,19 +392,18 @@ describe('shares', () => {
       await setAccountShare(2, 'half').expect(200);
       const purchase = store(2, -200, '2026-11-01');
       const refund = store(1, 50, '2026-11-12');
-      await request(server())
+      await api(app)
         .put(`/api/transactions/${refund}/offset`)
         .send({ purchaseId: purchase })
         .expect(200);
-      const list = (await request(server()).get('/api/transactions').expect(200))
+      const list = (await api(app).get('/api/transactions').expect(200))
         .body as TransactionsResponse;
       expect(list.transactions.find((t) => t.id === refund)?.share.source).toBe('purchase');
     });
   });
 
   it('seeds Överföring › Avräkning delade utgifter', async () => {
-    const body = (await request(server()).get('/api/categories').expect(200))
-      .body as CategoriesResponse;
+    const body = (await api(app).get('/api/categories').expect(200)).body as CategoriesResponse;
     const transfer = body.categories.find((c) => c.kind === 'transfer');
     expect(transfer?.subcategories.map((s) => s.name)).toContain('Avräkning delade utgifter');
   });
