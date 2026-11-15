@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import type {
   ManualTransactionRequest,
   OffsetCandidatesResponse,
+  ReplacementRequest,
   SetTransactionCategoryRequest,
   SetTransactionOffsetRequest,
   SetTransactionShareRequest,
@@ -81,6 +82,21 @@ export class TransactionsService {
   /** Deletes a manual transaction. */
   deleteManual(id: number): Observable<void> {
     return this.http.delete<void>(`/api/transactions/${id}`).pipe(tap(() => (this.listed = null)));
+  }
+
+  /**
+   * The bank transaction replaces the manual transaction it is the purchase of; the manual one
+   * is hidden from then on, so the list kept for the way back is dropped.
+   */
+  replace(request: ReplacementRequest): Observable<void> {
+    return this.http
+      .post<void>('/api/transactions/replace', request)
+      .pipe(tap(() => (this.listed = null)));
+  }
+
+  /** Says the two are not the same purchase, so they are not suggested again. */
+  notSame(request: ReplacementRequest): Observable<void> {
+    return this.http.post<void>('/api/transactions/not-same', request);
   }
 
   /** One transaction in full; errors with a 404 when it no longer exists. */

@@ -57,13 +57,16 @@ describe('ReviewPage', () => {
     ],
   };
 
-  async function render(body: TransactionReviewResponse | 'error') {
+  type Body = Omit<TransactionReviewResponse, 'replacements'> &
+    Partial<Pick<TransactionReviewResponse, 'replacements'>>;
+
+  async function render(body: Body | 'error') {
     const fixture = TestBed.createComponent(ReviewPage);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
     const request = http.expectOne('/api/transactions/review');
     if (body === 'error') request.error(new ProgressEvent('error'));
-    else request.flush(body);
+    else request.flush({ replacements: [], ...body });
     await fixture.whenStable();
     return { fixture, page: fixture.nativeElement as HTMLElement, http };
   }
@@ -212,6 +215,92 @@ describe('ReviewPage', () => {
     expect(page.querySelector('[data-empty]')?.textContent?.trim()).toBe(
       'Inget att granska just nu.',
     );
+  });
+
+  describe('suggested replacements', () => {
+    const pair = {
+      manual: transaction(1, {
+        description: 'Coop',
+        amount: { amount: -245, currency: 'SEK' },
+        account: null,
+        category: { ...guess, confirmed: true },
+      }),
+      bank: transaction(2, {
+        description: 'COOP KONSUM',
+        amount: { amount: -247.5, currency: 'SEK' },
+      }),
+    };
+
+    it('shows both rows with Ersätt and Inte samma', async () => {
+      const { page } = await render({ count: 1, transactions: [], replacements: [pair] });
+
+      const rows = Array.from(page.querySelectorAll('[data-replacement-row]')).map((row) =>
+        row.textContent?.replace(/\s+/g, ' ').trim(),
+      );
+      expect(rows[0]).toContain('Coop');
+      expect(rows[0]).toContain('Manuell');
+      expect(rows[1]).toContain('COOP KONSUM');
+      expect(page.querySelector('[data-replace]')?.textContent?.trim()).toBe('Ersätt');
+      expect(page.querySelector('[data-not-same]')?.textContent?.trim()).toBe('Inte samma');
+      expect(page.querySelector('[data-empty]')).toBeNull();
+    });
+
+    it('replaces the manual transaction and fetches the list again', async () => {
+      const { fixture, page, http } = await render({
+        count: 1,
+        transactions: [],
+        replacements: [pair],
+      });
+
+      (page.querySelector('[data-replace]') as HTMLButtonElement).click();
+      const request = http.expectOne('/api/transactions/replace');
+      expect(request.request.body).toEqual({ manualId: 1, bankId: 2 });
+      request.flush(null, { status: 204, statusText: 'No Content' });
+      http
+        .expectOne('/api/transactions/review')
+        .flush({ count: 0, transactions: [], replacements: [] });
+      await fixture.whenStable();
+
+      expect(page.querySelector('[data-replacement]')).toBeNull();
+      expect(page.querySelector('[data-empty]')).not.toBeNull();
+      expect(TestBed.inject(TransactionsService).reviewCount()).toBe(0);
+    });
+
+    it('stores Inte samma and drops the pair', async () => {
+      const { fixture, page, http } = await render({
+        count: 1,
+        transactions: [],
+        replacements: [pair],
+      });
+
+      (page.querySelector('[data-not-same]') as HTMLButtonElement).click();
+      const request = http.expectOne('/api/transactions/not-same');
+      expect(request.request.body).toEqual({ manualId: 1, bankId: 2 });
+      request.flush(null, { status: 204, statusText: 'No Content' });
+      http
+        .expectOne('/api/transactions/review')
+        .flush({ count: 0, transactions: [], replacements: [] });
+      await fixture.whenStable();
+
+      expect(page.querySelector('[data-replacement]')).toBeNull();
+    });
+
+    it('keeps the pair and says so when saving fails', async () => {
+      const { fixture, page, http } = await render({
+        count: 1,
+        transactions: [],
+        replacements: [pair],
+      });
+
+      (page.querySelector('[data-replace]') as HTMLButtonElement).click();
+      http.expectOne('/api/transactions/replace').error(new ProgressEvent('error'));
+      await fixture.whenStable();
+
+      expect(page.querySelector('[data-replacement]')).not.toBeNull();
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+        'Det gick inte att spara',
+      );
+    });
   });
 
   it('says so when the list cannot be fetched', async () => {

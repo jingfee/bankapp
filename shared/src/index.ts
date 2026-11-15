@@ -19,6 +19,8 @@ export type {
   Money,
   OffsetCandidatesResponse,
   OffsetTransaction,
+  ReplacementRequest,
+  ReplacementSuggestion,
   SetTransactionCategoryRequest,
   SetTransactionOffsetRequest,
   StartSyncResponse,

@@ -162,6 +162,35 @@ export class TransactionsController {
     return { count: this.accounts.countForReview() };
   }
 
+  /** The bank transaction replaces the manual transaction it is the purchase of (ADR 0009). */
+  @Post('replace')
+  @HttpCode(204)
+  replace(@Body() body: unknown): void {
+    const { manualId, bankId } = parseReplacement(body);
+    const result = this.accounts.replaceManual(manualId, bankId);
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'not-replaceable') {
+      throw new BadRequestException(
+        'Only a bank transaction can replace a manual transaction paid by the owner',
+      );
+    }
+    if (result === 'taken') {
+      throw new ConflictException('One of them is already replaced or replacing');
+    }
+  }
+
+  /** Stores that a manual and a bank transaction are not the same purchase. */
+  @Post('not-same')
+  @HttpCode(204)
+  notSame(@Body() body: unknown): void {
+    const { manualId, bankId } = parseReplacement(body);
+    const result = this.accounts.rejectReplacement(manualId, bankId);
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'not-replaceable') {
+      throw new BadRequestException('Expected a manual transaction and a bank transaction');
+    }
+  }
+
   /** Adds a manual transaction (ADR 0009). */
   @Post()
   add(@Body() body: unknown): Transaction {
@@ -307,6 +336,19 @@ function parseManual(body: unknown): ManualTransactionRequest {
     share: (share ?? null) as ShareOption | null,
     ...(paidBy == null ? {} : { paidBy: paidBy as PaidBy }),
   };
+}
+
+function parseReplacement(body: unknown): { manualId: number; bankId: number } {
+  const { manualId, bankId } = (body ?? {}) as Record<string, unknown>;
+  if (
+    typeof manualId !== 'number' ||
+    !Number.isInteger(manualId) ||
+    typeof bankId !== 'number' ||
+    !Number.isInteger(bankId)
+  ) {
+    throw new BadRequestException('manualId and bankId must be transaction ids');
+  }
+  return { manualId, bankId };
 }
 
 function isId(value: string): boolean {

@@ -41,3 +41,24 @@ export function descriptionMatch(refund: string, purchase: string): 0 | 1 | null
   const theirs = new Set(words(purchase));
   return words(refund).some((word) => theirs.has(word)) ? 1 : null;
 }
+
+/** How far apart a manual transaction and its bank transaction may be (ADR 0009). */
+export const REPLACE_WINDOW_DAYS = 5;
+
+/** The amount difference allowed between a manual transaction and its bank transaction. */
+export function replaceTolerance(amount: number): number {
+  return Math.max(2, Math.abs(amount) * 0.02);
+}
+
+/** Whether a bank transaction looks like the purchase a manual transaction records. */
+export function looksReplaceable(
+  manual: { amount: number; date: string },
+  bank: { amount: number; date: string },
+): boolean {
+  return (
+    Math.sign(manual.amount) === Math.sign(bank.amount) &&
+    // A hair of slack, as amounts are floats of öre.
+    Math.abs(manual.amount - bank.amount) <= replaceTolerance(manual.amount) + 1e-9 &&
+    Math.abs(daysBetween(manual.date, bank.date)) <= REPLACE_WINDOW_DAYS
+  );
+}

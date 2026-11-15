@@ -75,7 +75,7 @@ describe('transactions to review', () => {
       .body as TransactionReviewResponse;
 
   it('is empty when there are no transactions', async () => {
-    expect(await review()).toEqual({ count: 0, transactions: [] });
+    expect(await review()).toEqual({ count: 0, transactions: [], replacements: [] });
     expect(
       (await request(server()).get('/api/transactions/review/count').expect(200)).body,
     ).toEqual({ count: 0 });

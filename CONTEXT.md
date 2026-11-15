@@ -73,7 +73,7 @@ Who paid a manual transaction: the owner (_Jag_) or the partner (_Partner_). Ban
 _Avoid_: Payer, cardholder, owner of the transaction
 
 **Replace** (sv: _Ersätt_):
-Linking a manual transaction paid by the owner to the bank transaction that later arrives for the same purchase, once its account is connected. The manual transaction then disappears everywhere and the bank transaction takes its place, with its subcategory and share, including in the settlement balance. Review suggests a bank transaction whose amount is within max(2 kr, 2%) and whose date is within 5 days; _Inte samma_ means that pair is never suggested again.
+Linking a manual transaction paid by the owner to the bank transaction that later arrives for the same purchase, once its account is connected. The manual transaction then disappears everywhere and the bank transaction takes its place, with its subcategory and share, including in the settlement balance. Review suggests a bank transaction whose amount is within max(2 kr, 2%) and whose date is within 5 days; _Inte samma_ means that pair is never suggested again. A bank transaction replaces at most one manual transaction, and each pair is suggested only once, closest first. If a replacing pending transaction is dropped by the bank, the manual transaction comes back.
 _Avoid_: Merge, match (in the UI), dedupe
 
 **Booked transaction** (sv: _Bokförd_):
