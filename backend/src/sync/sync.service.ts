@@ -50,7 +50,11 @@ type AccountRow = typeof accounts.$inferSelect;
 type StoredCategory = Partial<
   Pick<
     typeof transactions.$inferSelect,
-    'subcategoryId' | 'categoryConfirmed' | 'categoryConfirmedAt' | 'share'
+    | 'subcategoryId'
+    | 'categoryConfirmed'
+    | 'categoryConfirmedAt'
+    | 'share'
+    | 'replacesTransactionId'
   >
 >;
 
@@ -383,7 +387,7 @@ export class SyncService implements OnModuleInit {
     const remove = (row: (typeof stored)[number]) => {
       // Also when the owner removed the category: their twin must not be guessed either.
       const hasCategory = row.subcategoryId !== null || row.categoryConfirmed;
-      if (hasCategory || row.share !== null) {
+      if (hasCategory || row.share !== null || row.replacesTransactionId !== null) {
         handedOn.push({
           signature: twinSignature(row),
           // Only what the owner decided: a share alone must not wipe a guessed category.
@@ -394,6 +398,10 @@ export class SyncService implements OnModuleInit {
               categoryConfirmedAt: row.categoryConfirmedAt,
             }),
             ...(row.share !== null && { share: row.share }),
+            // The manual transaction it replaces stays hidden behind its twin (ADR 0009).
+            ...(row.replacesTransactionId !== null && {
+              replacesTransactionId: row.replacesTransactionId,
+            }),
           },
         });
       }
@@ -427,6 +435,15 @@ export class SyncService implements OnModuleInit {
           const { share, ...decided } = category;
           if (decided.categoryConfirmed !== undefined && !exists.categoryConfirmed) {
             tx.update(transactions).set(decided).where(eq(transactions.id, exists.id)).run();
+          }
+          // The manual transaction the pending row replaced stays hidden behind the booked twin.
+          if (decided.replacesTransactionId !== undefined) {
+            tx.update(transactions)
+              .set({ replacesTransactionId: decided.replacesTransactionId })
+              .where(
+                and(eq(transactions.id, exists.id), isNull(transactions.replacesTransactionId)),
+              )
+              .run();
           }
           // A share the owner already set on the booked twin is theirs to keep.
           if (share !== undefined && share !== null) {

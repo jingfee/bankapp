@@ -149,7 +149,22 @@ export interface TransactionsResponse {
 export interface TransactionReviewResponse {
   /** Guessed and uncategorised transactions, newest first. */
   transactions: Transaction[];
+  /** Bank transactions that look like a manual transaction already entered, closest first. */
+  replacements: ReplacementSuggestion[];
+  /** Transactions to review plus suggested replacements. */
   count: number;
+}
+
+/** A manual transaction and the bank transaction that may be the same purchase (ADR 0009). */
+export interface ReplacementSuggestion {
+  manual: Transaction;
+  bank: Transaction;
+}
+
+/** Body of `POST /api/transactions/replace` and `POST /api/transactions/not-same`. */
+export interface ReplacementRequest {
+  manualId: number;
+  bankId: number;
 }
 
 /** Response body of `GET /api/transactions/review/count`. */

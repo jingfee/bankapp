@@ -33,6 +33,7 @@ import type {
   Transaction,
   TransactionDetails,
   OffsetCandidatesResponse,
+  ReplacementSuggestion,
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
@@ -44,6 +45,7 @@ import {
   categories,
   connections,
   householdRatios,
+  replaceRejections,
   subcategories,
   syncAccountResults,
   syncRuns,
@@ -55,6 +57,7 @@ import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
 import {
   categoryColumns,
+  isReplaced,
   onVisibleAccount,
   toAccount,
   toCategory,
@@ -69,6 +72,7 @@ import {
   SUGGESTION_WINDOW_DAYS,
   daysBetween,
   descriptionMatch,
+  looksReplaceable,
   refreshRefundCategories,
 } from './offsets';
 
@@ -342,12 +346,156 @@ export class AccountsService {
       .where(this.needsReview)
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
-    return { transactions: this.toTransactions(rows), count: rows.length };
+    const replacements = this.replacementSuggestions();
+    return {
+      transactions: this.toTransactions(rows),
+      replacements,
+      count: rows.length + replacements.length,
+    };
   }
 
-  /** How many transactions are waiting for review. */
+  /** How many transactions are waiting for review, with the suggested replacements. */
   countForReview(): number {
-    return this.db.select({ n: count() }).from(transactions).where(this.needsReview).get()?.n ?? 0;
+    const n = this.db.select({ n: count() }).from(transactions).where(this.needsReview).get()?.n;
+    return (n ?? 0) + this.replacementSuggestions().length;
+  }
+
+  /**
+   * Bank transactions that may be the purchase of a manual transaction paid by the owner
+   * (ADR 0009), closest first. Each manual and each bank transaction is in at most one pair, so
+   * the owner is never offered contradicting choices.
+   */
+  private replacementSuggestions(): ReplacementSuggestion[] {
+    const manuals = this.db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          isNull(transactions.accountId),
+          eq(transactions.paidBy, 'owner'),
+          lt(transactions.amount, 0),
+          not(isReplaced(this.db)),
+        ),
+      )
+      .all();
+    if (manuals.length === 0) return [];
+    const rejected = new Set(
+      this.db
+        .select()
+        .from(replaceRejections)
+        .all()
+        .map((r) => `${r.manualTransactionId}:${r.bankTransactionId}`),
+    );
+    const banks = this.db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          onVisibleAccount(this.db),
+          isNotNull(transactions.accountId),
+          lt(transactions.amount, 0),
+          eq(transactions.currency, 'SEK'),
+          isNull(transactions.replacesTransactionId),
+          isNull(transactions.offsetsTransactionId),
+        ),
+      )
+      .all();
+    const pairs = manuals
+      .flatMap((manual) =>
+        banks
+          .filter(
+            (bank) => looksReplaceable(manual, bank) && !rejected.has(`${manual.id}:${bank.id}`),
+          )
+          .map((bank) => ({ manual, bank })),
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(a.manual.amount - a.bank.amount) - Math.abs(b.manual.amount - b.bank.amount) ||
+          Math.abs(daysBetween(a.manual.date, a.bank.date)) -
+            Math.abs(daysBetween(b.manual.date, b.bank.date)) ||
+          b.bank.id - a.bank.id,
+      );
+    const usedManuals = new Set<number>();
+    const usedBanks = new Set<number>();
+    const chosen = pairs.filter(({ manual, bank }) => {
+      if (usedManuals.has(manual.id) || usedBanks.has(bank.id)) return false;
+      usedManuals.add(manual.id);
+      usedBanks.add(bank.id);
+      return true;
+    });
+    return chosen.map(({ manual, bank }) => ({
+      manual: this.listedTransaction(manual.id)!,
+      bank: this.listedTransaction(bank.id)!,
+    }));
+  }
+
+  /**
+   * The bank transaction replaces the manual one (ADR 0009): it takes the manual transaction's
+   * subcategory (confirmed) and share, and the manual one is hidden from then on.
+   */
+  replaceManual(
+    manualId: number,
+    bankId: number,
+  ): 'ok' | 'no-transaction' | 'not-replaceable' | 'taken' {
+    return this.db.transaction((tx) => {
+      const manual = tx.select().from(transactions).where(eq(transactions.id, manualId)).get();
+      const bank = tx.select().from(transactions).where(eq(transactions.id, bankId)).get();
+      if (manual === undefined || bank === undefined) return 'no-transaction' as const;
+      if (
+        manual.accountId !== null ||
+        manual.paidBy !== 'owner' ||
+        manual.amount >= 0 ||
+        bank.accountId === null ||
+        bank.amount >= 0 ||
+        bank.currency !== 'SEK' ||
+        bank.offsetsTransactionId !== null
+      ) {
+        return 'not-replaceable' as const;
+      }
+      const taken = tx
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          or(
+            eq(transactions.replacesTransactionId, manualId),
+            and(eq(transactions.id, bankId), isNotNull(transactions.replacesTransactionId)),
+          ),
+        )
+        .get();
+      if (taken !== undefined) return 'taken' as const;
+      tx.update(transactions)
+        .set({
+          replacesTransactionId: manualId,
+          subcategoryId: manual.subcategoryId,
+          categoryConfirmed: true,
+          categoryConfirmedAt: this.now(),
+          // The share the manual transaction counted with, so the purchase keeps its split.
+          share: effectiveShares(tx, [manual]).get(manualId)!.option,
+          // A refund offset against the manual transaction follows the bank one instead.
+        })
+        .where(eq(transactions.id, bankId))
+        .run();
+      tx.update(transactions)
+        .set({ offsetsTransactionId: bankId })
+        .where(eq(transactions.offsetsTransactionId, manualId))
+        .run();
+      refreshRefundCategories(tx);
+      return 'ok' as const;
+    });
+  }
+
+  /** Stores that the two are not the same purchase, so they are not suggested again. */
+  rejectReplacement(manualId: number, bankId: number): 'ok' | 'no-transaction' | 'not-replaceable' {
+    const manual = this.db.select().from(transactions).where(eq(transactions.id, manualId)).get();
+    const bank = this.db.select().from(transactions).where(eq(transactions.id, bankId)).get();
+    if (manual === undefined || bank === undefined) return 'no-transaction';
+    if (manual.accountId !== null || bank.accountId === null) return 'not-replaceable';
+    this.db
+      .insert(replaceRejections)
+      .values({ manualTransactionId: manualId, bankTransactionId: bankId })
+      .onConflictDoNothing()
+      .run();
+    return 'ok';
   }
 
   /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */

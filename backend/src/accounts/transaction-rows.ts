@@ -7,21 +7,38 @@ import type {
   TransactionAccount,
   TransactionCategory,
 } from '@bankapp/shared';
-import { eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, not, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type { AppDatabase } from '../db/database';
 import { accounts, categories, subcategories, transactions } from '../db/schema';
 
+const replacers = alias(transactions, 'replacers');
+
+/** True for a manual transaction that a bank transaction replaces (ADR 0009). */
+export function isReplaced(db: Pick<AppDatabase, 'select'>) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(replacers)
+      .where(eq(replacers.replacesTransactionId, transactions.id)),
+  );
+}
+
 /**
  * Only transactions of accounts the owner has not hidden are shown anywhere; a manual
- * transaction has no account and is never hidden (ADR 0009).
+ * transaction has no account and is never hidden, unless a bank transaction replaces it
+ * (ADR 0009).
  */
 export function onVisibleAccount(db: AppDatabase) {
-  return or(
-    isNull(transactions.accountId),
-    inArray(
-      transactions.accountId,
-      db.select({ id: accounts.id }).from(accounts).where(eq(accounts.hidden, false)),
+  return and(
+    or(
+      isNull(transactions.accountId),
+      inArray(
+        transactions.accountId,
+        db.select({ id: accounts.id }).from(accounts).where(eq(accounts.hidden, false)),
+      ),
     ),
+    not(isReplaced(db)),
   )!;
 }
 

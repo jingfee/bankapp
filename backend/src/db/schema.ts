@@ -3,6 +3,7 @@ import {
   type AnySQLiteColumn,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -164,6 +165,13 @@ export const transactions = sqliteTable(
     paidBy: text('paid_by', { enum: ['owner', 'partner'] })
       .notNull()
       .default('owner'),
+    /**
+     * The manual transaction this bank transaction replaces (ADR 0009), or null. The manual one
+     * is hidden while a transaction replaces it, and is back when that one is gone.
+     */
+    replacesTransactionId: integer('replaces_transaction_id').references(
+      (): AnySQLiteColumn => transactions.id,
+    ),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')
@@ -172,7 +180,24 @@ export const transactions = sqliteTable(
     index('transactions_account_date').on(table.accountId, table.date, table.id),
     index('transactions_subcategory_id').on(table.subcategoryId),
     index('transactions_offsets_transaction_id').on(table.offsetsTransactionId),
+    uniqueIndex('transactions_replaces_transaction_id')
+      .on(table.replacesTransactionId)
+      .where(sql`${table.replacesTransactionId} IS NOT NULL`),
   ],
+);
+
+/** A manual transaction and a bank transaction the owner said are not the same purchase. */
+export const replaceRejections = sqliteTable(
+  'replace_rejections',
+  {
+    manualTransactionId: integer('manual_transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    bankTransactionId: integer('bank_transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.manualTransactionId, table.bankTransactionId] })],
 );
 
 /**

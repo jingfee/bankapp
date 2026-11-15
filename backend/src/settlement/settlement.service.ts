@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gte, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, isNull, not, or } from 'drizzle-orm';
 import type {
   BalanceSetting,
   SettlementItem,
@@ -7,6 +7,7 @@ import type {
   SettlementResponse,
 } from '@bankapp/shared';
 import { effectiveShares } from '../accounts/shares';
+import { isReplaced } from '../accounts/transaction-rows';
 import { CLOCK, type Clock, localDay } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -134,7 +135,14 @@ export class SettlementService {
         and(
           or(isNull(transactions.accountId), eq(accounts.hidden, false)),
           gte(transactions.date, from),
-          or(isNull(accounts.connectedOn), gte(transactions.date, accounts.connectedOn)),
+          // A transaction that replaces a manual one stands in for it, so it counts even when
+          // dated before its account was connected (ADR 0009).
+          or(
+            isNull(accounts.connectedOn),
+            gte(transactions.date, accounts.connectedOn),
+            isNotNull(transactions.replacesTransactionId),
+          ),
+          not(isReplaced(this.db)),
         ),
       )
       .all();

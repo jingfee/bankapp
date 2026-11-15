@@ -417,6 +417,7 @@ describe('the initial sync', () => {
           offsetsTransactionId: null,
           share: null,
           paidBy: 'owner',
+          replacesTransactionId: null,
         },
       ]);
     });

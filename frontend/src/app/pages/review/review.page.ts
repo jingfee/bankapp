@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import type { Category, Transaction } from '@bankapp/shared';
+import type { Category, ReplacementSuggestion, Transaction } from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
 import { CategoryPickerComponent } from '../../category-picker/category-picker';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
@@ -34,7 +34,7 @@ type Status = 'loading' | 'ready' | 'failed';
           <header>
             <h1 class="text-3xl font-semibold tracking-tight">Att granska</h1>
           </header>
-          @if (transactions().length === 0) {
+          @if (transactions().length === 0 && replacements().length === 0) {
             <p data-empty>Inget att granska just nu.</p>
             <a routerLink="/transaktioner" class="self-start font-medium underline"
               >Till transaktionerna</a
@@ -51,6 +51,56 @@ type Status = 'loading' | 'ready' | 'failed';
             >
               {{ note }}
             </p>
+          }
+          @if (replacements().length > 0) {
+            <section
+              data-replacements
+              class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <h2 class="text-lg font-semibold">Samma köp?</h2>
+              <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+                @for (pair of replacements(); track pair.bank.id) {
+                  <li data-replacement [attr.data-manual]="pair.manual.id" class="py-3">
+                    @for (t of [pair.manual, pair.bank]; track t.id) {
+                      <div data-replacement-row class="flex items-center gap-3 py-1">
+                        <a
+                          [routerLink]="['/transaktioner', t.id]"
+                          class="flex min-w-0 flex-1 flex-col"
+                        >
+                          <span data-description>{{ t.description }}</span>
+                          <span data-meta class="text-sm text-zinc-500 dark:text-zinc-400"
+                            >{{ t.date | dateHeading }} · {{ t.account?.name ?? 'Manuell' }}</span
+                          >
+                        </a>
+                        <span data-amount class="font-medium tabular-nums">{{
+                          t.amount.amount | money: t.amount.currency
+                        }}</span>
+                      </div>
+                    }
+                    <div class="mt-2 flex gap-3">
+                      <button
+                        type="button"
+                        data-replace
+                        class="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                        [disabled]="deciding() !== null"
+                        (click)="decide(pair, 'replace')"
+                      >
+                        Ersätt
+                      </button>
+                      <button
+                        type="button"
+                        data-not-same
+                        class="text-sm font-medium underline disabled:opacity-50"
+                        [disabled]="deciding() !== null"
+                        (click)="decide(pair, 'notSame')"
+                      >
+                        Inte samma
+                      </button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            </section>
           }
           @for (group of groups(); track group.key) {
             <section
@@ -132,6 +182,8 @@ export class ReviewPage {
 
   protected readonly status = signal<Status>('loading');
   protected readonly transactions = signal<Transaction[]>([]);
+  protected readonly replacements = signal<ReplacementSuggestion[]>([]);
+  protected readonly deciding = signal<number | null>(null);
   protected readonly picking = signal<number | null>(null);
   protected readonly saving = signal<number | null>(null);
   protected readonly error = signal<string | null>(null);
@@ -161,6 +213,7 @@ export class ReviewPage {
     this.service.review().subscribe({
       next: (response) => {
         this.transactions.set(response.transactions);
+        this.replacements.set(response.replacements);
         this.status.set('ready');
       },
       error: () => this.status.set('failed'),
@@ -168,16 +221,37 @@ export class ReviewPage {
   }
 
   /** Fetches the list again after a save changed other rows; a failure keeps what is shown. */
-  private refresh(): void {
+  private refresh(withReplacements = false): void {
     const saves = ++this.refreshes;
     this.service.review().subscribe({
       // An answer that a later save has outdated would bring back a row confirmed meanwhile.
       next: (response) => {
         if (saves === this.refreshes && this.saving() === null) {
           this.transactions.set(response.transactions);
+          if (withReplacements) this.replacements.set(response.replacements);
         }
       },
       error: () => undefined,
+    });
+  }
+
+  /** Replaces the manual transaction with the bank one, or says they are not the same. */
+  protected decide(pair: ReplacementSuggestion, choice: 'replace' | 'notSame'): void {
+    if (this.deciding() !== null) return;
+    this.deciding.set(pair.bank.id);
+    this.error.set(null);
+    const request = { manualId: pair.manual.id, bankId: pair.bank.id };
+    this.service[choice](request).subscribe({
+      next: () => {
+        this.replacements.update((shown) => shown.filter((p) => p !== pair));
+        this.deciding.set(null);
+        // The bank transaction is confirmed by Ersätt, and other pairs may change.
+        this.refresh(true);
+      },
+      error: () => {
+        this.error.set('Det gick inte att spara. Försök igen.');
+        this.deciding.set(null);
+      },
     });
   }
 
