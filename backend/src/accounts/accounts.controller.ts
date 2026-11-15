@@ -29,6 +29,7 @@ import type {
 import type { ShareOption } from '@bankapp/shared';
 import { SHARE_OPTIONS } from '../db/share-options';
 import { isDay } from '../clock';
+import { parseFilter } from './transaction-filter';
 import { AccountsService } from './accounts.service';
 
 @Controller('accounts')
@@ -145,8 +146,14 @@ export class TransactionsController {
   constructor(private readonly accounts: AccountsService) {}
 
   @Get()
-  list(@Query('before') before?: string): TransactionsResponse {
-    const page = this.accounts.listTransactions(before);
+  list(
+    @Query('before') before?: string,
+    @Query() query: Record<string, unknown> = {},
+  ): TransactionsResponse {
+    const { q, from, to, accounts, categories, kind, min, max } = query;
+    const filter = parseFilter({ q, from, to, accounts, categories, kind, min, max });
+    if ('error' in filter) throw new BadRequestException(filter.error);
+    const page = this.accounts.listTransactions(before, filter);
     if (page === 'bad-cursor') throw new BadRequestException('The cursor is not valid');
     return page;
   }

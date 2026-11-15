@@ -184,7 +184,7 @@ describe('TransactionDetailsPage', () => {
     it('sets the chosen option and shows the new share', async () => {
       const { page, fixture, http } = await openChoices(details());
       const service = TestBed.inject(TransactionsService);
-      service.listed = { transactions: [], cursor: null };
+      service.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
 
       optionButtons(page)[3]!.click();
       const put = http.expectOne('/api/transactions/5/share');
@@ -292,8 +292,11 @@ describe('TransactionDetailsPage', () => {
       const service = TestBed.inject(TransactionsService);
       const guess = { ...livsmedel, confirmed: false };
       service.listed = {
+        key: '',
         transactions: [{ ...details(), date: '2026-11-08', category: guess }],
         cursor: null,
+        count: 1,
+        sum: null,
       };
       const rendered = await render(details({ category: guess }));
       const { page } = rendered;
@@ -448,7 +451,7 @@ describe('TransactionDetailsPage', () => {
     it('saves the chosen subcategory as confirmed and shows it, also in the list kept for the way back', async () => {
       const service = TestBed.inject(TransactionsService);
       const listed = { ...details(), date: '2026-11-08', category: livsmedel };
-      service.listed = { transactions: [listed], cursor: null };
+      service.listed = { key: '', transactions: [listed], cursor: null, count: 1, sum: null };
       const rendered = await render(details({ category: livsmedel }));
       await openPicker(rendered);
 
@@ -560,7 +563,7 @@ describe('TransactionDetailsPage', () => {
 
     it('offers suggestions on a money-in transaction and links the chosen purchase', async () => {
       const service = TestBed.inject(TransactionsService);
-      service.listed = { transactions: [], cursor: null };
+      service.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
       const rendered = await render(details({ amount: refund.amount }));
       const http = TestBed.inject(HttpTestingController);
 

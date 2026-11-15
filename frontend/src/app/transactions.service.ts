@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type {
   ManualTransactionRequest,
+  Money,
   OffsetCandidatesResponse,
   ReplacementRequest,
   SetTransactionCategoryRequest,
@@ -15,12 +16,21 @@ import type {
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
+import {
+  EMPTY_FILTERS,
+  type TransactionFilters,
+  filtersToParams,
+} from './pages/transactions/transaction-filters';
 import { type Observable, type Subscription, tap } from 'rxjs';
 
 /** The part of the list the owner has loaded, kept so going back to it finds it as it was left. */
 export interface ListedTransactions {
+  /** The query string it was loaded for; it is only shown again for the same one. */
+  key: string;
   transactions: Transaction[];
   cursor: string | null;
+  count: number;
+  sum: Money | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -33,10 +43,16 @@ export class TransactionsService {
   /** How many transactions wait for review, shown on the header icon; 0 until it is known. */
   readonly reviewCount = signal(0);
 
-  /** One page of the transactions of every account, newest first; `before` continues a previous page. */
-  list(before?: string): Observable<TransactionsResponse> {
+  /**
+   * One page of the transactions of every account, newest first; `before` continues a previous
+   * page, and `filters` narrow the list.
+   */
+  list(
+    before?: string,
+    filters: TransactionFilters = EMPTY_FILTERS,
+  ): Observable<TransactionsResponse> {
     return this.http.get<TransactionsResponse>('/api/transactions', {
-      params: before === undefined ? {} : { before },
+      params: { ...filtersToParams(filters), ...(before === undefined ? {} : { before }) },
     });
   }
 

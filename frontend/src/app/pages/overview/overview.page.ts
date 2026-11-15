@@ -191,6 +191,19 @@ function bars<T extends { id: number; name: string; total: number }>(
                   <dd data-change class="basis-full text-xs text-zinc-500 dark:text-zinc-400">
                     {{ total.change }}
                   </dd>
+                  @if (total.kind !== 'net') {
+                    <dd class="basis-full text-xs">
+                      <a
+                        data-total-link
+                        routerLink="/transaktioner"
+                        [queryParams]="
+                          monthParams({ kind: total.kind === 'income' ? 'in' : 'out' })
+                        "
+                        class="font-medium underline"
+                        >Visa transaktioner</a
+                      >
+                    </dd>
+                  }
                 </div>
               }
             </dl>
@@ -229,6 +242,15 @@ function bars<T extends { id: number; name: string; total: number }>(
                           <ul
                             class="mt-1 mb-2 ml-3 flex flex-col border-l border-zinc-200 pl-1 dark:border-zinc-700"
                           >
+                            <li class="px-2 py-1 text-sm">
+                              <a
+                                data-category-link
+                                routerLink="/transaktioner"
+                                [queryParams]="monthParams({ categories: '' + bar.item.id })"
+                                class="font-medium underline"
+                                >Visa alla transaktioner i {{ bar.item.name }}</a
+                              >
+                            </li>
                             @for (sub of subBars(bar.item); track sub.item.id) {
                               <li [attr.data-subcategory-row]="sub.item.name">
                                 <app-category-bar
@@ -367,6 +389,18 @@ export class OverviewPage {
       { key: 'income', title: labelOf('income'), bars: bars(this.income(), o?.totals.income ?? 0) },
     ];
   });
+
+  /** Transaktioner pre-filtered to the month shown, and whatever else `extra` adds. */
+  protected monthParams(extra: Record<string, string>): Record<string, string> {
+    const [year, number] = this.month().split('-').map(Number) as [number, number];
+    const day = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return {
+      from: day(new Date(year, number - 1, 1)),
+      to: day(new Date(year, number, 0)),
+      ...extra,
+    };
+  }
 
   protected readonly totalRows = computed(() => {
     const o = this.overview();

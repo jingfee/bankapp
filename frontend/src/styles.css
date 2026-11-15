@@ -638,6 +638,8 @@ router-outlet + * {
 @media (prefers-reduced-motion: reduce) {
   router-outlet + *,
   .stagger > *,
+  .sheet,
+  .sheet-backdrop,
   .toast {
     animation: none;
   }
@@ -653,6 +655,34 @@ router-outlet + * {
 }
 
 @layer components {
+  /* Filter panel: slides in from the right on desktop, up from the bottom on mobile */
+  .sheet {
+    animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .sheet-backdrop {
+    animation: fade-in 0.2s ease;
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateX(110%);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (min-width: 40rem) {
+    .sheet {
+      animation-name: sheet-in;
+    }
+  }
+
   /* Login card: a short shake after wrong credentials */
   .shake {
     animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
