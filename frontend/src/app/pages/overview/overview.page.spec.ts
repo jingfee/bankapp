@@ -358,6 +358,23 @@ describe('OverviewPage', () => {
         categories: [salary, food, home],
       });
 
+    it('links the totals and an expanded category to Transaktioner for the month', async () => {
+      const { fixture, page } = await render(body());
+
+      const links = Array.from(page.querySelectorAll('[data-total-link]')).map((a) =>
+        a.getAttribute('href'),
+      );
+      expect(links).toEqual([
+        '/transaktioner?from=2026-11-01&to=2026-11-30&kind=in',
+        '/transaktioner?from=2026-11-01&to=2026-11-30&kind=out',
+      ]);
+
+      await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
+      expect(
+        row(page, 'Mat & Dryck')?.querySelector('[data-category-link]')?.getAttribute('href'),
+      ).toBe('/transaktioner?from=2026-11-01&to=2026-11-30&categories=2');
+    });
+
     it('lists spending per category as bars, largest first, with amount and share', async () => {
       const { page } = await render(body());
 

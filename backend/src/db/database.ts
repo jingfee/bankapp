@@ -22,6 +22,10 @@ export function openDatabase(location: { dataDir: string } | { inMemory: true })
   }
   const sqlite = new Database(file);
   if (file !== ':memory:') sqlite.pragma('journal_mode = WAL');
+  // SQLite's own lower() and LIKE fold the case of ASCII letters only, so å, ä and ö would not match.
+  sqlite.function('unicode_lower', { deterministic: true }, (text) =>
+    typeof text === 'string' ? text.toLowerCase() : text,
+  );
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder });
   return { db, close: () => sqlite.close() };

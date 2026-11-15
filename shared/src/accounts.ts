@@ -143,6 +143,10 @@ export interface TransactionsResponse {
   transactions: Transaction[];
   /** Pass as `?before=` to get the next, older page; null when there are no more. */
   nextCursor: string | null;
+  /** How many transactions match the filters, over every page. */
+  count: number;
+  /** Their total, or null when there are none or they mix currencies. */
+  sum: Money | null;
 }
 
 /** Response body of `GET /api/transactions/review`: what is waiting for the owner's review. */

@@ -54,6 +54,7 @@ import {
 import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, localDay, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
+import { filterCondition, type TransactionFilter } from './transaction-filter';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
 import {
   categoryColumns,
@@ -264,9 +265,13 @@ export class AccountsService {
    * One page of the transactions of every account, newest first. `before` is the `nextCursor` of
    * the previous page; the cursor is a position rather than an offset, so transactions arriving
    * from a sync while the owner scrolls neither repeat nor skip. `'bad-cursor'` for a cursor
-   * that is not one we handed out.
+   * that is not one we handed out. `filter` narrows the list, and `count` and `sum` cover every
+   * match rather than the page.
    */
-  listTransactions(before?: string): TransactionsResponse | 'bad-cursor' {
+  listTransactions(
+    before?: string,
+    filter: TransactionFilter = {},
+  ): TransactionsResponse | 'bad-cursor' {
     let after = undefined;
     if (before !== undefined) {
       const match = /^(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(before);
@@ -277,6 +282,7 @@ export class AccountsService {
         and(eq(transactions.date, date), lt(transactions.id, Number(id))),
       );
     }
+    const matching = and(onVisibleAccount(this.db), filterCondition(filter));
     const rows = this.db
       .select({
         transaction: transactions,
@@ -290,15 +296,32 @@ export class AccountsService {
       .leftJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(onVisibleAccount(this.db), after))
+      .where(and(matching, after))
       .orderBy(desc(transactions.date), desc(transactions.id))
       .limit(TRANSACTIONS_PAGE_SIZE + 1)
       .all();
+    const totals = this.db
+      .select({
+        count: sql<number>`count(*)`,
+        sum: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
+        currencies: sql<number>`count(distinct ${transactions.currency})`,
+        currency: sql<string | null>`min(${transactions.currency})`,
+      })
+      .from(transactions)
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(matching)
+      .get()!;
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1)?.transaction;
     return {
       transactions: this.toTransactions(page),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
+      count: totals.count,
+      sum:
+        totals.currencies === 1 && totals.currency !== null
+          ? { amount: Math.round(totals.sum * 100) / 100, currency: totals.currency }
+          : null,
     };
   }
 
