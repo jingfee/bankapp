@@ -14,7 +14,9 @@ import { AccountsService } from '../../accounts.service';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
+import { balanceText } from '../../formatting/settlement-balance';
 import { OverviewService } from '../../overview.service';
+import { SettlementService } from '../../settlement.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
 
 type Status = 'loading' | 'ready' | 'failed';
@@ -111,6 +113,17 @@ function bars<T extends { id: number; name: string; total: number }>(
             </li>
           }
         </ul>
+      }
+
+      @if (settlementCard(); as card) {
+        <a
+          data-settlement-card
+          routerLink="/avrakning"
+          class="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <span>Avräkning: {{ card }}</span>
+          <span aria-hidden="true">›</span>
+        </a>
       }
 
       <header class="flex items-center justify-between">
@@ -286,6 +299,21 @@ export class OverviewPage {
       .pipe(catchError(() => of(undefined))),
     { initialValue: undefined },
   );
+
+  /** Fetched once; the card is a convenience, so a failure just leaves it out. */
+  private readonly settlement = toSignal(
+    inject(SettlementService)
+      .balance()
+      .pipe(catchError(() => of(undefined))),
+    { initialValue: undefined },
+  );
+
+  /** What the card says; before any balance setting it invites the owner to set one. */
+  protected readonly settlementCard = computed(() => {
+    const response = this.settlement();
+    if (response === undefined) return null;
+    return response.balance === null ? 'inte inställd' : balanceText(response.balance);
+  });
 
   protected readonly openAccounts = computed<ConnectedAccount[] | null>(() => {
     const open =

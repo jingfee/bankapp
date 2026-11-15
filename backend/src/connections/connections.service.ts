@@ -4,7 +4,7 @@ import { and, eq, lt, notInArray } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
-import { CLOCK, type Clock } from '../clock';
+import { CLOCK, type Clock, localDay } from '../clock';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import { accounts, authorisations, banks, connections } from '../db/schema';
@@ -112,9 +112,14 @@ export class ConnectionsService {
           .returning({ id: connections.id })
           .get();
         if (session.accounts.length > 0) {
+          const connectedOn = localDay(this.now());
           tx.insert(accounts)
             .values(
-              session.accounts.map((account) => ({ ...account, connectionId: connection.id })),
+              session.accounts.map((account) => ({
+                ...account,
+                connectionId: connection.id,
+                connectedOn,
+              })),
             )
             .run();
         }
@@ -172,7 +177,7 @@ export class ConnectionsService {
           .run();
       } else {
         tx.insert(accounts)
-          .values({ ...account, connectionId })
+          .values({ ...account, connectionId, connectedOn: localDay(this.now()) })
           .run();
       }
     }

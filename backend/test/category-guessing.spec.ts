@@ -257,6 +257,17 @@ describe('guessing categories', () => {
     ]);
   });
 
+  it('recognises the partner’s incoming transfers as Avräkning delade utgifter once one is confirmed', async () => {
+    await syncWith(transaction('Swish från Anna Andersson', { amount: 3000 }));
+    await confirm('Swish från Anna Andersson', 'Överföring', 'Avräkning delade utgifter');
+
+    await syncWith(transaction('Swish från Anna Andersson', { amount: 2500 }));
+
+    expect((await listed()).slice(1)).toEqual([
+      ['Swish från Anna Andersson', 'Överföring / Avräkning delade utgifter ?'],
+    ]);
+  });
+
   it('reuses the most recently confirmed category when several were confirmed', async () => {
     await syncWith(transaction('Kiosken Vega 1'), transaction('Kiosken Vega 2'));
     await confirm('Kiosken Vega 2', 'Mat & Dryck', 'Café & fika');

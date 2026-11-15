@@ -127,6 +127,13 @@
       "when": 1794609770128,
       "tag": "0017_account_shares",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1794724904648,
+      "tag": "0018_settlement_balance",
+      "breakpoints": true
     }
   ]
 }

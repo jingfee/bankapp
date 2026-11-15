@@ -158,6 +158,7 @@ describe('connecting a bank', () => {
         closed: false,
         hidden: false,
         share: null,
+        connectedOn: '2026-11-10',
       });
     });
 

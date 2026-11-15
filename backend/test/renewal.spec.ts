@@ -226,6 +226,25 @@ describe('connection expiry and renewal', () => {
       ]);
     });
 
+    it('records the day a new account is first connected, and keeps the first day of the others', async () => {
+      await start();
+      await connect(session(new Date(START.getTime() + 5 * DAY), [lonekonto]));
+      now = new Date(START.getTime() + 3 * DAY);
+
+      await renew(session(FUTURE, [lonekonto, sparkonto]));
+
+      expect(
+        db()
+          .select()
+          .from(accounts)
+          .all()
+          .map((row) => [row.identificationHash, row.connectedOn]),
+      ).toEqual([
+        ['hash-1', '2026-11-10'],
+        ['hash-2', '2026-11-13'],
+      ]);
+    });
+
     it('keeps the history of renewed accounts', async () => {
       await start();
       enableBanking.transactions.set('uid-1', [

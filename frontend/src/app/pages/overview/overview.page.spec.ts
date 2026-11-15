@@ -112,6 +112,7 @@ describe('OverviewPage', () => {
   async function render(
     body: OverviewResponse | 'error' = overview(),
     accounts: AccountsResponse | 'error' = accountsOf([]),
+    settlement: number | null | 'error' = null,
   ) {
     const fixture = TestBed.createComponent(OverviewPage);
     await fixture.whenStable();
@@ -119,6 +120,9 @@ describe('OverviewPage', () => {
     const accountsRequest = http.expectOne('/api/accounts');
     if (accounts === 'error') accountsRequest.error(new ProgressEvent('error'));
     else accountsRequest.flush(accounts);
+    const settlementRequest = http.expectOne('/api/settlement/balance');
+    if (settlement === 'error') settlementRequest.error(new ProgressEvent('error'));
+    else settlementRequest.flush({ balance: settlement });
     await answer(http, body);
     await fixture.whenStable();
     return { fixture, page: fixture.nativeElement as HTMLElement, http };
@@ -146,6 +150,35 @@ describe('OverviewPage', () => {
     const { page } = await render();
 
     expect(text(page.querySelector('[data-month]'))).toBe('november 2026');
+  });
+
+  describe('the settlement card', () => {
+    const card = (page: HTMLElement) => page.querySelector('[data-settlement-card]');
+
+    it('says what the partner owes and links to Avräkning', async () => {
+      const { page } = await render(overview(), accountsOf([]), 4312);
+
+      expect(text(card(page))).toContain('Avräkning: 4 312,00 kr att få');
+      expect(card(page)?.getAttribute('href')).toBe('/avrakning');
+    });
+
+    it('says att betala when the balance is negative', async () => {
+      const { page } = await render(overview(), accountsOf([]), -250);
+
+      expect(text(card(page))).toContain('Avräkning: 250,00 kr att betala');
+    });
+
+    it('invites a first setting when there is no balance yet', async () => {
+      const { page } = await render();
+
+      expect(text(card(page))).toContain('Avräkning: inte inställd');
+    });
+
+    it('is left out when the balance cannot be fetched', async () => {
+      const { page } = await render(overview(), accountsOf([]), 'error');
+
+      expect(card(page)).toBeNull();
+    });
   });
 
   describe('totals', () => {
@@ -186,6 +219,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
+      http.expectOne('/api/settlement/balance').flush({ balance: null });
       const request = http.expectOne((r) => r.url === '/api/overview');
       expect(request.request.params.get('view')).toBe('mine');
       request.flush(overview());
@@ -218,6 +252,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
+      http.expectOne('/api/settlement/balance').flush({ balance: null });
       const request = http.expectOne((r) => r.url === '/api/overview');
       expect(request.request.params.get('view')).toBe('full');
       request.flush(overview());
@@ -253,6 +288,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
+      http.expectOne('/api/settlement/balance').flush({ balance: null });
       http.expectOne((r) => r.url === '/api/overview').flush(body());
       await fixture.whenStable();
       const page = fixture.nativeElement as HTMLElement;

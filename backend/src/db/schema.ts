@@ -46,6 +46,12 @@ export const accounts = sqliteTable('accounts', {
    * shows as Jag but lets the subcategory's share apply. Choosing Jag on Banker clears it.
    */
   share: text('share', { enum: SHARE_OPTIONS }),
+  /**
+   * The day the account was first connected (`YYYY-MM-DD`); only transactions dated on or after
+   * it count in the settlement balance (ADR 0008). Null for accounts connected before this was
+   * recorded, which count in full.
+   */
+  connectedOn: text('connected_on'),
   /** The account as Enable Banking last returned it, as JSON; empty until first seen (ADR 0001). */
   raw: text('raw'),
 });
@@ -209,6 +215,17 @@ export const subcategories = sqliteTable(
 export const householdRatios = sqliteTable('household_ratios', {
   from: text('from').primaryKey(),
   percent: integer('percent').notNull(),
+});
+
+/**
+ * The owner stating that the settlement balance was `amount` as of `asOf` (`YYYY-MM-DD`); the
+ * latest as-of day wins, and a later setting for the same day wins over an earlier one (ADR 0008).
+ */
+export const balanceSettings = sqliteTable('balance_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  amount: real('amount').notNull(),
+  asOf: text('as_of').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
 /** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
