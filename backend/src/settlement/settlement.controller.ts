@@ -4,7 +4,8 @@ import type {
   SettlementBalanceResponse,
   SettlementResponse,
 } from '@bankapp/shared';
-import { SettlementService, isDay } from './settlement.service';
+import { isDay } from '../clock';
+import { SettlementService } from './settlement.service';
 
 @Controller('settlement')
 export class SettlementController {

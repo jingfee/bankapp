@@ -5,16 +5,21 @@ import {
   Controller,
   Get,
   NotFoundException,
+  Delete,
+  HttpCode,
   Param,
+  Post,
   Put,
   Query,
 } from '@nestjs/common';
 import type {
   AccountsResponse,
   HouseholdRatioResponse,
+  ManualTransactionRequest,
   OffsetCandidatesResponse,
   SubcategorySharesResponse,
   TransactionCategoryResponse,
+  Transaction,
   TransactionDetails,
   TransactionReviewCountResponse,
   TransactionReviewResponse,
@@ -22,6 +27,7 @@ import type {
 } from '@bankapp/shared';
 import type { ShareOption } from '@bankapp/shared';
 import { SHARE_OPTIONS } from '../db/share-options';
+import { isDay } from '../clock';
 import { AccountsService } from './accounts.service';
 
 @Controller('accounts')
@@ -155,6 +161,44 @@ export class TransactionsController {
     return { count: this.accounts.countForReview() };
   }
 
+  /** Adds a manual transaction (ADR 0009). */
+  @Post()
+  add(@Body() body: unknown): Transaction {
+    const result = this.accounts.addManualTransaction(parseManual(body));
+    if (result === 'no-subcategory') throw new BadRequestException('There is no such subcategory');
+    if (result === 'no-ratio') {
+      throw new ConflictException('Set a household ratio before choosing Hushåll');
+    }
+    return result;
+  }
+
+  /** Edits a manual transaction; a bank transaction cannot be edited. */
+  @Put(':id')
+  edit(@Param('id') id: string, @Body() body: unknown): Transaction {
+    if (!isId(id)) throw new NotFoundException('There is no such transaction');
+    const result = this.accounts.editManualTransaction(Number(id), parseManual(body));
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'not-manual') {
+      throw new ConflictException('Only a manual transaction can be edited');
+    }
+    if (result === 'no-subcategory') throw new BadRequestException('There is no such subcategory');
+    if (result === 'no-ratio') {
+      throw new ConflictException('Set a household ratio before choosing Hushåll');
+    }
+    return result;
+  }
+
+  /** Deletes a manual transaction; a bank transaction cannot be deleted. */
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Param('id') id: string): void {
+    const result = isId(id) ? this.accounts.deleteManualTransaction(Number(id)) : 'no-transaction';
+    if (result === 'no-transaction') throw new NotFoundException('There is no such transaction');
+    if (result === 'not-manual') {
+      throw new ConflictException('Only a manual transaction can be deleted');
+    }
+  }
+
   @Get(':id')
   get(@Param('id') id: string): TransactionDetails {
     const details = isId(id) ? this.accounts.getTransaction(Number(id)) : null;
@@ -227,6 +271,37 @@ export class TransactionsController {
     }
     return result;
   }
+}
+
+/** Reads and checks the body of adding or editing a manual transaction. */
+function parseManual(body: unknown): ManualTransactionRequest {
+  const { description, amount, subcategoryId, date, share } = (body ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (typeof description !== 'string' || description.trim() === '' || description.length > 200) {
+    throw new BadRequestException('description must be a text of at most 200 characters');
+  }
+  const rounded = typeof amount === 'number' ? Math.round(amount * 100) / 100 : NaN;
+  if (!Number.isFinite(rounded) || rounded === 0 || Math.abs(rounded) > 1e9) {
+    throw new BadRequestException('amount must be a number other than 0, below a billion');
+  }
+  if (typeof subcategoryId !== 'number' || !Number.isInteger(subcategoryId)) {
+    throw new BadRequestException('subcategoryId must be a subcategory id');
+  }
+  if (date !== undefined && (typeof date !== 'string' || !isDay(date))) {
+    throw new BadRequestException('date must be a day, YYYY-MM-DD');
+  }
+  if (share != null && !SHARE_OPTIONS.includes(share as ShareOption)) {
+    throw new BadRequestException(`share must be one of ${SHARE_OPTIONS.join(', ')} or null`);
+  }
+  return {
+    description,
+    amount: rounded,
+    subcategoryId,
+    ...(date === undefined ? {} : { date }),
+    share: (share ?? null) as ShareOption | null,
+  };
 }
 
 function isId(value: string): boolean {

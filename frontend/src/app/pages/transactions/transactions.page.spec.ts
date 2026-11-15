@@ -262,4 +262,11 @@ describe('TransactionsPage', () => {
       expect(page.querySelector('button[data-more]')).not.toBeNull();
     });
   });
+
+  it('shows Manuell where a manual transaction’s account would be and links to adding one', async () => {
+    const { page } = await render(response([transaction(1, { account: null })]));
+
+    expect(page.querySelector('[data-account]')?.textContent?.trim()).toBe('Manuell');
+    expect(page.querySelector('[data-add]')?.getAttribute('href')).toBe('/transaktioner/ny');
+  });
 });

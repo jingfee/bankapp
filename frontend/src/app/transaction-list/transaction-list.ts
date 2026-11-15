@@ -43,9 +43,11 @@ interface DayGroup {
                 <app-transaction-category-badge [category]="transaction.category" />
                 <span class="flex min-w-0 flex-1 flex-col">
                   <span data-description>{{ transaction.description }}</span>
-                  <span data-account class="text-sm text-zinc-500 dark:text-zinc-400"
-                    >{{ transaction.account.name }} · {{ transaction.account.bank }}</span
-                  >
+                  <span data-account class="text-sm text-zinc-500 dark:text-zinc-400">{{
+                    transaction.account
+                      ? transaction.account.name + ' · ' + transaction.account.bank
+                      : 'Manuell'
+                  }}</span>
                   @if (badge(transaction); as label) {
                     <span
                       data-share-badge

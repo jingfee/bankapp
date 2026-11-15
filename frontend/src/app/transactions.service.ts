@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type {
+  ManualTransactionRequest,
   OffsetCandidatesResponse,
   SetTransactionCategoryRequest,
   SetTransactionOffsetRequest,
@@ -61,6 +62,25 @@ export class TransactionsService {
         next: (response) => this.reviewCount.set(response.count),
         error: () => undefined,
       });
+  }
+
+  /** Adds a manual transaction. The list kept for the way back is dropped: it has a new row. */
+  addManual(request: ManualTransactionRequest): Observable<Transaction> {
+    return this.http
+      .post<Transaction>('/api/transactions', request)
+      .pipe(tap(() => (this.listed = null)));
+  }
+
+  /** Replaces what the owner entered for a manual transaction. */
+  editManual(id: number, request: ManualTransactionRequest): Observable<Transaction> {
+    return this.http
+      .put<Transaction>(`/api/transactions/${id}`, request)
+      .pipe(tap(() => (this.listed = null)));
+  }
+
+  /** Deletes a manual transaction. */
+  deleteManual(id: number): Observable<void> {
+    return this.http.delete<void>(`/api/transactions/${id}`).pipe(tap(() => (this.listed = null)));
   }
 
   /** One transaction in full; errors with a 404 when it no longer exists. */

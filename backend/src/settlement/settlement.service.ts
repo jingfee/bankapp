@@ -15,15 +15,11 @@ import { accounts, balanceSettings, categories, subcategories, transactions } fr
 /** The subcategory the partner's transfers are categorised as (Överföring › Avräkning delade utgifter). */
 export const SETTLEMENT_SUBCATEGORY = 'Avräkning delade utgifter';
 
+/** What a manual transaction shows where an account's name would be. */
+export const MANUAL_ACCOUNT_NAME = 'Manuell';
+
 /** Money sums are floats; rounding to öre keeps the noise out of the API. */
 const round = (value: number) => Math.round(value * 100) / 100 + 0;
-
-/** Whether `value` is a real calendar day as `YYYY-MM-DD`. */
-export function isDay(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
-}
 
 /** What the replay of one transaction needs: where it falls and what it adds to the balance. */
 interface Event {
@@ -131,12 +127,12 @@ export class SettlementService {
         subcategoryName: subcategories.name,
       })
       .from(transactions)
-      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(
         and(
-          eq(accounts.hidden, false),
+          or(isNull(transactions.accountId), eq(accounts.hidden, false)),
           gte(transactions.date, from),
           or(isNull(accounts.connectedOn), gte(transactions.date, accounts.connectedOn)),
         ),
@@ -166,7 +162,7 @@ export class SettlementService {
           transactionId: transaction.id,
           date: transaction.date,
           description: transaction.description,
-          accountName: row.accountName,
+          accountName: row.accountName ?? MANUAL_ACCOUNT_NAME,
           amount: transaction.amount,
           share: share.option,
           partnerPart,

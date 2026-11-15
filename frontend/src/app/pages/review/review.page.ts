@@ -69,7 +69,7 @@ type Status = 'loading' | 'ready' | 'failed';
                       >
                         <span data-description>{{ t.description }}</span>
                         <span data-meta class="text-sm text-zinc-500 dark:text-zinc-400"
-                          >{{ t.date | dateHeading }} · {{ t.account.name }}</span
+                          >{{ t.date | dateHeading }} · {{ t.account?.name ?? 'Manuell' }}</span
                         >
                         @if (t.category; as c) {
                           <span data-guess class="text-sm text-zinc-500 dark:text-zinc-400"

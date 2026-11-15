@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
@@ -21,6 +22,7 @@ import {
 import type {
   AccountsResponse,
   HouseholdRatioEntry,
+  ManualTransactionRequest,
   Money,
   OffsetTransaction,
   ShareOption,
@@ -47,12 +49,13 @@ import {
   transactions,
 } from '../db/schema';
 import { connectionStatus } from '../connections/connection-status';
-import { CLOCK, type Clock } from '../clock';
+import { CLOCK, localDay, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
 import {
   categoryColumns,
   onVisibleAccount,
+  toAccount,
   toCategory,
   toTransaction,
   type ListedRow,
@@ -278,8 +281,8 @@ export class AccountsService {
         category: categoryColumns,
       })
       .from(transactions)
-      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(and(onVisibleAccount(this.db), after))
@@ -331,8 +334,8 @@ export class AccountsService {
         category: categoryColumns,
       })
       .from(transactions)
-      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(this.needsReview)
@@ -357,8 +360,8 @@ export class AccountsService {
         category: categoryColumns,
       })
       .from(transactions)
-      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(connections, eq(accounts.connectionId, connections.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(and(eq(transactions.id, id), onVisibleAccount(this.db)))
@@ -378,7 +381,7 @@ export class AccountsService {
       status: row.status,
       amount: { amount: row.amount, currency: row.currency },
       description: row.description,
-      account: { id: row.accountId, name: accountName, bank, type: accountType },
+      account: toAccount(row.accountId, accountName, bank, accountType),
       category: toCategory(category),
       share: effectiveShares(this.db, [row]).get(row.id)!,
       transactionDate: row.transactionDate,
@@ -419,6 +422,119 @@ export class AccountsService {
     if (share !== null && !canChoose(this.db, share)) return 'no-ratio';
     this.db.update(transactions).set({ share }).where(eq(transactions.id, id)).run();
     return this.getTransaction(id) ?? 'no-transaction';
+  }
+
+  /**
+   * Adds a manual transaction (ADR 0009): no account, booked, its subcategory confirmed. The
+   * date is today and the share the subcategory's unless given. The caller has validated the
+   * request's shape.
+   */
+  addManualTransaction(
+    request: ManualTransactionRequest,
+  ): Transaction | 'no-subcategory' | 'no-ratio' {
+    const checked = this.checkManual(request);
+    if (typeof checked === 'string') return checked;
+    const now = this.now();
+    const date = request.date ?? localDay(now);
+    const id = this.db
+      .insert(transactions)
+      .values({
+        accountId: null,
+        status: 'booked',
+        currency: 'SEK',
+        dedupKey: `manual:${randomUUID()}`,
+        raw: '{}',
+        fetchedAt: now,
+        categoryConfirmed: true,
+        categoryConfirmedAt: now,
+        ...checked,
+        date,
+        transactionDate: date,
+      })
+      .returning({ id: transactions.id })
+      .get().id;
+    return this.listedTransaction(id)!;
+  }
+
+  /** Replaces what the owner entered for a manual transaction; a bank transaction cannot be edited. */
+  editManualTransaction(
+    id: number,
+    request: ManualTransactionRequest,
+  ): Transaction | 'no-transaction' | 'not-manual' | 'no-subcategory' | 'no-ratio' {
+    const current = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
+    if (current === undefined) return 'no-transaction';
+    if (current.accountId !== null) return 'not-manual';
+    const checked = this.checkManual(request);
+    if (typeof checked === 'string') return checked;
+    const date = request.date ?? current.date;
+    this.db.transaction((tx) => {
+      // Refunds are money in and purchases money out, so a change of direction ends the links.
+      if (Math.sign(request.amount) !== Math.sign(current.amount)) {
+        tx.update(transactions)
+          .set({ offsetsTransactionId: null })
+          .where(or(eq(transactions.offsetsTransactionId, id), eq(transactions.id, id)))
+          .run();
+      }
+      tx.update(transactions)
+        .set({ ...checked, date, transactionDate: date, categoryConfirmedAt: this.now() })
+        .where(eq(transactions.id, id))
+        .run();
+    });
+    return this.listedTransaction(id)!;
+  }
+
+  /** Deletes a manual transaction; a bank transaction is never deleted. */
+  deleteManualTransaction(id: number): 'ok' | 'no-transaction' | 'not-manual' {
+    return this.db.transaction((tx) => {
+      const current = tx.select().from(transactions).where(eq(transactions.id, id)).get();
+      if (current === undefined) return 'no-transaction' as const;
+      if (current.accountId !== null) return 'not-manual' as const;
+      // Refunds offset against it become ordinary again, keeping the category they took.
+      tx.update(transactions)
+        .set({ offsetsTransactionId: null })
+        .where(eq(transactions.offsetsTransactionId, id))
+        .run();
+      tx.delete(transactions).where(eq(transactions.id, id)).run();
+      return 'ok' as const;
+    });
+  }
+
+  /** The columns a manual transaction takes from the request, or why they cannot be set. */
+  private checkManual(request: ManualTransactionRequest) {
+    const subcategory = this.db
+      .select({ id: subcategories.id })
+      .from(subcategories)
+      .where(eq(subcategories.id, request.subcategoryId))
+      .get();
+    if (subcategory === undefined) return 'no-subcategory' as const;
+    const share = request.share ?? null;
+    if (share !== null && !canChoose(this.db, share)) return 'no-ratio' as const;
+    return {
+      amount: request.amount,
+      description: request.description.trim(),
+      subcategoryId: request.subcategoryId,
+      share,
+    };
+  }
+
+  /** One transaction as listed, or null when there is none. */
+  private listedTransaction(id: number): Transaction | null {
+    const row = this.db
+      .select({
+        transaction: transactions,
+        accountName: accounts.name,
+        accountType: accounts.type,
+        bank: connections.bankName,
+        category: categoryColumns,
+      })
+      .from(transactions)
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+      .where(eq(transactions.id, id))
+      .get();
+    return row === undefined ? null : this.toTransactions([row])[0]!;
   }
 
   private offsetTransaction(id: number): OffsetTransaction | null {
@@ -499,8 +615,8 @@ export class AccountsService {
           category: categoryColumns,
         })
         .from(transactions)
-        .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-        .innerJoin(connections, eq(accounts.connectionId, connections.id))
+        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+        .leftJoin(connections, eq(accounts.connectionId, connections.id))
         .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
         .leftJoin(categories, eq(subcategories.categoryId, categories.id));
 
