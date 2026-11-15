@@ -149,10 +149,14 @@ export class SettlementService {
         row.kind === 'transfer' && row.subcategoryName === SETTLEMENT_SUBCATEGORY;
       if (row.kind === 'transfer' && !isSettlement) continue;
       const share = shares.get(transaction.id)!;
-      if (!isSettlement && share.percent === 100) continue;
+      const paidByPartner = transaction.paidBy === 'partner';
+      if (!isSettlement && !paidByPartner && share.percent === 100) continue;
+      // The partner's part of what the owner paid; the owner's part of what the partner paid.
       const partnerPart = isSettlement
         ? -transaction.amount
-        : round((-transaction.amount * (100 - share.percent)) / 100);
+        : paidByPartner
+          ? round((transaction.amount * share.percent) / 100)
+          : round((-transaction.amount * (100 - share.percent)) / 100);
       events.push({
         date: transaction.date,
         order: 1,

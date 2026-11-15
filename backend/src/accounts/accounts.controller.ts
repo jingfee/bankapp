@@ -16,6 +16,7 @@ import type {
   AccountsResponse,
   HouseholdRatioResponse,
   ManualTransactionRequest,
+  PaidBy,
   OffsetCandidatesResponse,
   SubcategorySharesResponse,
   TransactionCategoryResponse,
@@ -275,7 +276,7 @@ export class TransactionsController {
 
 /** Reads and checks the body of adding or editing a manual transaction. */
 function parseManual(body: unknown): ManualTransactionRequest {
-  const { description, amount, subcategoryId, date, share } = (body ?? {}) as Record<
+  const { description, amount, subcategoryId, date, share, paidBy } = (body ?? {}) as Record<
     string,
     unknown
   >;
@@ -295,12 +296,16 @@ function parseManual(body: unknown): ManualTransactionRequest {
   if (share != null && !SHARE_OPTIONS.includes(share as ShareOption)) {
     throw new BadRequestException(`share must be one of ${SHARE_OPTIONS.join(', ')} or null`);
   }
+  if (paidBy != null && paidBy !== 'owner' && paidBy !== 'partner') {
+    throw new BadRequestException('paidBy must be owner or partner');
+  }
   return {
     description,
     amount: rounded,
     subcategoryId,
     ...(date === undefined ? {} : { date }),
     share: (share ?? null) as ShareOption | null,
+    ...(paidBy == null ? {} : { paidBy: paidBy as PaidBy }),
   };
 }
 

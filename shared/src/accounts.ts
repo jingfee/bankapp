@@ -91,7 +91,12 @@ export interface Transaction {
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */
   share: EffectiveShare;
+  /** Who paid it; always the owner for a bank transaction (ADR 0009). */
+  paidBy: PaidBy;
 }
+
+/** Who paid a manual transaction: the owner (_Jag_) or the partner (_Partner_). */
+export type PaidBy = 'owner' | 'partner';
 
 /** The subcategory a transaction is assigned, with its category's name and colour. */
 export interface TransactionCategory {
@@ -129,6 +134,8 @@ export interface ManualTransactionRequest {
   /** `YYYY-MM-DD`. */
   date?: string;
   share?: ShareOption | null;
+  /** Who paid it; the owner when left out. */
+  paidBy?: PaidBy;
 }
 
 /** Response body of `GET /api/transactions`: every account's transactions, newest first. */
@@ -185,6 +192,8 @@ export interface TransactionDetails {
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */
   share: EffectiveShare;
+  /** Who paid it; always the owner for a bank transaction (ADR 0009). */
+  paidBy: PaidBy;
   /** `YYYY-MM-DD`: the day the owner made the transaction. */
   transactionDate: string | null;
   /** `YYYY-MM-DD`: the day the bank booked it; pending transactions have none. */

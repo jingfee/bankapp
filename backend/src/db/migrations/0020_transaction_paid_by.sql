@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `paid_by` text DEFAULT 'owner' NOT NULL;

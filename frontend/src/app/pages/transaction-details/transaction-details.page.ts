@@ -515,7 +515,14 @@ export class TransactionDetailsPage {
     const fields: Field[] = [
       { label: 'Status', key: 'status', value: t.status === 'pending' ? 'Reserverad' : 'Bokförd' },
       ...(t.account === null
-        ? [{ label: 'Konto', key: 'account', value: 'Manuell' }]
+        ? [
+            { label: 'Konto', key: 'account', value: 'Manuell' },
+            {
+              label: 'Betald av',
+              key: 'paidBy',
+              value: t.paidBy === 'partner' ? 'Partner' : 'Jag',
+            },
+          ]
         : [
             { label: 'Bank', key: 'bank', value: t.account.bank },
             {

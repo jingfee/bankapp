@@ -23,6 +23,7 @@ import type {
   AccountsResponse,
   HouseholdRatioEntry,
   ManualTransactionRequest,
+  PaidBy,
   Money,
   OffsetTransaction,
   ShareOption,
@@ -383,6 +384,7 @@ export class AccountsService {
       description: row.description,
       account: toAccount(row.accountId, accountName, bank, accountType),
       category: toCategory(category),
+      paidBy: row.paidBy,
       share: effectiveShares(this.db, [row]).get(row.id)!,
       transactionDate: row.transactionDate,
       bookingDate: row.bookingDate,
@@ -464,7 +466,7 @@ export class AccountsService {
     const current = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
     if (current === undefined) return 'no-transaction';
     if (current.accountId !== null) return 'not-manual';
-    const checked = this.checkManual(request);
+    const checked = this.checkManual(request, current.paidBy);
     if (typeof checked === 'string') return checked;
     const date = request.date ?? current.date;
     this.db.transaction((tx) => {
@@ -500,7 +502,7 @@ export class AccountsService {
   }
 
   /** The columns a manual transaction takes from the request, or why they cannot be set. */
-  private checkManual(request: ManualTransactionRequest) {
+  private checkManual(request: ManualTransactionRequest, current?: PaidBy) {
     const subcategory = this.db
       .select({ id: subcategories.id })
       .from(subcategories)
@@ -514,6 +516,7 @@ export class AccountsService {
       description: request.description.trim(),
       subcategoryId: request.subcategoryId,
       share,
+      paidBy: request.paidBy ?? current ?? 'owner',
     };
   }
 

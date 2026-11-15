@@ -87,6 +87,7 @@ export function toTransaction(
     account: toAccount(row.accountId, accountName, bank, accountType),
     category: toCategory(category),
     share,
+    paidBy: row.paidBy,
   };
 }
 
