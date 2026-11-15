@@ -210,14 +210,6 @@ function formatOriginal({ amount, currency }: Money): string {
                     </div>
                   }
                 </section>
-                @if (t.account !== null) {
-                  <details data-raw class="card p-5">
-                    <summary class="cursor-pointer font-medium">Rådata</summary>
-                    <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
-                      rawJson()
-                    }}</pre>
-                  </details>
-                }
               </div>
 
               <div class="flex min-w-0 flex-col gap-5">
@@ -527,6 +519,14 @@ function formatOriginal({ amount, currency }: Money): string {
                 }
               </div>
             </div>
+            @if (t.account !== null) {
+              <details data-raw class="card p-5">
+                <summary class="cursor-pointer font-medium">Rådata</summary>
+                <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
+                  rawJson()
+                }}</pre>
+              </details>
+            }
           }
         }
       }
