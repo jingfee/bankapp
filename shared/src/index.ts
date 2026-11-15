@@ -15,6 +15,7 @@ export type {
   ConnectedAccount,
   ConnectionStatus,
   ManualTransactionRequest,
+  PaidBy,
   Money,
   OffsetCandidatesResponse,
   OffsetTransaction,

@@ -192,6 +192,7 @@ describe('GET /api/transactions', () => {
         account: { id: 1, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
         category: null,
         share: { option: 'me', percent: 100, source: 'default' },
+        paidBy: 'owner',
         transactionDate: '2026-11-08',
         bookingDate: '2026-11-10',
         counterparty: 'Café Roma',

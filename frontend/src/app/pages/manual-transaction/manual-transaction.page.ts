@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { Category, ManualTransactionRequest, ShareOption } from '@bankapp/shared';
+import type { Category, ManualTransactionRequest, PaidBy, ShareOption } from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
 import { TransactionsService } from '../../transactions.service';
 
@@ -125,6 +125,17 @@ const SHARE_CHOICES: { value: ShareOption | ''; label: string }[] = [
                 }
               </select>
             </label>
+            <label class="flex flex-col text-sm">
+              Betald av
+              <select
+                data-paid-by
+                class="rounded-lg border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
+                (change)="paidBy.set($any(value($event)))"
+              >
+                <option value="owner" [selected]="paidBy() === 'owner'">Jag</option>
+                <option value="partner" [selected]="paidBy() === 'partner'">Partner</option>
+              </select>
+            </label>
             @if (error(); as message) {
               <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ message }}</p>
             }
@@ -159,6 +170,7 @@ export class ManualTransactionPage {
   protected readonly date = signal(today());
   protected readonly subcategoryId = signal('');
   protected readonly share = signal<ShareOption | ''>('');
+  protected readonly paidBy = signal<PaidBy>('owner');
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -193,6 +205,7 @@ export class ManualTransactionPage {
         this.date.set(t.transactionDate ?? today());
         this.subcategoryId.set(t.category === null ? '' : String(t.category.subcategory.id));
         this.share.set(t.share.source === 'transaction' ? t.share.option : '');
+        this.paidBy.set(t.paidBy);
         this.status.set('ready');
       },
       error: (error: unknown) =>
@@ -216,6 +229,7 @@ export class ManualTransactionPage {
       subcategoryId: Number(this.subcategoryId()),
       date: this.date(),
       share: share === '' ? null : share,
+      paidBy: this.paidBy(),
     };
     const id = this.editingId();
     this.saving.set(true);

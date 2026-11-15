@@ -157,6 +157,13 @@ export const transactions = sqliteTable(
     ),
     /** The owner's own share for this transaction; null defers to the account and subcategory. */
     share: text('share', { enum: SHARE_OPTIONS }),
+    /**
+     * Who paid it: always the owner for a bank transaction; a manual one may be paid by the
+     * partner, its share still meaning the owner's part (ADR 0009).
+     */
+    paidBy: text('paid_by', { enum: ['owner', 'partner'] })
+      .notNull()
+      .default('owner'),
   },
   (table) => [
     uniqueIndex('transactions_booked_dedup')

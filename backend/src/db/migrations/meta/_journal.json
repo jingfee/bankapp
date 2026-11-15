@@ -141,6 +141,13 @@
       "when": 1794726217111,
       "tag": "0019_manual_transactions",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1794726925730,
+      "tag": "0020_transaction_paid_by",
+      "breakpoints": true
     }
   ]
 }

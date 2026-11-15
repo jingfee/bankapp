@@ -141,6 +141,63 @@ describe('manual transactions', () => {
     expect(body.periods[0]!.items[0]).toMatchObject({ accountName: 'Manuell', partnerPart: 150 });
   });
 
+  it('defaults to paid by the owner', async () => {
+    expect((await create()).paidBy).toBe('owner');
+  });
+
+  it('paid by the partner lowers the settlement balance by the owner’s part, the overview counting both', async () => {
+    await setBalance();
+    const created = await create({ amount: -100, paidBy: 'partner' });
+    expect(created.paidBy).toBe('partner');
+    expect(created.amount.amount).toBe(-100);
+    const body = await settlement();
+    expect(body.balance).toBe(-50);
+    expect(body.periods[0]!.items[0]).toMatchObject({ accountName: 'Manuell', partnerPart: -50 });
+    expect((await overview('mine')).totals.spending).toBe(50);
+    expect((await overview('full')).totals.spending).toBe(100);
+  });
+
+  it('paid by the partner counts the owner’s whole part even when the share is theirs alone', async () => {
+    await setBalance();
+    await create({ amount: -100, paidBy: 'partner', share: 'me' });
+    expect((await settlement()).balance).toBe(-100);
+  });
+
+  it('can be edited to and from paid by the partner', async () => {
+    await setBalance();
+    const created = await create({ amount: -100 });
+    expect((await settlement()).balance).toBe(50);
+    const edited = (
+      await request(server())
+        .put(`/api/transactions/${created.id}`)
+        .send({
+          description: 'ICA Maxi',
+          amount: -100,
+          subcategoryId: groceries(),
+          share: 'half',
+          paidBy: 'partner',
+        })
+        .expect(200)
+    ).body as Transaction;
+    expect(edited.paidBy).toBe('partner');
+    expect((await settlement()).balance).toBe(-50);
+  });
+
+  it('keeps who paid when an edit leaves paidBy out', async () => {
+    const created = await create({ paidBy: 'partner' });
+    const edited = (
+      await request(server())
+        .put(`/api/transactions/${created.id}`)
+        .send({ description: 'Ny text', amount: -300, subcategoryId: groceries() })
+        .expect(200)
+    ).body as Transaction;
+    expect(edited.paidBy).toBe('partner');
+  });
+
+  it('rejects an unknown paid by', async () => {
+    await add({ paidBy: 'bank' }).expect(400);
+  });
+
   it('is kept when accounts are joined or hidden', async () => {
     db.insert(connections)
       .values({ bankName: 'Swedbank', sessionId: 's', validUntil: new Date('2027-06-01') })
