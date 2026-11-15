@@ -491,6 +491,19 @@
     line-height: 1;
   }
 
+  /* Transaction row: hover background and a slight press */
+  .tx-row {
+    transition:
+      background-color 0.15s ease,
+      transform 0.12s ease;
+  }
+  .tx-row:hover {
+    background: var(--color-surface-2);
+  }
+  .tx-row:active {
+    transform: scale(0.99);
+  }
+
   /* Navigation (the sidebar and the bottom tabs share these) */
   .nav-link {
     position: relative;
