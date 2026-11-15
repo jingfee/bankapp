@@ -3,7 +3,8 @@ import { normaliseDescription } from './normalise-description';
 /** What the classifier learns from and judges: one transaction, as the owner's bank described it. */
 export interface ClassifierInput {
   description: string;
-  accountId: number;
+  /** Null for a manual transaction, which has no account. */
+  accountId: number | null;
   amount: number;
 }
 
@@ -120,7 +121,7 @@ function features({ description, accountId, amount }: ClassifierInput): string[]
     .filter((word) => word.length > 1);
   return [
     ...[...new Set(words)].map((word) => `${WORD}${word}`),
-    `${ACCOUNT}${accountId}`,
+    ...(accountId === null ? [] : [`${ACCOUNT}${accountId}`]),
     `${SIGN}${amount < 0 ? 'out' : 'in'}`,
   ];
 }

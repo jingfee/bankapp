@@ -6,12 +6,23 @@ import { AvrakningPage } from './pages/avrakning/avrakning.page';
 import { BankerPage } from './pages/banker/banker.page';
 import { ReviewPage } from './pages/review/review.page';
 import { TransactionDetailsPage } from './pages/transaction-details/transaction-details.page';
+import { ManualTransactionPage } from './pages/manual-transaction/manual-transaction.page';
 import { OverviewPage } from './pages/overview/overview.page';
 import { TransactionsPage } from './pages/transactions/transactions.page';
 
 export const routes: Routes = [
   { path: '', component: OverviewPage, title: 'Bankapp' },
   { path: 'transaktioner', component: TransactionsPage, title: 'Transaktioner – Bankapp' },
+  {
+    path: 'transaktioner/ny',
+    component: ManualTransactionPage,
+    title: 'Ny transaktion – Bankapp',
+  },
+  {
+    path: 'transaktioner/:id/redigera',
+    component: ManualTransactionPage,
+    title: 'Redigera transaktion – Bankapp',
+  },
   { path: 'banker', component: BankerPage, title: 'Banker – Bankapp' },
   { path: 'andelar', component: AndelarPage, title: 'Andelar – Bankapp' },
   { path: 'avrakning', component: AvrakningPage, title: 'Avräkning – Bankapp' },

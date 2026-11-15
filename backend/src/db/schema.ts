@@ -109,16 +109,16 @@ export const syncAccountResults = sqliteTable('sync_account_results', {
 
 /**
  * Transactions as the bank reported them, with the raw response kept next to the parsed fields
- * (ADR 0001). Booked transactions are never deleted; pending ones are replaced on every sync.
+ * (ADR 0001), and the manual transactions the owner entered, which have no account and an empty
+ * raw response (ADR 0009). Booked transactions are never deleted; pending ones are replaced on every sync.
  * The dedup rules are provisional until real data has been observed.
  */
 export const transactions = sqliteTable(
   'transactions',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    accountId: integer('account_id')
-      .notNull()
-      .references(() => accounts.id),
+    /** The account it belongs to; null for a manual transaction the owner entered (ADR 0009). */
+    accountId: integer('account_id').references(() => accounts.id),
     status: text('status', { enum: ['booked', 'pending'] }).notNull(),
     /** Negative when money leaves the account. */
     amount: real('amount').notNull(),

@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import type { Transaction } from '@bankapp/shared';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { TransactionsService } from '../../transactions.service';
@@ -8,7 +8,7 @@ type Status = 'loading' | 'ready' | 'failed';
 
 @Component({
   selector: 'app-transactions-page',
-  imports: [TransactionList],
+  imports: [TransactionList, RouterLink],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       @switch (status()) {
@@ -22,6 +22,12 @@ type Status = 'loading' | 'ready' | 'failed';
           <header>
             <h1 class="text-3xl font-semibold tracking-tight">Transaktioner</h1>
             <p class="mt-1 text-zinc-600 dark:text-zinc-400">Från alla dina konton.</p>
+            <a
+              routerLink="/transaktioner/ny"
+              data-add
+              class="mt-3 inline-block font-medium underline"
+              >Lägg till transaktion</a
+            >
           </header>
           @if (transactions().length === 0) {
             <p>Inga transaktioner ännu.</p>

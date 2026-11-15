@@ -85,7 +85,8 @@ export interface Transaction {
   /** The day it is listed under (`YYYY-MM-DD`). */
   date: string;
   description: string;
-  account: TransactionAccount;
+  /** The account it belongs to; null for a manual transaction, shown as _Manuell_. */
+  account: TransactionAccount | null;
   /** The assigned subcategory, or null when the transaction is uncategorised. */
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */
@@ -113,6 +114,21 @@ export interface TransactionCategoryResponse {
    * re-guessed to match a newly chosen category; 0 when it was removed.
    */
   updatedSimilar: number;
+}
+
+/**
+ * Request body of `POST /api/transactions` (add a manual transaction) and of
+ * `PUT /api/transactions/:id` (edit one): the owner's own entry (ADR 0009). `amount` is in SEK
+ * and negative when money left; `date` is today when left out and `share` the subcategory's
+ * when left out or null.
+ */
+export interface ManualTransactionRequest {
+  description: string;
+  amount: number;
+  subcategoryId: number;
+  /** `YYYY-MM-DD`. */
+  date?: string;
+  share?: ShareOption | null;
 }
 
 /** Response body of `GET /api/transactions`: every account's transactions, newest first. */
@@ -163,7 +179,8 @@ export interface TransactionDetails {
   status: 'booked' | 'pending';
   amount: Money;
   description: string;
-  account: TransactionAccount;
+  /** The account it belongs to; null for a manual transaction (ADR 0009). */
+  account: TransactionAccount | null;
   /** The assigned subcategory, or null when the transaction is uncategorised. */
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */

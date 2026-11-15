@@ -76,8 +76,8 @@ export class OverviewService {
       })
       .from(transactions)
       .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
-      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(connections, eq(accounts.connectionId, connections.id))
       .innerJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .innerJoin(categories, eq(subcategories.categoryId, categories.id))
       .where(

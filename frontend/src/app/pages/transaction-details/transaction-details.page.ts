@@ -410,15 +410,61 @@ function formatOriginal({ amount, currency }: Money): string {
                 </dd>
               }
             </dl>
-            <details
-              data-raw
-              class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <summary class="cursor-pointer font-medium">Rådata</summary>
-              <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
-                rawJson()
-              }}</pre>
-            </details>
+            @if (t.account === null) {
+              <section data-manual-actions class="flex flex-wrap items-center gap-4">
+                <a
+                  data-edit
+                  [routerLink]="['/transaktioner', t.id, 'redigera']"
+                  class="font-medium underline"
+                  >Redigera</a
+                >
+                @if (confirmingDelete()) {
+                  <span class="text-sm">Ta bort transaktionen?</span>
+                  <button
+                    type="button"
+                    data-confirm-delete
+                    class="font-medium text-red-700 underline dark:text-red-400"
+                    [disabled]="saving()"
+                    (click)="deleteManual(t.id)"
+                  >
+                    Ja, ta bort
+                  </button>
+                  <button
+                    type="button"
+                    data-cancel-delete
+                    class="underline"
+                    (click)="confirmingDelete.set(false)"
+                  >
+                    Avbryt
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    data-delete
+                    class="font-medium text-red-700 underline dark:text-red-400"
+                    (click)="confirmingDelete.set(true)"
+                  >
+                    Ta bort
+                  </button>
+                }
+                @if (deleteError()) {
+                  <p role="alert" class="w-full text-sm text-red-700 dark:text-red-400">
+                    Transaktionen kunde inte tas bort. Försök igen.
+                  </p>
+                }
+              </section>
+            }
+            @if (t.account !== null) {
+              <details
+                data-raw
+                class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <summary class="cursor-pointer font-medium">Rådata</summary>
+                <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
+                  rawJson()
+                }}</pre>
+              </details>
+            }
           }
         }
       }
@@ -432,6 +478,8 @@ export class TransactionDetailsPage {
   private readonly categoryList = inject(CategoriesService);
   private readonly sharesService = inject(SharesService);
 
+  protected readonly confirmingDelete = signal(false);
+  protected readonly deleteError = signal(false);
   protected readonly picking = signal(false);
   protected readonly saving = signal(false);
   protected readonly categoryError = signal<string | null>(null);
@@ -466,12 +514,16 @@ export class TransactionDetailsPage {
     if (t === null) return [];
     const fields: Field[] = [
       { label: 'Status', key: 'status', value: t.status === 'pending' ? 'Reserverad' : 'Bokförd' },
-      { label: 'Bank', key: 'bank', value: t.account.bank },
-      {
-        label: 'Konto',
-        key: 'account',
-        value: `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
-      },
+      ...(t.account === null
+        ? [{ label: 'Konto', key: 'account', value: 'Manuell' }]
+        : [
+            { label: 'Bank', key: 'bank', value: t.account.bank },
+            {
+              label: 'Konto',
+              key: 'account',
+              value: `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
+            },
+          ]),
     ];
     const day = new DateHeadingPipe();
     if (t.transactionDate) {
@@ -571,7 +623,7 @@ export class TransactionDetailsPage {
     if (t === null) return '';
     switch (t.share.source) {
       case 'account':
-        return `från konto ${t.account.name}`;
+        return `från konto ${t.account?.name ?? ''}`;
       case 'subcategory':
         return `från underkategori ${t.category?.subcategory.name ?? ''}`;
       case 'transaction':
@@ -710,6 +762,19 @@ export class TransactionDetailsPage {
       },
       error: () => {
         this.categoryError.set('Kategorin kunde inte sparas. Försök igen.');
+        this.saving.set(false);
+      },
+    });
+  }
+
+  /** Deletes a manual transaction and returns to the list. */
+  protected deleteManual(id: number): void {
+    this.saving.set(true);
+    this.deleteError.set(false);
+    this.transactions.deleteManual(id).subscribe({
+      next: () => void this.router.navigateByUrl('/transaktioner'),
+      error: () => {
+        this.deleteError.set(true);
         this.saving.set(false);
       },
     });

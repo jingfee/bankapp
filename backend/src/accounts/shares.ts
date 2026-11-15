@@ -98,7 +98,7 @@ export function effectiveShares(
     resolveShare(
       {
         transaction: row.share,
-        account: accountShares.get(row.accountId) ?? null,
+        account: row.accountId === null ? null : (accountShares.get(row.accountId) ?? null),
         subcategory:
           row.subcategoryId === null ? null : (subcategoryShares.get(row.subcategoryId) ?? null),
       },
