@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import type { CategoriesResponse, TransactionCategory, TransactionDetails } from '@bankapp/shared';
 import { of } from 'rxjs';
+import { ToastService } from '../../toast/toast.service';
 import { TransactionsService } from '../../transactions.service';
 import { TransactionDetailsPage } from './transaction-details.page';
 
@@ -50,13 +51,22 @@ describe('TransactionDetailsPage', () => {
     ...overrides,
   });
 
-  async function render(response: TransactionDetails | { httpStatus: number }) {
+  async function render(
+    response: TransactionDetails | { httpStatus: number },
+    ratio: { from: string; percent: number }[] = [{ from: '2026-01-01', percent: 60 }],
+  ) {
     const fixture = TestBed.createComponent(TransactionDetailsPage);
     await fixture.whenStable();
     const request = TestBed.inject(HttpTestingController).expectOne('/api/transactions/5');
     if ('httpStatus' in response) {
       request.flush('', { status: response.httpStatus, statusText: 'x' });
-    } else request.flush(response);
+    } else {
+      request.flush(response);
+      await fixture.whenStable();
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/household-ratio')
+        .flush({ entries: ratio });
+    }
     await fixture.whenStable();
     const page = fixture.nativeElement as HTMLElement;
     const field = (key: string) =>
@@ -81,7 +91,12 @@ describe('TransactionDetailsPage', () => {
 
     expect(page.querySelector('[data-description]')?.textContent?.trim()).toBe('Lunch Rom');
     expect(page.querySelector('[data-amount]')?.textContent?.trim()).toMatch(/^−12,50\skr$/);
-    expect(field('status')).toBe('Reserverad');
+    expect(page.querySelector('[data-status-pill]')?.textContent?.trim()).toBe('Reserverad');
+    expect(page.querySelector('[data-pending-note]')?.textContent).toContain(
+      'banken har inte bokfört köpet än',
+    );
+    expect(page.querySelector('[data-amount]')?.classList).toContain('text-pending');
+    expect(field('paidBy')).toBe('Jag');
     expect(field('bank')).toBe('Swedbank');
     expect(field('account')).toBe('Lönekonto (Betalkonto)');
     expect(field('transactionDate')).toBe('Söndag 8 november 2026');
@@ -95,13 +110,16 @@ describe('TransactionDetailsPage', () => {
   });
 
   it('shows Bokförd for booked transactions and hides what the bank did not send', async () => {
-    const { page, field } = await render(details());
+    const { page } = await render(details());
 
-    expect(field('status')).toBe('Bokförd');
+    expect(page.querySelector('[data-status-pill]')?.textContent?.trim()).toBe('Bokförd');
+    expect(page.querySelector('[data-pending-note]')).toBeNull();
+    expect(page.querySelector('[data-share-pill]')).toBeNull();
+    expect(page.querySelector('[data-manual-pill]')).toBeNull();
     const shown = Array.from(page.querySelectorAll('[data-field]')).map((d) =>
       d.getAttribute('data-field'),
     );
-    expect(shown).toEqual(['status', 'bank', 'account']);
+    expect(shown).toEqual(['bank', 'account', 'paidBy']);
   });
 
   describe('share', () => {
@@ -118,8 +136,11 @@ describe('TransactionDetailsPage', () => {
       );
 
       expect(shareText(page, 'name')).toBe('50/50');
-      expect(shareText(page, 'source')).toBe('från konto Lönekonto');
+      expect(shareText(page, 'source')).toBe('Från kontot');
       expect(shareText(page, 'part')).toMatch(/^−125,00\skr$/);
+      expect(shareText(page, 'partner-part')).toMatch(/^−125,00\skr$/);
+      expect(page.querySelector<HTMLElement>('[data-share-bar]')?.style.width).toBe('50%');
+      expect(text(page.querySelector('[data-share-pill]'))).toBe('Delad · 50/50');
     });
 
     it('names the household ratio and the other sources', async () => {
@@ -130,7 +151,7 @@ describe('TransactionDetailsPage', () => {
     it.each([
       [
         'subcategory',
-        'från underkategori Livsmedel',
+        'Från underkategorin',
         {
           category: {
             category: { id: 2, name: 'Mat & Dryck', colour: 'green' },
@@ -139,7 +160,7 @@ describe('TransactionDetailsPage', () => {
           } as TransactionCategory,
         },
       ],
-      ['transaction', 'satt manuellt', {}],
+      ['transaction', 'Egen andel', {}],
     ] as const)('says a share from the %s is %s', async (source, expected, extra) => {
       const { page } = await render(
         details({ ...extra, share: { option: 'partner', percent: 0, source } }),
@@ -149,14 +170,7 @@ describe('TransactionDetailsPage', () => {
 
     async function openChoices(response: TransactionDetails) {
       const rendered = await render(response);
-      const http = TestBed.inject(HttpTestingController);
-      (rendered.page.querySelector('[data-share-toggle]') as HTMLButtonElement).click();
-      await rendered.fixture.whenStable();
-      http.expectOne('/api/household-ratio').flush({
-        entries: [{ from: '2026-01-01', percent: 60 }],
-      });
-      await rendered.fixture.whenStable();
-      return { ...rendered, http };
+      return { ...rendered, http: TestBed.inject(HttpTestingController) };
     }
 
     const optionButtons = (page: HTMLElement) =>
@@ -170,8 +184,8 @@ describe('TransactionDetailsPage', () => {
       expect(optionButtons(page).map((b) => [b.dataset['shareOption'], text(b)])).toEqual([
         ['me', 'Jag'],
         ['half', '50/50'],
-        ['household', 'Hushåll (60/40)'],
-        ['partner', 'Partner betalar allt'],
+        ['household', 'Hushåll'],
+        ['partner', 'Partner'],
       ]);
       expect(optionButtons(page).map((b) => b.getAttribute('aria-pressed'))).toEqual([
         'false',
@@ -193,9 +207,9 @@ describe('TransactionDetailsPage', () => {
       put.flush(details({ share: { option: 'partner', percent: 0, source: 'transaction' } }));
       await fixture.whenStable();
 
-      expect(shareText(page, 'name')).toBe('Partner betalar allt');
-      expect(shareText(page, 'source')).toBe('satt manuellt');
-      expect(optionButtons(page)).toHaveLength(0);
+      expect(shareText(page, 'name')).toBe('Partner');
+      expect(shareText(page, 'source')).toBe('Egen andel');
+      expect(TestBed.inject(ToastService).message()).toBe('Andelen sparades');
       expect(service.listed).toBeNull();
     });
 
@@ -221,12 +235,7 @@ describe('TransactionDetailsPage', () => {
     });
 
     it('disables Hushåll while there is no household ratio', async () => {
-      const rendered = await render(details());
-      const http = TestBed.inject(HttpTestingController);
-      (rendered.page.querySelector('[data-share-toggle]') as HTMLButtonElement).click();
-      await rendered.fixture.whenStable();
-      http.expectOne('/api/household-ratio').flush({ entries: [] });
-      await rendered.fixture.whenStable();
+      const rendered = await render(details(), []);
 
       const household = optionButtons(rendered.page).find(
         (b) => b.dataset['shareOption'] === 'household',
@@ -260,11 +269,11 @@ describe('TransactionDetailsPage', () => {
         }),
       );
 
-      expect(shareText(page, 'source')).toBe('andel från köpet');
+      expect(shareText(page, 'source')).toBe('Följer köpet');
       expect(page.querySelector('[data-share-purchase]')?.getAttribute('href')).toBe(
         '/transaktioner/3',
       );
-      expect(page.querySelector('[data-share-toggle]')).toBeNull();
+      expect(optionButtons(page)).toHaveLength(0);
       expect(page.querySelector('[data-remove-share]')).toBeNull();
     });
   });
@@ -305,6 +314,7 @@ describe('TransactionDetailsPage', () => {
       expect(page.querySelector('[data-category-guessed-note]')?.textContent?.trim()).toBe(
         'Gissad',
       );
+      expect(page.querySelector('[data-guess-bar]')?.textContent).toContain('Stämmer gissningen?');
 
       (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
       const request = TestBed.inject(HttpTestingController).expectOne(
@@ -318,6 +328,7 @@ describe('TransactionDetailsPage', () => {
       expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
       expect(page.querySelector('[data-confirm-category]')).toBeNull();
       expect(page.querySelector('[data-category-guessed-note]')).toBeNull();
+      expect(TestBed.inject(ToastService).message()).toBe('Kategorin bekräftades');
       expect(service.listed?.transactions[0]?.category).toEqual(livsmedel);
     });
 
@@ -395,57 +406,31 @@ describe('TransactionDetailsPage', () => {
       await rendered.fixture.whenStable();
     }
 
-    const pickerGroups = (page: HTMLElement) =>
-      Array.from(page.querySelectorAll('[data-picker-category]')).map((group) => ({
-        name: group.querySelector('[data-picker-category-name]')?.textContent?.trim(),
-        subcategories: Array.from(group.querySelectorAll('[data-subcategory]')).map((button) =>
-          button.textContent?.trim(),
-        ),
-      }));
+    const tileNames = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll('[data-picker-category]')).map((tile) =>
+        tile.querySelector('[data-picker-category-name]')?.textContent?.trim(),
+      );
+    const chips = (page: HTMLElement) =>
+      Array.from(page.querySelectorAll('[data-subcategory]')).map((c) => c.textContent?.trim());
 
-    async function search(rendered: Awaited<ReturnType<typeof render>>, text: string) {
-      const input = rendered.page.querySelector('[data-category-search]') as HTMLInputElement;
-      input.value = text;
-      input.dispatchEvent(new Event('input'));
-      await rendered.fixture.whenStable();
-    }
-
-    it('opens a picker with the subcategories grouped under their categories, in order, with icons', async () => {
+    it('opens a picker with a tile per category in order, then the subcategories of the chosen one', async () => {
       const rendered = await render(details());
       expect(rendered.page.querySelector('[data-picker]')).toBeNull();
 
       await openPicker(rendered);
+      expect(tileNames(rendered.page)).toEqual(['Mat & Dryck', 'Transport']);
+      expect(chips(rendered.page)).toEqual([]);
 
-      expect(pickerGroups(rendered.page)).toEqual([
-        { name: 'Mat & Dryck', subcategories: ['Livsmedel', 'Restaurang', 'Övrigt'] },
-        { name: 'Transport', subcategories: ['Kollektivtrafik', 'Taxi'] },
-      ]);
-      const taxi = rendered.page.querySelector('[data-subcategory="21"]');
-      expect(taxi?.querySelector('[data-badge]')?.getAttribute('style')).toContain('--category');
+      (rendered.page.querySelector('[data-category-tile="3"]') as HTMLButtonElement).click();
+      await rendered.fixture.whenStable();
+      expect(chips(rendered.page)).toEqual(['Kollektivtrafik', 'Taxi']);
     });
 
-    it('searches category and subcategory names, ignoring case', async () => {
-      const rendered = await render(details());
+    it('opens on the current category', async () => {
+      const rendered = await render(details({ category: livsmedel }));
       await openPicker(rendered);
 
-      await search(rendered, 'TAXI');
-      expect(pickerGroups(rendered.page)).toEqual([{ name: 'Transport', subcategories: ['Taxi'] }]);
-
-      await search(rendered, 'mat &');
-      expect(pickerGroups(rendered.page)).toEqual([
-        { name: 'Mat & Dryck', subcategories: ['Livsmedel', 'Restaurang', 'Övrigt'] },
-      ]);
-
-      await search(rendered, 'övr');
-      expect(pickerGroups(rendered.page)).toEqual([
-        { name: 'Mat & Dryck', subcategories: ['Övrigt'] },
-      ]);
-
-      await search(rendered, 'xyz');
-      expect(pickerGroups(rendered.page)).toEqual([]);
-      expect(rendered.page.querySelector('[data-picker-empty]')?.textContent?.trim()).toBe(
-        'Inga träffar',
-      );
+      expect(chips(rendered.page)).toEqual(['Livsmedel', 'Restaurang', 'Övrigt']);
     });
 
     it('saves the chosen subcategory as confirmed and shows it, also in the list kept for the way back', async () => {
@@ -466,6 +451,7 @@ describe('TransactionDetailsPage', () => {
 
       expect(categoryText(rendered.page)).toBe('Mat & Dryck / Restaurang');
       expect(rendered.page.querySelector('[data-picker]')).toBeNull();
+      expect(TestBed.inject(ToastService).message()).toBe('Kategorin sparades');
       expect(service.listed?.transactions[0]?.category).toEqual(restaurang);
     });
 
@@ -482,6 +468,7 @@ describe('TransactionDetailsPage', () => {
 
       expect(categoryText(rendered.page)).toBe('Okategoriserad');
       expect(rendered.page.querySelector('[data-remove-category]')).toBeNull();
+      expect(TestBed.inject(ToastService).message()).toBe('Kategorin togs bort');
     });
 
     it('says so when the categories cannot be fetched, and tries again on the next tap', async () => {
@@ -555,9 +542,7 @@ describe('TransactionDetailsPage', () => {
       expect(page.querySelector('[data-offsets-purchase]')?.getAttribute('href')).toBe(
         '/transaktioner/3',
       );
-      expect((page.querySelector('[data-category-button]') as HTMLButtonElement).disabled).toBe(
-        true,
-      );
+      expect(page.querySelector('[data-category-button]')).toBeNull();
       expect(page.querySelector('[data-remove-category]')).toBeNull();
     });
 
@@ -583,6 +568,7 @@ describe('TransactionDetailsPage', () => {
       await rendered.fixture.whenStable();
 
       expect(rendered.page.querySelector('[data-offsets-purchase]')).not.toBeNull();
+      expect(TestBed.inject(ToastService).message()).toBe('Kvittningen sparades');
       expect(service.listed).toBeNull();
     });
 
@@ -623,6 +609,7 @@ describe('TransactionDetailsPage', () => {
 
       expect(rendered.page.querySelector('[data-offsets]')).toBeNull();
       expect(rendered.page.querySelector('[data-offset-picker]')).not.toBeNull();
+      expect(TestBed.inject(ToastService).message()).toBe('Kvittningen togs bort');
     });
   });
 
@@ -670,6 +657,7 @@ describe('TransactionDetailsPage', () => {
       const http = TestBed.inject(HttpTestingController);
 
       expect(field('account')).toBe('Manuell');
+      expect(page.querySelector('[data-manual-pill]')?.textContent?.trim()).toBe('Manuell');
       expect(field('bank')).toBeNull();
       expect(page.querySelector('[data-raw]')).toBeNull();
       expect(page.querySelector('[data-edit]')?.getAttribute('href')).toBe(
@@ -692,6 +680,7 @@ describe('TransactionDetailsPage', () => {
       const request = http.expectOne('/api/transactions/5');
       expect(request.request.method).toBe('DELETE');
       request.flush(null, { status: 204, statusText: 'No Content' });
+      expect(TestBed.inject(ToastService).message()).toBe('Transaktionen togs bort');
     });
 
     it('offers neither for a bank transaction', async () => {

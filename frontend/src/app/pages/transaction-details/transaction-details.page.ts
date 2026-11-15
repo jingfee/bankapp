@@ -15,12 +15,13 @@ import type {
   TransactionDetails,
 } from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
-import { CategoryPickerComponent } from '../../category-picker/category-picker';
+import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesService } from '../../shares.service';
+import { ToastService } from '../../toast/toast.service';
 import { TransactionsService } from '../../transactions.service';
 
 type State =
@@ -45,7 +46,7 @@ const SHARE_OPTION_ORDER: ShareOption[] = ['me', 'half', 'household', 'partner']
 const SHARE_CHOICE_LABELS: Record<Exclude<ShareOption, 'household'>, string> = {
   me: 'Jag',
   half: '50/50',
-  partner: 'Partner betalar allt',
+  partner: 'Partner',
 };
 
 /** The household ratio in force on `date`: the latest entry from then or before, else the first. */
@@ -56,6 +57,15 @@ function ratioOn(entries: HouseholdRatioEntry[], date: string | null): number | 
 
 const householdLabel = (percent: number | null) =>
   percent === null ? 'Hushåll' : `Hushåll (${percent}/${100 - percent})`;
+
+/** Said next to Andel: where the effective share comes from. */
+const SHARE_SOURCES: Record<TransactionDetails['share']['source'], string> = {
+  default: 'Standard',
+  subcategory: 'Från underkategorin',
+  account: 'Från kontot',
+  transaction: 'Egen andel',
+  purchase: 'Följer köpet',
+};
 
 /** The bank's currency code is not ours to trust: an unknown one is shown as sent. */
 function formatOriginal({ amount, currency }: Money): string {
@@ -68,9 +78,9 @@ function formatOriginal({ amount, currency }: Money): string {
 
 @Component({
   selector: 'app-transaction-details-page',
-  imports: [RouterLink, MoneyPipe, TransactionCategoryBadge, CategoryPickerComponent],
+  imports: [RouterLink, MoneyPipe, DateHeadingPipe, TransactionCategoryBadge, CategoryTiles],
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
+    <main class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:py-10">
       @switch (state().status) {
         @case ('loading') {
           <p aria-live="polite">Hämtar transaktionen…</p>
@@ -85,389 +95,438 @@ function formatOriginal({ amount, currency }: Money): string {
         }
         @default {
           @if (details(); as t) {
+            @let pending = t.status === 'pending';
             <button
               type="button"
               data-back
-              class="self-start font-medium underline"
+              class="btn btn-ghost btn-sm self-start"
               (click)="back()"
             >
               ← Transaktioner
             </button>
-            <header>
-              <h1
-                data-description
-                class="text-3xl [overflow-wrap:anywhere] font-semibold tracking-tight"
-              >
-                {{ t.description || 'Transaktion' }}
-              </h1>
-              <p
-                data-amount
-                class="mt-1 text-2xl font-medium tabular-nums"
-                [class.text-emerald-600]="t.amount.amount > 0"
-                [class.dark:text-emerald-400]="t.amount.amount > 0"
-              >
-                {{ t.amount.amount | money: t.amount.currency }}
-              </p>
-            </header>
-            <section
-              data-category
-              class="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <div class="flex items-center gap-3">
-                <button
-                  type="button"
-                  data-category-button
-                  class="flex flex-1 items-center gap-3 text-left"
-                  [attr.aria-expanded]="picking()"
-                  [disabled]="saving() || t.offsets !== null"
-                  (click)="togglePicker()"
-                >
-                  <app-transaction-category-badge
-                    [category]="t.category"
-                    [pending]="t.status === 'pending'"
-                  />
-                  <span class="flex flex-1 flex-col">
-                    <span
-                      data-category-name
-                      class="font-medium"
-                      [class.text-zinc-500]="t.category?.confirmed === false"
-                      [class.dark:text-zinc-400]="t.category?.confirmed === false"
+            <div class="stagger grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+              <div class="flex min-w-0 flex-col gap-5">
+                <section data-summary class="card flex flex-col gap-5 p-5 sm:p-7">
+                  <div class="flex items-start gap-4">
+                    <app-transaction-category-badge
+                      class="shrink-0"
+                      [category]="t.category"
+                      [pending]="pending"
+                      [size]="60"
+                    />
+                    <h1
+                      data-description
+                      class="min-w-0 flex-1 text-2xl [overflow-wrap:anywhere] font-semibold tracking-tight sm:text-3xl"
                     >
-                      @if (t.category; as c) {
-                        {{ c.category.name }} / {{ c.subcategory.name }}
+                      {{ t.description || 'Transaktion' }}
+                    </h1>
+                  </div>
+                  <p
+                    data-amount
+                    class="amount text-4xl [overflow-wrap:anywhere] sm:text-[44px] sm:leading-tight"
+                    [class.text-positive]="t.amount.amount > 0 && !pending"
+                    [class.text-pending]="pending"
+                  >
+                    {{ t.amount.amount | money: t.amount.currency }}
+                  </p>
+                  <div data-pills class="flex flex-wrap gap-2">
+                    <span
+                      data-status-pill
+                      class="pill"
+                      [class.pill-neutral]="!pending"
+                      [class.pill-pending]="pending"
+                      >{{ pending ? 'Reserverad' : 'Bokförd' }}</span
+                    >
+                    @if (sharedLabel(); as label) {
+                      <span data-share-pill class="pill pill-neutral">Delad · {{ label }}</span>
+                    }
+                    @if (t.account === null) {
+                      <span data-manual-pill class="pill pill-accent">Manuell</span>
+                    }
+                  </div>
+                  @if (pending) {
+                    <p
+                      data-pending-note
+                      class="rounded-xl border border-pending/30 bg-pending/10 px-4 py-3 text-sm text-pending"
+                    >
+                      Reserverad – banken har inte bokfört köpet än. Beloppet kan ändras.
+                    </p>
+                  }
+                  <dl
+                    class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-3 border-t border-line pt-5 text-[15px]"
+                  >
+                    @for (field of fields(); track field.key) {
+                      <dt class="text-muted">{{ field.label }}</dt>
+                      <dd [attr.data-field]="field.key" class="text-right [overflow-wrap:anywhere]">
+                        {{ field.value }}
+                      </dd>
+                    }
+                  </dl>
+                  @if (t.account === null) {
+                    <div
+                      data-manual-actions
+                      class="flex flex-wrap items-center gap-2 border-t border-line pt-5"
+                    >
+                      <a
+                        data-edit
+                        [routerLink]="['/transaktioner', t.id, 'redigera']"
+                        class="btn btn-secondary btn-sm"
+                        >Redigera</a
+                      >
+                      @if (confirmingDelete()) {
+                        <span class="text-sm">Ta bort transaktionen?</span>
+                        <button
+                          type="button"
+                          data-confirm-delete
+                          class="btn btn-sm bg-danger text-on-accent"
+                          [disabled]="saving()"
+                          (click)="deleteManual(t.id)"
+                        >
+                          Ja, ta bort
+                        </button>
+                        <button
+                          type="button"
+                          data-cancel-delete
+                          class="btn btn-ghost btn-sm"
+                          (click)="confirmingDelete.set(false)"
+                        >
+                          Avbryt
+                        </button>
                       } @else {
-                        Okategoriserad
+                        <button
+                          type="button"
+                          data-delete
+                          class="btn btn-ghost btn-sm text-danger"
+                          (click)="confirmingDelete.set(true)"
+                        >
+                          Ta bort
+                        </button>
                       }
+                      @if (deleteError()) {
+                        <p role="alert" class="w-full text-sm text-danger">
+                          Transaktionen kunde inte tas bort. Försök igen.
+                        </p>
+                      }
+                    </div>
+                  }
+                </section>
+                @if (t.account !== null) {
+                  <details data-raw class="card p-5">
+                    <summary class="cursor-pointer font-medium">Rådata</summary>
+                    <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
+                      rawJson()
+                    }}</pre>
+                  </details>
+                }
+              </div>
+
+              <div class="flex min-w-0 flex-col gap-5">
+                <section data-category class="card flex flex-col gap-4 p-5">
+                  <h2 class="text-sm font-medium tracking-wide text-muted uppercase">Kategori</h2>
+                  <div class="flex items-center gap-3">
+                    <app-transaction-category-badge
+                      [category]="t.category"
+                      [pending]="pending"
+                      [size]="40"
+                    />
+                    <span class="flex min-w-0 flex-1 flex-col">
+                      <span
+                        data-category-name
+                        class="font-medium [overflow-wrap:anywhere]"
+                        [class.text-muted]="t.category?.confirmed === false"
+                      >
+                        @if (t.category; as c) {
+                          {{ c.category.name }} / {{ c.subcategory.name }}
+                        } @else {
+                          Okategoriserad
+                        }
+                      </span>
                     </span>
                     @if (t.category?.confirmed === false) {
-                      <span
-                        data-category-guessed-note
-                        class="text-sm text-zinc-500 dark:text-zinc-400"
-                        >Gissad</span
-                      >
+                      <span data-category-guessed-note class="pill pill-guess">Gissad</span>
                     }
-                  </span>
-                  @if (t.offsets === null) {
-                    <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                      picking() ? 'Stäng' : 'Ändra'
-                    }}</span>
+                    @if (t.offsets === null) {
+                      <button
+                        type="button"
+                        data-category-button
+                        class="btn btn-secondary btn-sm"
+                        [attr.aria-expanded]="picking()"
+                        [disabled]="saving()"
+                        (click)="togglePicker()"
+                      >
+                        {{ picking() ? 'Stäng' : 'Ändra' }}
+                      </button>
+                    }
+                  </div>
+                  @if (t.category; as c) {
+                    @if (!c.confirmed && t.offsets === null) {
+                      <div
+                        data-guess-bar
+                        class="flex items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3"
+                      >
+                        <span class="text-sm font-medium text-warning">Stämmer gissningen?</span>
+                        <button
+                          type="button"
+                          data-confirm-category
+                          class="btn btn-sm bg-positive text-on-accent"
+                          [disabled]="saving()"
+                          (click)="setCategory(c.subcategory.id, 'Kategorin bekräftades')"
+                        >
+                          Stämmer
+                        </button>
+                      </div>
+                    }
+                    @if (t.offsets === null) {
+                      <button
+                        type="button"
+                        data-remove-category
+                        class="self-start text-sm text-muted underline"
+                        [disabled]="saving()"
+                        (click)="setCategory(null, 'Kategorin togs bort')"
+                      >
+                        Ta bort kategori
+                      </button>
+                    }
                   }
-                </button>
-              </div>
-              @if (t.category; as c) {
-                @if (!c.confirmed && t.offsets === null) {
-                  <button
-                    type="button"
-                    data-confirm-category
-                    class="self-start rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    [disabled]="saving()"
-                    (click)="setCategory(c.subcategory.id)"
+                  @if (t.offsets !== null) {
+                    <p class="text-sm text-muted">Följer köpets kategori.</p>
+                  }
+                  @if (categoryError(); as error) {
+                    <p role="alert" class="text-sm text-danger">{{ error }}</p>
+                  }
+                  @if (similarNote(); as note) {
+                    <p data-similar-updated aria-live="polite" class="text-sm text-muted">
+                      {{ note }}
+                    </p>
+                  }
+                  @if (picking()) {
+                    @if (categories(); as list) {
+                      <app-category-tiles
+                        [categories]="list"
+                        [current]="t.category?.subcategory?.id ?? null"
+                        (picked)="setCategory($event, 'Kategorin sparades')"
+                      />
+                    } @else {
+                      <p aria-live="polite">Hämtar kategorier…</p>
+                    }
+                  }
+                </section>
+
+                <section data-share class="card flex flex-col gap-4 p-5">
+                  <div class="flex items-baseline justify-between gap-3">
+                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">Andel</h2>
+                    <span data-share-source class="text-sm text-muted">{{ shareSource() }}</span>
+                  </div>
+                  <span data-share-name class="sr-only">{{ shareName() }}</span>
+                  @if (t.offsets; as purchase) {
+                    <a
+                      data-share-purchase
+                      [routerLink]="['/transaktioner', purchase.id]"
+                      class="text-sm font-medium underline [overflow-wrap:anywhere]"
+                    >
+                      {{ purchase.description }}
+                    </a>
+                  } @else {
+                    <div
+                      role="group"
+                      aria-label="Välj andel"
+                      class="segmented grid w-full grid-cols-4"
+                    >
+                      @for (choice of shareChoices(); track choice.option) {
+                        <button
+                          type="button"
+                          [attr.data-share-option]="choice.option"
+                          [attr.aria-pressed]="choice.current"
+                          [attr.title]="choice.title"
+                          [disabled]="saving() || choice.disabled"
+                          class="px-1 disabled:opacity-40"
+                          (click)="setShare(choice.option)"
+                        >
+                          {{ choice.label }}
+                        </button>
+                      }
+                    </div>
+                    @if (ratio() !== null && ratio()!.length === 0) {
+                      <p class="text-sm text-muted">
+                        Hushåll kan väljas först när en hushållsandel har ställts in.
+                      </p>
+                    }
+                  }
+                  <div
+                    class="flex h-2 overflow-hidden rounded-full bg-surface-3"
+                    role="presentation"
                   >
-                    Stämmer
-                  </button>
-                }
-                @if (t.offsets === null) {
-                  <button
-                    type="button"
-                    data-remove-category
-                    class="self-start text-sm font-medium underline"
-                    [disabled]="saving()"
-                    (click)="setCategory(null)"
-                  >
-                    Ta bort kategori
-                  </button>
-                }
-              }
-              @if (categoryError(); as error) {
-                <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ error }}</p>
-              }
-              @if (similarNote(); as note) {
-                <p
-                  data-similar-updated
-                  aria-live="polite"
-                  class="text-sm text-zinc-500 dark:text-zinc-400"
-                >
-                  {{ note }}
-                </p>
-              }
-              @if (picking()) {
-                @if (categories(); as list) {
-                  <app-category-picker [categories]="list" (picked)="setCategory($event)" />
-                } @else {
-                  <p aria-live="polite">Hämtar kategorier…</p>
-                }
-              }
-            </section>
-            <section
-              data-share
-              class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <h2 class="font-semibold">Andel</h2>
-              <div class="flex justify-between gap-3">
-                <span class="flex flex-col">
-                  <span data-share-name class="font-medium">
-                    {{ shareName() }}
-                  </span>
-                  <span data-share-source class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ shareSource() }}
-                  </span>
-                </span>
-                <span class="flex flex-col items-end">
-                  <span class="text-sm text-zinc-500 dark:text-zinc-400">Din del</span>
-                  <span data-share-part class="tabular-nums">{{
-                    ownerPart() | money: t.amount.currency
-                  }}</span>
-                </span>
-              </div>
-              @if (t.offsets; as purchase) {
-                <a
-                  data-share-purchase
-                  [routerLink]="['/transaktioner', purchase.id]"
-                  class="self-start text-sm font-medium underline"
-                >
-                  {{ purchase.description }}
-                </a>
-              } @else {
-                <div class="flex items-center gap-4">
-                  <button
-                    type="button"
-                    data-share-toggle
-                    class="font-medium underline"
-                    [attr.aria-expanded]="choosingShare()"
-                    (click)="toggleShareChoices()"
-                  >
-                    {{ choosingShare() ? 'Stäng' : 'Ändra' }}
-                  </button>
-                  @if (t.share.source === 'transaction') {
+                    <div
+                      data-share-bar
+                      class="bar-grow h-full bg-accent transition-[width] duration-500"
+                      [style.width.%]="t.share.percent"
+                    ></div>
+                  </div>
+                  <div class="flex justify-between gap-3 text-sm">
+                    <span class="flex flex-col">
+                      <span class="text-muted">Din del</span>
+                      <span data-share-part class="amount">{{
+                        ownerPart() | money: t.amount.currency
+                      }}</span>
+                    </span>
+                    <span class="flex flex-col items-end">
+                      <span class="text-muted">Partnern</span>
+                      <span data-share-partner-part class="amount">{{
+                        partnerPart() | money: t.amount.currency
+                      }}</span>
+                    </span>
+                  </div>
+                  @if (t.offsets === null && t.share.source === 'transaction') {
                     <button
                       type="button"
                       data-remove-share
-                      class="text-sm font-medium underline"
+                      class="self-start text-sm text-muted underline"
                       [disabled]="saving()"
                       (click)="setShare(null)"
                     >
                       Ta bort egen andel
                     </button>
                   }
-                </div>
-                @if (choosingShare()) {
-                  <div role="group" aria-label="Välj andel" class="flex flex-col gap-1">
-                    @for (choice of shareChoices(); track choice.option) {
-                      <button
-                        type="button"
-                        [attr.data-share-option]="choice.option"
-                        class="rounded-lg px-3 py-2 text-left hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800"
-                        [class.font-semibold]="choice.current"
-                        [attr.aria-pressed]="choice.current"
-                        [disabled]="saving() || choice.disabled"
-                        (click)="setShare(choice.option)"
-                      >
-                        {{ choice.label }}
-                      </button>
-                    }
-                  </div>
-                  @if (ratio() !== null && ratio()!.length === 0) {
-                    <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                      Hushåll kan väljas först när en hushållsandel har ställts in.
-                    </p>
+                  @if (shareError(); as error) {
+                    <p data-share-error role="alert" class="text-sm text-danger">{{ error }}</p>
                   }
-                }
-              }
-              @if (shareError(); as error) {
-                <p data-share-error role="alert" class="text-sm text-red-700 dark:text-red-400">
-                  {{ error }}
-                </p>
-              }
-            </section>
-            @if (t.offsets; as purchase) {
-              <section
-                data-offsets
-                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <h2 class="font-semibold">Kvittad mot</h2>
-                <a
-                  data-offsets-purchase
-                  [routerLink]="['/transaktioner', purchase.id]"
-                  class="flex justify-between gap-3 underline"
-                >
-                  <span class="min-w-0 [overflow-wrap:anywhere]">{{ purchase.description }}</span>
-                  <span class="shrink-0 tabular-nums">{{
-                    purchase.amount.amount | money: purchase.amount.currency
-                  }}</span>
-                </a>
-                <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                  Räknas i köpets månad och följer köpets kategori.
-                </p>
-                <button
-                  type="button"
-                  data-remove-offset
-                  class="self-start text-sm font-medium underline"
-                  [disabled]="saving()"
-                  (click)="setOffset(null)"
-                >
-                  Ta bort kvittning
-                </button>
-              </section>
-            } @else if (t.amount.amount > 0 && t.status === 'booked') {
-              <section
-                data-offset-picker
-                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <button
-                  type="button"
-                  data-offset-toggle
-                  class="self-start font-medium underline"
-                  [attr.aria-expanded]="offsetting()"
-                  (click)="toggleOffset()"
-                >
-                  {{ offsetting() ? 'Stäng' : 'Kvitta mot ett köp' }}
-                </button>
-                @if (offsetting()) {
-                  <input
-                    data-offset-search
-                    type="search"
-                    placeholder="Sök köp"
-                    aria-label="Sök köp"
-                    class="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
-                    [value]="offsetSearch()"
-                    (input)="searchOffsets($any($event.target).value)"
-                  />
-                  @if (offsetCandidates(); as candidates) {
-                    @if (candidates.length === 0) {
-                      <p data-offset-empty>
-                        {{
-                          offsetSearch().trim()
-                            ? 'Inga träffar'
-                            : 'Inga troliga köp. Sök efter ett.'
-                        }}
-                      </p>
+                </section>
+
+                @if (t.offsets; as purchase) {
+                  <section data-offsets class="card flex flex-col gap-3 p-5">
+                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
+                      Kvittad mot
+                    </h2>
+                    <a
+                      data-offsets-purchase
+                      [routerLink]="['/transaktioner', purchase.id]"
+                      class="tx-row flex justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5"
+                    >
+                      <span class="flex min-w-0 flex-col">
+                        <span class="font-medium [overflow-wrap:anywhere]">{{
+                          purchase.description
+                        }}</span>
+                        <span class="text-sm text-muted">{{ purchase.date | dateHeading }}</span>
+                      </span>
+                      <span class="amount shrink-0">{{
+                        purchase.amount.amount | money: purchase.amount.currency
+                      }}</span>
+                    </a>
+                    <p class="text-sm text-muted">
+                      Räknas i köpets månad och följer köpets kategori.
+                    </p>
+                    <button
+                      type="button"
+                      data-remove-offset
+                      class="btn btn-secondary btn-sm self-start"
+                      [disabled]="saving()"
+                      (click)="setOffset(null)"
+                    >
+                      Ta bort kvittning
+                    </button>
+                  </section>
+                } @else if (t.amount.amount > 0 && t.status === 'booked') {
+                  <section data-offset-picker class="card flex flex-col gap-3 p-5">
+                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
+                      Återbetalning?
+                    </h2>
+                    <button
+                      type="button"
+                      data-offset-toggle
+                      class="btn btn-secondary btn-sm self-start"
+                      [attr.aria-expanded]="offsetting()"
+                      (click)="toggleOffset()"
+                    >
+                      {{ offsetting() ? 'Stäng' : 'Kvitta mot ett köp' }}
+                    </button>
+                    @if (offsetting()) {
+                      <div class="expand-in flex flex-col gap-3">
+                        <input
+                          data-offset-search
+                          type="search"
+                          placeholder="Sök köp"
+                          aria-label="Sök köp"
+                          class="input"
+                          [value]="offsetSearch()"
+                          (input)="searchOffsets($any($event.target).value)"
+                        />
+                        @if (offsetCandidates(); as candidates) {
+                          @if (candidates.length === 0) {
+                            <p data-offset-empty class="text-sm text-muted">
+                              {{
+                                offsetSearch().trim()
+                                  ? 'Inga träffar'
+                                  : 'Inga troliga köp. Sök efter ett.'
+                              }}
+                            </p>
+                          }
+                          <ul class="flex flex-col gap-1">
+                            @for (candidate of candidates; track candidate.id) {
+                              <li>
+                                <button
+                                  type="button"
+                                  [attr.data-offset-candidate]="candidate.id"
+                                  class="tx-row flex w-full justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
+                                  [disabled]="saving()"
+                                  (click)="setOffset(candidate.id)"
+                                >
+                                  <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
+                                    <span class="font-medium">{{ candidate.description }}</span>
+                                    <span class="text-sm text-muted">{{ candidate.date }}</span>
+                                  </span>
+                                  <span class="amount shrink-0">{{
+                                    candidate.amount.amount | money: candidate.amount.currency
+                                  }}</span>
+                                </button>
+                              </li>
+                            }
+                          </ul>
+                        } @else {
+                          <p aria-live="polite">Hämtar köp…</p>
+                        }
+                      </div>
                     }
-                    <ul>
-                      @for (candidate of candidates; track candidate.id) {
+                  </section>
+                }
+
+                @if (t.refunds.length > 0 && t.netAmount; as net) {
+                  <section data-refunds class="card flex flex-col gap-3 p-5">
+                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
+                      Kvitterat av
+                    </h2>
+                    <ul class="flex flex-col gap-1">
+                      @for (refund of t.refunds; track refund.id) {
                         <li>
-                          <button
-                            type="button"
-                            [attr.data-offset-candidate]="candidate.id"
-                            class="flex w-full justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            [disabled]="saving()"
-                            (click)="setOffset(candidate.id)"
+                          <a
+                            [attr.data-refund]="refund.id"
+                            [routerLink]="['/transaktioner', refund.id]"
+                            class="tx-row flex justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5"
                           >
-                            <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
-                              <span>{{ candidate.description }}</span>
-                              <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                                candidate.date
+                            <span class="flex min-w-0 flex-col">
+                              <span class="font-medium [overflow-wrap:anywhere]">{{
+                                refund.description
+                              }}</span>
+                              <span class="text-sm text-muted">{{
+                                refund.date | dateHeading
                               }}</span>
                             </span>
-                            <span class="shrink-0 tabular-nums">{{
-                              candidate.amount.amount | money: candidate.amount.currency
+                            <span class="amount text-positive shrink-0">{{
+                              refund.amount.amount | money: refund.amount.currency
                             }}</span>
-                          </button>
+                          </a>
                         </li>
                       }
                     </ul>
-                  } @else {
-                    <p aria-live="polite">Hämtar köp…</p>
-                  }
+                    <p class="flex justify-between border-t border-line pt-3 font-medium">
+                      <span>Netto</span>
+                      <span data-net-amount class="amount">{{
+                        net.amount | money: net.currency
+                      }}</span>
+                    </p>
+                  </section>
                 }
-              </section>
-            }
-            @if (t.refunds.length > 0 && t.netAmount; as net) {
-              <section
-                data-refunds
-                class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <h2 class="font-semibold">Kvitterat av</h2>
-                <ul class="flex flex-col gap-1">
-                  @for (refund of t.refunds; track refund.id) {
-                    <li>
-                      <a
-                        [attr.data-refund]="refund.id"
-                        [routerLink]="['/transaktioner', refund.id]"
-                        class="flex justify-between gap-3 underline"
-                      >
-                        <span class="min-w-0 [overflow-wrap:anywhere]">{{
-                          refund.description
-                        }}</span>
-                        <span class="shrink-0 tabular-nums">{{
-                          refund.amount.amount | money: refund.amount.currency
-                        }}</span>
-                      </a>
-                    </li>
-                  }
-                </ul>
-                <p class="flex justify-between font-medium">
-                  <span>Netto</span>
-                  <span data-net-amount class="tabular-nums">{{
-                    net.amount | money: net.currency
-                  }}</span>
-                </p>
-              </section>
-            }
-            <dl
-              class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 sm:gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              @for (field of fields(); track field.key) {
-                <dt class="text-zinc-500 dark:text-zinc-400">{{ field.label }}</dt>
-                <dd [attr.data-field]="field.key" class="text-right [overflow-wrap:anywhere]">
-                  {{ field.value }}
-                </dd>
-              }
-            </dl>
-            @if (t.account === null) {
-              <section data-manual-actions class="flex flex-wrap items-center gap-4">
-                <a
-                  data-edit
-                  [routerLink]="['/transaktioner', t.id, 'redigera']"
-                  class="font-medium underline"
-                  >Redigera</a
-                >
-                @if (confirmingDelete()) {
-                  <span class="text-sm">Ta bort transaktionen?</span>
-                  <button
-                    type="button"
-                    data-confirm-delete
-                    class="font-medium text-red-700 underline dark:text-red-400"
-                    [disabled]="saving()"
-                    (click)="deleteManual(t.id)"
-                  >
-                    Ja, ta bort
-                  </button>
-                  <button
-                    type="button"
-                    data-cancel-delete
-                    class="underline"
-                    (click)="confirmingDelete.set(false)"
-                  >
-                    Avbryt
-                  </button>
-                } @else {
-                  <button
-                    type="button"
-                    data-delete
-                    class="font-medium text-red-700 underline dark:text-red-400"
-                    (click)="confirmingDelete.set(true)"
-                  >
-                    Ta bort
-                  </button>
-                }
-                @if (deleteError()) {
-                  <p role="alert" class="w-full text-sm text-red-700 dark:text-red-400">
-                    Transaktionen kunde inte tas bort. Försök igen.
-                  </p>
-                }
-              </section>
-            }
-            @if (t.account !== null) {
-              <details
-                data-raw
-                class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <summary class="cursor-pointer font-medium">Rådata</summary>
-                <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
-                  rawJson()
-                }}</pre>
-              </details>
-            }
+              </div>
+            </div>
           }
         }
       }
@@ -480,6 +539,7 @@ export class TransactionDetailsPage {
   private readonly transactions = inject(TransactionsService);
   private readonly categoryList = inject(CategoriesService);
   private readonly sharesService = inject(SharesService);
+  private readonly toast = inject(ToastService);
 
   protected readonly confirmingDelete = signal(false);
   protected readonly deleteError = signal(false);
@@ -491,9 +551,8 @@ export class TransactionDetailsPage {
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
 
-  protected readonly choosingShare = signal(false);
   protected readonly shareError = signal<string | null>(null);
-  /** The household ratio, fetched when the options are first opened; null until then. */
+  /** The household ratio, fetched once the page is shown; null until then or if that failed. */
   protected readonly ratio = signal<HouseholdRatioEntry[] | null>(null);
   private loadingRatio = false;
   private shareRequest: Subscription | undefined;
@@ -515,26 +574,7 @@ export class TransactionDetailsPage {
   protected readonly fields = computed<Field[]>(() => {
     const t = this.details();
     if (t === null) return [];
-    const fields: Field[] = [
-      { label: 'Status', key: 'status', value: t.status === 'pending' ? 'Reserverad' : 'Bokförd' },
-      ...(t.account === null
-        ? [
-            { label: 'Konto', key: 'account', value: 'Manuell' },
-            {
-              label: 'Betald av',
-              key: 'paidBy',
-              value: t.paidBy === 'partner' ? 'Partner' : 'Jag',
-            },
-          ]
-        : [
-            { label: 'Bank', key: 'bank', value: t.account.bank },
-            {
-              label: 'Konto',
-              key: 'account',
-              value: `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
-            },
-          ]),
-    ];
+    const fields: Field[] = [];
     const day = new DateHeadingPipe();
     if (t.transactionDate) {
       fields.push({
@@ -550,6 +590,18 @@ export class TransactionDetailsPage {
         value: day.transform(t.bookingDate),
       });
     }
+    if (t.account !== null) fields.push({ label: 'Bank', key: 'bank', value: t.account.bank });
+    fields.push({
+      label: 'Konto',
+      key: 'account',
+      value:
+        t.account === null ? 'Manuell' : `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
+    });
+    fields.push({
+      label: 'Betald av',
+      key: 'paidBy',
+      value: t.paidBy === 'partner' ? 'Partner' : 'Jag',
+    });
     if (t.counterparty)
       fields.push({ label: 'Motpart', key: 'counterparty', value: t.counterparty });
     if (t.originalAmount) {
@@ -608,10 +660,12 @@ export class TransactionDetailsPage {
     this.categoryError.set(null);
     this.similarNote.set(null);
     this.picking.set(false);
-    this.choosingShare.set(false);
     this.shareError.set(null);
     this.loadRequest = this.transactions.get(id).subscribe({
-      next: (details) => this.state.set({ status: 'ready', details }),
+      next: (details) => {
+        this.state.set({ status: 'ready', details });
+        this.loadRatio();
+      },
       error: (error: unknown) =>
         this.state.set({
           status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
@@ -630,25 +684,26 @@ export class TransactionDetailsPage {
 
   protected readonly shareSource = computed(() => {
     const t = this.details();
-    if (t === null) return '';
-    switch (t.share.source) {
-      case 'account':
-        return `från konto ${t.account?.name ?? ''}`;
-      case 'subcategory':
-        return `från underkategori ${t.category?.subcategory.name ?? ''}`;
-      case 'transaction':
-        return 'satt manuellt';
-      case 'purchase':
-        return 'andel från köpet';
-      case 'default':
-        return 'ingen andel vald';
-    }
+    return t === null ? '' : SHARE_SOURCES[t.share.source];
+  });
+
+  /** The share named in the *Delad* pill; null while the transaction is the owner's alone. */
+  protected readonly sharedLabel = computed(() => {
+    const share = this.details()?.share;
+    if (share === undefined || share.option === 'me') return null;
+    return share.option === 'household' ? 'Hushåll' : SHARE_CHOICE_LABELS[share.option];
   });
 
   /** The owner's part of the amount, signed like the amount. */
   protected readonly ownerPart = computed(() => {
     const t = this.details();
     return t === null ? 0 : Math.round(t.amount.amount * t.share.percent) / 100 + 0;
+  });
+
+  /** What the partner bears of the amount, signed like the amount. */
+  protected readonly partnerPart = computed(() => {
+    const t = this.details();
+    return t === null ? 0 : Math.round((t.amount.amount - this.ownerPart()) * 100) / 100 + 0;
   });
 
   protected readonly shareChoices = computed(() => {
@@ -658,15 +713,16 @@ export class TransactionDetailsPage {
     return SHARE_OPTION_ORDER.map((option) => ({
       option,
       current: t?.share.option === option,
-      label: option === 'household' ? householdLabel(percent) : SHARE_CHOICE_LABELS[option],
-      disabled: option === 'household' && (entries === null || entries.length === 0),
+      label: option === 'household' ? 'Hushåll' : SHARE_CHOICE_LABELS[option],
+      title: option === 'household' ? householdLabel(percent) : SHARE_CHOICE_LABELS[option],
+      // Unknown (not fetched) leaves it enabled; the server refuses it and the error says so.
+      disabled: option === 'household' && entries !== null && entries.length === 0,
     }));
   });
 
-  protected toggleShareChoices(): void {
-    this.choosingShare.update((open) => !open);
-    this.shareError.set(null);
-    if (!this.choosingShare() || this.ratio() !== null || this.loadingRatio) return;
+  /** The ratio decides whether Hushåll can be chosen, so it is fetched once the page is shown. */
+  private loadRatio(): void {
+    if (this.ratio() !== null || this.loadingRatio) return;
     this.loadingRatio = true;
     this.sharesService.householdRatio().subscribe({
       next: (entries) => {
@@ -688,7 +744,7 @@ export class TransactionDetailsPage {
     this.shareRequest = this.transactions.setShare(details.id, share).subscribe({
       next: (updated) => {
         this.state.set({ status: 'ready', details: updated });
-        this.choosingShare.set(false);
+        this.toast.show(share === null ? 'Egen andel togs bort' : 'Andelen sparades');
         this.saving.set(false);
       },
       error: () => {
@@ -728,6 +784,7 @@ export class TransactionDetailsPage {
     this.transactions.setOffset(details.id, purchaseId).subscribe({
       next: (updated) => {
         this.state.set({ status: 'ready', details: updated });
+        this.toast.show(purchaseId === null ? 'Kvittningen togs bort' : 'Kvittningen sparades');
         this.offsetting.set(false);
         this.saving.set(false);
       },
@@ -757,7 +814,7 @@ export class TransactionDetailsPage {
   }
 
   /** Saves the owner's choice as a confirmed category; null makes the transaction uncategorised. */
-  protected setCategory(subcategoryId: number | null): void {
+  protected setCategory(subcategoryId: number | null, saved: string): void {
     const details = this.details();
     if (details === null || this.saving()) return;
     this.saving.set(true);
@@ -767,6 +824,7 @@ export class TransactionDetailsPage {
       next: ({ category, updatedSimilar }) => {
         this.state.set({ status: 'ready', details: { ...details, category } });
         this.similarNote.set(similarUpdatedNote(updatedSimilar));
+        this.toast.show(saved);
         this.picking.set(false);
         this.saving.set(false);
       },
@@ -782,7 +840,10 @@ export class TransactionDetailsPage {
     this.saving.set(true);
     this.deleteError.set(false);
     this.transactions.deleteManual(id).subscribe({
-      next: () => void this.router.navigateByUrl('/transaktioner'),
+      next: () => {
+        this.toast.show('Transaktionen togs bort');
+        void this.router.navigateByUrl('/transaktioner');
+      },
       error: () => {
         this.deleteError.set(true);
         this.saving.set(false);
