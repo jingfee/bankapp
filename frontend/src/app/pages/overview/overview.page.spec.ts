@@ -153,29 +153,31 @@ describe('OverviewPage', () => {
     expect(text(page.querySelector('[data-month]'))).toBe('november 2026');
   });
 
-  describe('the settlement card', () => {
-    const card = (page: HTMLElement) => page.querySelector('[data-settlement-card]');
+  describe('the settlement tile', () => {
+    const card = (page: HTMLElement) => page.querySelector('[data-total="settlement"]');
 
-    it('says what the partner owes and links to Avräkning', async () => {
+    it('shows what the partner owes and links to Delat', async () => {
       const { page } = await render(overview(), accountsOf([]), 4312);
 
-      expect(text(card(page))).toContain('Avräkning: 4 312,00 kr att få');
+      expect(text(card(page)?.querySelector('[data-amount]'))).toBe('4\u00a0312,00\u00a0kr');
+      expect(text(card(page))).toContain('Partnern är skyldig dig');
       expect(card(page)?.getAttribute('href')).toBe('/avrakning');
     });
 
-    it('says att betala when the balance is negative', async () => {
+    it('says the reverse when the balance is negative', async () => {
       const { page } = await render(overview(), accountsOf([]), -250);
 
-      expect(text(card(page))).toContain('Avräkning: 250,00 kr att betala');
+      expect(text(card(page)?.querySelector('[data-amount]'))).toBe('250,00\u00a0kr');
+      expect(text(card(page))).toContain('Du är skyldig partnern');
     });
 
-    it('invites a first setting when there is no balance yet', async () => {
+    it('is hidden when there is no balance setting', async () => {
       const { page } = await render();
 
-      expect(text(card(page))).toContain('Avräkning: inte inställd');
+      expect(card(page)).toBeNull();
     });
 
-    it('is left out when the balance cannot be fetched', async () => {
+    it('is hidden when the balance cannot be fetched', async () => {
       const { page } = await render(overview(), accountsOf([]), 'error');
 
       expect(card(page)).toBeNull();
@@ -195,6 +197,20 @@ describe('OverviewPage', () => {
       expect(text(total('income')?.querySelector('[data-change]'))).toContain('+2 000,00 kr');
       expect(text(total('spending')?.querySelector('[data-change]'))).toContain('−3 000,00 kr');
       expect(text(total('net')?.querySelector('[data-change]'))).toContain('+5 000,00 kr');
+    });
+
+    it('shows four tiles: netto, inkomster, utgifter and avräkning', async () => {
+      const { page } = await render(overview(), accountsOf([]), 10);
+
+      expect(
+        Array.from(page.querySelectorAll('[data-total]')).map((t) => t.getAttribute('data-total')),
+      ).toEqual(['net', 'income', 'spending', 'settlement']);
+    });
+
+    it('does not link the netto tile', async () => {
+      const { page } = await render();
+
+      expect(page.querySelector('[data-total="net"]')?.tagName).not.toBe('A');
     });
 
     it('says when a total is unchanged', async () => {
@@ -361,7 +377,7 @@ describe('OverviewPage', () => {
     it('links the totals and an expanded category to Transaktioner for the month', async () => {
       const { fixture, page } = await render(body());
 
-      const links = Array.from(page.querySelectorAll('[data-total-link]')).map((a) =>
+      const links = Array.from(page.querySelectorAll('a[data-total-link]')).map((a) =>
         a.getAttribute('href'),
       );
       expect(links).toEqual([
@@ -373,6 +389,22 @@ describe('OverviewPage', () => {
       expect(
         row(page, 'Mat & Dryck')?.querySelector('[data-category-link]')?.getAttribute('href'),
       ).toBe('/transaktioner?from=2026-11-01&to=2026-11-30&categories=2');
+      expect(text(row(page, 'Mat & Dryck')?.querySelector('[data-category-link]'))).toBe(
+        'Visa transaktionerna →',
+      );
+    });
+
+    it('draws a donut with a segment per category and the total in the middle', async () => {
+      const { page } = await render(body());
+
+      const segments = Array.from(page.querySelectorAll('[data-donut] [data-segment]'));
+      expect(segments.map((s) => s.getAttribute('data-segment'))).toEqual([
+        'Mat & Dryck',
+        'Boende & Hushåll',
+      ]);
+      expect(text(page.querySelector('[data-donut-total]'))?.replace(/\s/g, ' ')).toBe(
+        '1 000,00 kr',
+      );
     });
 
     it('lists spending per category as bars, largest first, with amount and share', async () => {
@@ -396,19 +428,11 @@ describe('OverviewPage', () => {
       expect(rows[0]?.querySelector('[data-badge]')).not.toBeNull();
     });
 
-    it('lists income in its own section', async () => {
+    it('has no separate income breakdown', async () => {
       const { page } = await render(body());
 
-      const rows = page.querySelectorAll('[data-section="income"] [data-category-row]');
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.getAttribute('data-category-row')).toBe('Inkomst');
-      expect(text(rows[0]?.querySelector('[data-share]'))).toBe('100 %');
-    });
-
-    it('has no income section when there is no income', async () => {
-      const { page } = await render(overview({ categories: [food] }));
-
       expect(page.querySelector('[data-section="income"]')).toBeNull();
+      expect(page.querySelector('[data-category-row="Inkomst"]')).toBeNull();
     });
 
     it('opens the subcategories of a tapped category, and closes them on another tap', async () => {
@@ -452,14 +476,6 @@ describe('OverviewPage', () => {
       );
     });
 
-    it('drills into income the same way', async () => {
-      const { fixture, page } = await render(body());
-
-      await click(fixture, row(page, 'Inkomst')?.querySelector('button') ?? null);
-
-      expect(page.querySelector('[data-subcategory-row="Lön"]')).not.toBeNull();
-    });
-
     it('shows a failure to fetch the transactions of a subcategory', async () => {
       const { fixture, page, http } = await render(body());
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
@@ -489,8 +505,8 @@ describe('OverviewPage', () => {
       const { page } = await render(overview({ uncategorised: 4 }));
 
       const link = page.querySelector('[data-uncategorised-row]');
-      expect(text(link)).toContain('Okategoriserat');
-      expect(text(link)).toContain('4');
+      expect(text(link)).toContain('4 okategoriserade transaktioner');
+      expect(text(link)).toContain('Granska →');
       expect(link?.getAttribute('href')).toBe('/granska');
     });
 
@@ -514,9 +530,9 @@ describe('OverviewPage', () => {
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
   });
 
-  describe('the balance strip', () => {
+  describe('the accounts card', () => {
     const strip = (page: HTMLElement) =>
-      Array.from(page.querySelectorAll('[data-balance-strip] li')).map((li) => ({
+      Array.from(page.querySelectorAll('[data-accounts] li')).map((li) => ({
         name: li.querySelector('[data-account-name]')?.textContent?.trim(),
         balance: li.querySelector('[data-balance]')?.textContent?.trim(),
       }));
@@ -535,7 +551,19 @@ describe('OverviewPage', () => {
         { name: 'Sparkonto', balance: '10,00 kr' },
         { name: 'Kort', balance: '−99,00 kr' },
       ]);
-      expect(page.querySelector('[data-balance-strip] a, [data-balance-strip] button')).toBeNull();
+      expect(page.querySelector('[data-accounts] li a, [data-accounts] li button')).toBeNull();
+    });
+
+    it('shows the bank and account type, a monogram, and links to Banker', async () => {
+      const { page } = await render(
+        overview(),
+        accountsOf([bankGroup('Swedbank', [account('Lönekonto', 5)])]),
+      );
+
+      const li = page.querySelector('[data-accounts] li');
+      expect(text(li?.querySelector('[data-account-detail]'))).toBe('Swedbank · Betalkonto');
+      expect(text(li?.querySelector('[data-monogram]'))).toBe('S');
+      expect(page.querySelector('[data-accounts] a[href="/banker"]')).not.toBeNull();
     });
 
     it('leaves out hidden accounts', async () => {
@@ -576,7 +604,7 @@ describe('OverviewPage', () => {
 
     it('is absent when there are no accounts, or they cannot be fetched', async () => {
       const none = await render();
-      expect(none.page.querySelector('[data-balance-strip]')).toBeNull();
+      expect(none.page.querySelector('[data-accounts]')).toBeNull();
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         imports: [OverviewPage],
@@ -584,7 +612,7 @@ describe('OverviewPage', () => {
       });
 
       const failed = await render(overview({ uncategorised: 1 }), 'error');
-      expect(failed.page.querySelector('[data-balance-strip]')).toBeNull();
+      expect(failed.page.querySelector('[data-accounts]')).toBeNull();
       expect(failed.page.querySelector('[data-uncategorised-row]')).not.toBeNull();
     });
   });
@@ -606,6 +634,30 @@ describe('OverviewPage', () => {
         expect(banner(page)?.querySelector('a[href="/banker"]')).not.toBeNull();
       },
     );
+
+    it('says which bank expires and in how many days, with a link to renew', async () => {
+      const { page } = await render(
+        overview(),
+        accountsOf([
+          bankGroup('Skandia', [account('Spar', 5, 2)], {
+            status: 'expiring',
+            validUntil: new Date(Date.now() + 5 * 86_400_000 - 1000).toISOString(),
+          }),
+        ]),
+      );
+
+      expect(text(banner(page))).toContain('Kopplingen till Skandia går ut om 5 dagar.');
+      expect(text(banner(page)?.querySelector('a'))).toBe('Förnya →');
+    });
+
+    it('says when a connection has expired', async () => {
+      const { page } = await render(
+        overview(),
+        accountsOf([bankGroup('Skandia', [account('Spar', 5, 2)], { status: 'expired' })]),
+      );
+
+      expect(text(banner(page))).toContain('Kopplingen till Skandia har gått ut.');
+    });
 
     it('is absent when every connection is active', async () => {
       const { page } = await render(

@@ -1,20 +1,22 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type {
-  ConnectedAccount,
-  OverviewCategory,
-  OverviewResponse,
-  OverviewTotals,
-  OverviewView,
-  Transaction,
+import {
+  CATEGORY_PALETTE,
+  type AccountType,
+  type ConnectedAccount,
+  type OverviewCategory,
+  type OverviewResponse,
+  type OverviewTotals,
+  type OverviewView,
+  type Transaction,
 } from '@bankapp/shared';
 import { type Subscription, catchError, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
-import { balanceText } from '../../formatting/settlement-balance';
 import { OverviewService } from '../../overview.service';
 import { SettlementService } from '../../settlement.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
@@ -31,13 +33,45 @@ interface Bar<T> {
 }
 
 const TOTALS: { kind: TotalKind; label: string }[] = [
+  { kind: 'net', label: 'Netto' },
   { kind: 'income', label: 'Inkomster' },
   { kind: 'spending', label: 'Utgifter' },
-  { kind: 'net', label: 'Netto' },
 ];
 
-function labelOf(kind: TotalKind): string {
-  return TOTALS.find((total) => total.kind === kind)!.label;
+const ACCOUNT_TYPES: Record<AccountType, string> = {
+  payment: 'Betalkonto',
+  savings: 'Sparkonto',
+  card: 'Kortkonto',
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The donut: radius and circumference of its ring, in the SVG's own units. */
+const RADIUS = 48;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+/** Space left between neighbouring segments. */
+const SEGMENT_GAP = 1.5;
+
+interface DonutSegment {
+  id: number;
+  name: string;
+  colour: string;
+  dash: string;
+  offset: number;
+}
+
+interface Tile {
+  kind: TotalKind | 'settlement';
+  label: string;
+  amount: string;
+  line: string;
+  positive: boolean;
+  link?: { path: string; params: Record<string, string> };
+}
+
+interface AccountRow {
+  account: ConnectedAccount;
+  bank: string;
 }
 
 const money = new MoneyPipe();
@@ -85,91 +119,95 @@ function bars<T extends { id: number; name: string; total: number }>(
 /** One calendar month: income, spending and net, and where the money went. */
 @Component({
   selector: 'app-overview-page',
-  imports: [RouterLink, MoneyPipe, CategoryBar, TransactionList],
+  imports: [NgTemplateOutlet, RouterLink, MoneyPipe, CategoryBar, TransactionList],
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      @if (expiringConnection()) {
-        <p
-          data-connection-banner
-          class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-        >
-          En koppling går ut eller har gått ut.
-          <a routerLink="/banker" class="font-medium underline">Gå till Banker</a>
-        </p>
-      }
-
-      @if (openAccounts(); as open) {
-        <ul data-balance-strip class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          @for (account of open; track account.id) {
-            <li
-              class="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <span data-account-name class="truncate text-sm text-zinc-500 dark:text-zinc-400">{{
-                account.name
-              }}</span>
-              <span data-balance class="font-medium tabular-nums">{{
-                account.balance ? (account.balance.amount | money: account.balance.currency) : '–'
-              }}</span>
-            </li>
-          }
-        </ul>
-      }
-
-      @if (settlementCard(); as card) {
-        <a
-          data-settlement-card
-          routerLink="/avrakning"
-          class="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-        >
-          <span>Avräkning: {{ card }}</span>
-          <span aria-hidden="true">›</span>
-        </a>
-      }
-
-      <header class="flex items-center justify-between">
-        <button
-          type="button"
-          data-previous-month
-          aria-label="Föregående månad"
-          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-surface-2"
-          (click)="go(-1)"
-        >
-          ‹
-        </button>
-        <h1 data-month class="text-2xl font-semibold tracking-tight">{{ monthTitle() }}</h1>
-        <button
-          type="button"
-          data-next-month
-          aria-label="Nästa månad"
-          class="min-w-11 rounded-lg px-3 py-2 text-2xl hover:bg-surface-2 disabled:opacity-30"
-          [disabled]="!canGoForward()"
-          (click)="go(1)"
-        >
-          ›
-        </button>
-      </header>
-
-      <div
-        role="group"
-        aria-label="Visa"
-        data-view-toggle
-        class="flex self-center rounded-lg bg-zinc-200/60 p-1 dark:bg-zinc-800"
+    <ng-template #tileBody let-tile>
+      <span class="text-[11px] font-semibold tracking-wider text-muted uppercase">{{
+        tile.label
+      }}</span>
+      <span
+        data-amount
+        class="amount text-[17px] sm:text-[21px]"
+        [class.text-positive]="tile.positive"
+        >{{ tile.amount }}</span
       >
-        @for (option of views; track option.view) {
+      <span data-change class="text-xs leading-snug text-muted">{{ tile.line }}</span>
+    </ng-template>
+
+    <main class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:py-10">
+      <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-1">
           <button
             type="button"
-            [attr.data-view]="option.view"
-            [attr.aria-pressed]="view() === option.view"
-            class="rounded-md px-4 py-1.5 text-sm font-medium"
-            [class.bg-white]="view() === option.view"
-            [class.shadow-sm]="view() === option.view"
-            [class.dark:bg-zinc-600]="view() === option.view"
-            (click)="setView(option.view)"
+            data-previous-month
+            aria-label="Föregående månad"
+            class="btn btn-ghost size-10 px-0 text-2xl"
+            (click)="go(-1)"
           >
-            {{ option.label }}
+            ‹
           </button>
-        }
-      </div>
+          <h1
+            data-month
+            class="min-w-44 text-center text-2xl font-semibold tracking-tight capitalize sm:text-3xl"
+          >
+            {{ monthTitle() }}
+          </h1>
+          <button
+            type="button"
+            data-next-month
+            aria-label="Nästa månad"
+            class="btn btn-ghost size-10 px-0 text-2xl"
+            [disabled]="!canGoForward()"
+            (click)="go(1)"
+          >
+            ›
+          </button>
+        </div>
+
+        <div
+          role="group"
+          aria-label="Visa"
+          data-view-toggle
+          class="segmented w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none"
+        >
+          @for (option of views; track option.view) {
+            <button
+              type="button"
+              [attr.data-view]="option.view"
+              [attr.aria-pressed]="view() === option.view"
+              (click)="setView(option.view)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+      </header>
+
+      @if (banner(); as b) {
+        <p
+          data-connection-banner
+          class="flex items-center gap-3 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="size-5 shrink-0"
+            aria-hidden="true"
+          >
+            <path
+              d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"
+            />
+            <path d="M12 9v4M12 17h.01" />
+          </svg>
+          <span class="flex-1 text-ink">{{ b }}</span>
+          <a routerLink="/banker" class="shrink-0 font-semibold whitespace-nowrap">Förnya →</a>
+        </p>
+      }
 
       @switch (status()) {
         @case ('loading') {
@@ -180,132 +218,218 @@ function bars<T extends { id: number; name: string; total: number }>(
         }
         @default {
           @if (overview(); as o) {
-            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              @for (total of totalRows(); track total.kind) {
-                <div
-                  [attr.data-total]="total.kind"
-                  class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm sm:block dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <dt class="text-sm text-zinc-500 dark:text-zinc-400">{{ total.label }}</dt>
-                  <dd data-amount class="font-semibold tabular-nums">{{ total.amount }}</dd>
-                  <dd data-change class="basis-full text-xs text-zinc-500 dark:text-zinc-400">
-                    {{ total.change }}
-                  </dd>
-                  @if (total.kind !== 'net') {
-                    <dd class="basis-full text-xs">
-                      <a
-                        data-total-link
-                        routerLink="/transaktioner"
-                        [queryParams]="
-                          monthParams({ kind: total.kind === 'income' ? 'in' : 'out' })
-                        "
-                        class="font-medium underline"
-                        >Visa transaktioner</a
-                      >
-                    </dd>
-                  }
-                </div>
+            <div data-tiles class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
+              @for (tile of tiles(); track tile.kind) {
+                @if (tile.link; as link) {
+                  <a
+                    [attr.data-total]="tile.kind"
+                    [attr.data-total-link]="tile.kind === 'settlement' ? null : ''"
+                    [routerLink]="link.path"
+                    [queryParams]="link.params"
+                    class="stat-tile"
+                    [class.stat-tile-violet]="tile.kind === 'settlement'"
+                  >
+                    <ng-container *ngTemplateOutlet="tileBody; context: { $implicit: tile }" />
+                  </a>
+                } @else {
+                  <div
+                    [attr.data-total]="tile.kind"
+                    class="stat-tile"
+                    [class.stat-tile-positive]="tile.positive"
+                  >
+                    <ng-container *ngTemplateOutlet="tileBody; context: { $implicit: tile }" />
+                  </div>
+                }
               }
-            </dl>
+            </div>
 
             @if (spending().length === 0 && income().length === 0) {
               <p>Inga transaktioner den här månaden.</p>
-              @if (!openAccounts()) {
+              @if (!accountRows()) {
                 <a routerLink="/anslut-bank" class="self-start font-medium underline"
                   >Anslut bank</a
                 >
               }
             }
 
-            @for (section of sections(); track section.key) {
-              @if (section.bars.length > 0) {
-                <section
-                  [attr.data-section]="section.key"
-                  class="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:p-4 dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <h2 class="px-2 text-lg font-semibold">{{ section.title }}</h2>
-                  <ul class="mt-2 flex flex-col">
-                    @for (bar of section.bars; track bar.item.id) {
-                      <li [attr.data-category-row]="bar.item.name">
-                        <app-category-bar
-                          [icon]="bar.item.icon"
-                          [colour]="bar.item.colour"
-                          [name]="bar.item.name"
-                          [total]="bar.item.total"
-                          [share]="bar.share"
-                          [width]="bar.width"
-                          [expanded]="openCategory() === bar.item.id"
-                          (toggled)="toggleCategory(bar.item.id)"
-                        />
-
-                        @if (openCategory() === bar.item.id) {
-                          <ul
-                            class="mt-1 mb-2 ml-3 flex flex-col border-l border-zinc-200 pl-1 dark:border-zinc-700"
+            <div
+              class="grid gap-4 sm:gap-5 lg:items-start"
+              [class.lg:grid-cols-[minmax(0,1fr)_320px]]="accountRows()"
+            >
+              <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
+                @if (spending().length > 0 || income().length > 0) {
+                  <section data-section="spending" class="card p-4 sm:p-5">
+                    <h2 class="mb-4 text-lg font-semibold">Utgifter per kategori</h2>
+                    @if (spending().length === 0) {
+                      <p class="text-muted">Inga utgifter den här månaden.</p>
+                    } @else {
+                      <div class="flex flex-col gap-5 sm:flex-row sm:items-start">
+                        <div
+                          data-donut
+                          class="donut-enter relative mx-auto size-44 shrink-0 sm:mx-0"
+                        >
+                          <svg
+                            viewBox="0 0 120 120"
+                            class="size-full -rotate-90"
+                            aria-hidden="true"
                           >
-                            <li class="px-2 py-1 text-sm">
-                              <a
-                                data-category-link
-                                routerLink="/transaktioner"
-                                [queryParams]="monthParams({ categories: '' + bar.item.id })"
-                                class="font-medium underline"
-                                >Visa alla transaktioner i {{ bar.item.name }}</a
-                              >
-                            </li>
-                            @for (sub of subBars(bar.item); track sub.item.id) {
-                              <li [attr.data-subcategory-row]="sub.item.name">
-                                <app-category-bar
-                                  [icon]="sub.item.icon"
-                                  [colour]="bar.item.colour"
-                                  [name]="sub.item.name"
-                                  [total]="sub.item.total"
-                                  [share]="sub.share"
-                                  [width]="sub.width"
-                                  [expanded]="openSubcategory() === sub.item.id"
-                                  (toggled)="toggleSubcategory(sub.item.id)"
-                                />
-                                @if (openSubcategory() === sub.item.id) {
-                                  @if (subStatus() === 'failed') {
-                                    <p role="alert" class="px-2 py-2">
-                                      Transaktionerna kunde inte hämtas. Försök igen senare.
-                                    </p>
-                                  } @else if (subStatus() === 'loading') {
-                                    <p aria-live="polite" class="px-2 py-2">
-                                      Hämtar transaktioner…
-                                    </p>
-                                  } @else {
-                                    <div class="mt-2 mb-3">
-                                      <app-transaction-list
-                                        [transactions]="subTransactions()"
-                                        [compact]="true"
-                                        [showOwnShare]="view() === 'mine'"
-                                      />
-                                    </div>
-                                  }
-                                }
-                              </li>
+                            <circle
+                              cx="60"
+                              cy="60"
+                              r="48"
+                              fill="none"
+                              stroke="var(--color-surface-3)"
+                              stroke-width="14"
+                            />
+                            @for (segment of donut(); track segment.id) {
+                              <circle
+                                [attr.data-segment]="segment.name"
+                                cx="60"
+                                cy="60"
+                                r="48"
+                                fill="none"
+                                stroke-width="14"
+                                [attr.stroke]="segment.colour"
+                                [attr.stroke-dasharray]="segment.dash"
+                                [attr.stroke-dashoffset]="segment.offset"
+                              />
                             }
-                          </ul>
-                        }
+                          </svg>
+                          <span
+                            class="absolute inset-0 flex flex-col items-center justify-center text-center"
+                          >
+                            <span class="text-[11px] tracking-wider text-muted uppercase"
+                              >Utgifter</span
+                            >
+                            <span data-donut-total class="amount text-base">{{
+                              o.totals.spending | money
+                            }}</span>
+                          </span>
+                        </div>
+
+                        <ul class="flex min-w-0 flex-1 flex-col">
+                          @for (bar of spendingBars(); track bar.item.id) {
+                            <li [attr.data-category-row]="bar.item.name">
+                              <app-category-bar
+                                [icon]="bar.item.icon"
+                                [colour]="bar.item.colour"
+                                [name]="bar.item.name"
+                                [total]="bar.item.total"
+                                [share]="bar.share"
+                                [width]="bar.width"
+                                [expanded]="openCategory() === bar.item.id"
+                                (toggled)="toggleCategory(bar.item.id)"
+                              />
+
+                              @if (openCategory() === bar.item.id) {
+                                <ul
+                                  class="expand-in mt-1 mb-2 ml-4 flex flex-col border-l border-line pl-1"
+                                >
+                                  @for (sub of subBars(bar.item); track sub.item.id) {
+                                    <li [attr.data-subcategory-row]="sub.item.name">
+                                      <app-category-bar
+                                        [icon]="sub.item.icon"
+                                        [colour]="bar.item.colour"
+                                        [name]="sub.item.name"
+                                        [total]="sub.item.total"
+                                        [share]="sub.share"
+                                        [width]="sub.width"
+                                        [expanded]="openSubcategory() === sub.item.id"
+                                        (toggled)="toggleSubcategory(sub.item.id)"
+                                      />
+                                      @if (openSubcategory() === sub.item.id) {
+                                        @if (subStatus() === 'failed') {
+                                          <p role="alert" class="px-2 py-2">
+                                            Transaktionerna kunde inte hämtas. Försök igen senare.
+                                          </p>
+                                        } @else if (subStatus() === 'loading') {
+                                          <p aria-live="polite" class="px-2 py-2">
+                                            Hämtar transaktioner…
+                                          </p>
+                                        } @else {
+                                          <div class="expand-in mt-2 mb-3">
+                                            <app-transaction-list
+                                              [transactions]="subTransactions()"
+                                              [compact]="true"
+                                              [showOwnShare]="view() === 'mine'"
+                                            />
+                                          </div>
+                                        }
+                                      }
+                                    </li>
+                                  }
+                                  <li class="px-2 py-2 text-sm">
+                                    <a
+                                      data-category-link
+                                      routerLink="/transaktioner"
+                                      [queryParams]="monthParams({ categories: '' + bar.item.id })"
+                                      class="font-semibold text-accent"
+                                      >Visa transaktionerna →</a
+                                    >
+                                  </li>
+                                </ul>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  </section>
+                }
+
+                @if (o.uncategorised > 0) {
+                  <a
+                    data-uncategorised-row
+                    routerLink="/granska"
+                    class="tx-row flex items-center justify-between gap-3 rounded-[14px] border border-dashed border-line-strong px-4 py-3 text-sm"
+                  >
+                    <span
+                      >{{ o.uncategorised }}
+                      {{
+                        o.uncategorised === 1
+                          ? 'okategoriserad transaktion'
+                          : 'okategoriserade transaktioner'
+                      }}</span
+                    >
+                    <span class="font-semibold whitespace-nowrap text-accent">Granska →</span>
+                  </a>
+                }
+              </div>
+
+              @if (accountRows(); as rows) {
+                <section data-accounts class="card p-4 sm:p-5">
+                  <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold">Konton</h2>
+                    <a routerLink="/banker" class="text-sm font-semibold text-accent">Banker →</a>
+                  </div>
+                  <ul class="flex flex-col gap-1">
+                    @for (row of rows; track row.account.id) {
+                      <li class="flex items-center gap-3 py-2">
+                        <span
+                          data-monogram
+                          class="grid size-9 shrink-0 place-content-center rounded-[10px] bg-surface-3 text-sm font-bold"
+                          aria-hidden="true"
+                          >{{ row.bank.charAt(0).toUpperCase() }}</span
+                        >
+                        <span class="flex min-w-0 flex-1 flex-col">
+                          <span data-account-name class="truncate text-[15px] font-medium">{{
+                            row.account.name
+                          }}</span>
+                          <span data-account-detail class="truncate text-xs text-muted"
+                            >{{ row.bank }} · {{ accountType(row.account) }}</span
+                          >
+                        </span>
+                        <span data-balance class="amount shrink-0 text-[15px]">{{
+                          row.account.balance
+                            ? (row.account.balance.amount | money: row.account.balance.currency)
+                            : '–'
+                        }}</span>
                       </li>
                     }
                   </ul>
                 </section>
               }
-            }
-
-            @if (o.uncategorised > 0) {
-              <a
-                data-uncategorised-row
-                routerLink="/granska"
-                class="flex items-center justify-between rounded-2xl border border-dashed border-zinc-300 bg-white p-4 dark:border-zinc-600 dark:bg-zinc-900"
-              >
-                <span>Okategoriserat</span>
-                <span class="font-medium tabular-nums"
-                  >{{ o.uncategorised }}
-                  {{ o.uncategorised === 1 ? 'transaktion' : 'transaktioner' }} ›</span
-                >
-              </a>
-            }
+            </div>
           }
         }
       }
@@ -330,22 +454,24 @@ export class OverviewPage {
     { initialValue: undefined },
   );
 
-  /** What the card says; before any balance setting it invites the owner to set one. */
-  protected readonly settlementCard = computed(() => {
-    const response = this.settlement();
-    if (response === undefined) return null;
-    return response.balance === null ? 'inte inställd' : balanceText(response.balance);
-  });
-
-  protected readonly openAccounts = computed<ConnectedAccount[] | null>(() => {
+  /** Each open account with its bank. */
+  protected readonly accountRows = computed<AccountRow[] | null>(() => {
     const open =
-      this.accounts()?.banks.flatMap((group) => group.accounts.filter((a) => !a.hidden)) ?? [];
+      this.accounts()?.banks.flatMap((group) =>
+        group.accounts.filter((a) => !a.hidden).map((account) => ({ account, bank: group.bank })),
+      ) ?? [];
     return open.length === 0 ? null : open;
   });
 
-  protected readonly expiringConnection = computed(
-    () => this.accounts()?.banks.some((group) => group.status !== 'active') ?? false,
-  );
+  /** What the amber banner says about the first connection that is expiring or expired. */
+  protected readonly banner = computed<string | null>(() => {
+    const lapsed = this.accounts()?.banks.filter((g) => g.status !== 'active') ?? [];
+    const group = lapsed.find((g) => g.status === 'expired') ?? lapsed[0];
+    if (!group) return null;
+    if (group.status === 'expired') return `Kopplingen till ${group.bank} har gått ut.`;
+    const days = Math.max(1, Math.ceil((Date.parse(group.validUntil) - Date.now()) / DAY_MS));
+    return `Kopplingen till ${group.bank} går ut om ${days === 1 ? '1 dag' : `${days} dagar`}.`;
+  });
 
   private readonly currentMonth = monthOf(new Date());
   protected readonly month = signal(this.currentMonth);
@@ -378,16 +504,28 @@ export class OverviewPage {
     (this.overview()?.categories ?? []).filter((c) => c.kind === 'expense'),
   );
 
-  protected readonly sections = computed(() => {
-    const o = this.overview();
-    return [
-      {
-        key: 'spending',
-        title: labelOf('spending'),
-        bars: bars(this.spending(), o?.totals.spending ?? 0),
-      },
-      { key: 'income', title: labelOf('income'), bars: bars(this.income(), o?.totals.income ?? 0) },
-    ];
+  protected readonly spendingBars = computed(() =>
+    bars(this.spending(), this.overview()?.totals.spending ?? 0),
+  );
+
+  /** One ring segment per spending category, in the category's colour. */
+  protected readonly donut = computed<DonutSegment[]>(() => {
+    const items = this.spending().filter((c) => c.total > 0);
+    const sum = items.reduce((acc, c) => acc + c.total, 0);
+    let used = 0;
+    return items.map((c) => {
+      const length = (c.total / sum) * CIRCUMFERENCE;
+      const visible = Math.max(length - (items.length > 1 ? SEGMENT_GAP : 0), 0.5);
+      const segment = {
+        id: c.id,
+        name: c.name,
+        colour: CATEGORY_PALETTE[c.colour].colour,
+        dash: `${visible} ${CIRCUMFERENCE - visible}`,
+        offset: -used,
+      };
+      used += length;
+      return segment;
+    });
   });
 
   /** Transaktioner pre-filtered to the month shown, and whatever else `extra` adds. */
@@ -402,16 +540,46 @@ export class OverviewPage {
     };
   }
 
-  protected readonly totalRows = computed(() => {
+  /** Netto, Inkomster, Utgifter and, with a balance setting, Avräkning. */
+  protected readonly tiles = computed<Tile[]>(() => {
     const o = this.overview();
     if (o === null) return [];
-    return TOTALS.map(({ kind, label }) => ({
+    const tiles: Tile[] = TOTALS.map(({ kind, label }) => ({
       kind,
       label,
       amount: money.transform(o.totals[kind]),
-      change: this.changeText(o.totals[kind] - o.previous[kind]),
+      line: this.changeText(o.totals[kind] - o.previous[kind]),
+      positive: kind === 'net' && o.totals.net >= 0,
+      link:
+        kind === 'net'
+          ? undefined
+          : {
+              path: '/transaktioner',
+              params: this.monthParams({ kind: kind === 'income' ? 'in' : 'out' }),
+            },
     }));
+    const balance = this.settlement()?.balance;
+    if (balance !== undefined && balance !== null) {
+      tiles.push({
+        kind: 'settlement',
+        label: 'Avräkning',
+        amount: money.transform(Math.abs(balance)),
+        line:
+          balance === 0
+            ? 'Ni är kvitt'
+            : balance > 0
+              ? 'Partnern är skyldig dig'
+              : 'Du är skyldig partnern',
+        positive: false,
+        link: { path: '/avrakning', params: {} },
+      });
+    }
+    return tiles;
   });
+
+  protected accountType(account: ConnectedAccount): string {
+    return ACCOUNT_TYPES[account.type];
+  }
 
   constructor() {
     this.load();

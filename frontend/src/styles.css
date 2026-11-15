@@ -727,3 +727,76 @@ router-outlet + * {
     }
   }
 }
+
+@layer components {
+  /* Overview stat tile: a compact label / amount / muted line, optionally tinted and a link */
+  .stat-tile {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    background: var(--color-surface-1);
+    transition:
+      background-color 0.15s ease,
+      transform 0.12s ease;
+  }
+  a.stat-tile:hover {
+    background: var(--color-surface-2);
+  }
+  a.stat-tile:active {
+    transform: scale(0.98);
+  }
+  .stat-tile-positive {
+    border-color: color-mix(in srgb, var(--color-positive) 28%, transparent);
+  }
+  .stat-tile-violet {
+    border-color: color-mix(in srgb, #c4b5fd 30%, transparent);
+  }
+  .stat-tile-violet [data-amount] {
+    color: #c4b5fd;
+  }
+  @media (min-width: 40rem) {
+    .stat-tile {
+      padding: 14px 16px;
+    }
+  }
+
+  /* Overview: the donut rotates and scales in, bars grow, and an opened row fades and slides */
+  .donut-enter {
+    animation: donut-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .bar-grow {
+    transform-origin: left;
+    animation: bar-grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .expand-in {
+    animation: expand-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  @keyframes donut-in {
+    from {
+      opacity: 0;
+      transform: rotate(-90deg) scale(0.85);
+    }
+  }
+  @keyframes bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes expand-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .donut-enter,
+    .bar-grow,
+    .expand-in {
+      animation: none;
+    }
+  }
+}
