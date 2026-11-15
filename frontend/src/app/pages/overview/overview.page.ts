@@ -127,7 +127,7 @@ function bars<T extends { id: number; name: string; total: number }>(
       }}</span>
       <span
         data-amount
-        class="amount text-[17px] sm:text-[21px]"
+        class="amount text-[17px] whitespace-nowrap sm:text-[21px]"
         [class.text-positive]="tile.positive"
         >{{ tile.amount }}</span
       >
@@ -218,7 +218,7 @@ function bars<T extends { id: number; name: string; total: number }>(
         }
         @default {
           @if (overview(); as o) {
-            <div data-tiles class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
+            <div data-tiles class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-4">
               @for (tile of tiles(); track tile.kind) {
                 @if (tile.link; as link) {
                   <a
@@ -253,20 +253,20 @@ function bars<T extends { id: number; name: string; total: number }>(
             }
 
             <div
-              class="grid gap-4 sm:gap-5 lg:items-start"
-              [class.lg:grid-cols-[minmax(0,1fr)_320px]]="accountRows()"
+              class="grid gap-4 sm:gap-5 xl:items-start"
+              [class.xl:grid-cols-[minmax(0,1fr)_320px]]="accountRows()"
             >
               <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
                 @if (spending().length > 0 || income().length > 0) {
-                  <section data-section="spending" class="card p-4 sm:p-5">
+                  <section data-section="spending" class="card @container p-4 sm:p-5">
                     <h2 class="mb-4 text-lg font-semibold">Utgifter per kategori</h2>
                     @if (spending().length === 0) {
                       <p class="text-muted">Inga utgifter den här månaden.</p>
                     } @else {
-                      <div class="flex flex-col gap-5 sm:flex-row sm:items-start">
+                      <div class="flex flex-col gap-5 @lg:flex-row @lg:items-start">
                         <div
                           data-donut
-                          class="donut-enter relative mx-auto size-44 shrink-0 sm:mx-0"
+                          class="donut-enter relative mx-auto size-44 shrink-0 @lg:mx-0"
                         >
                           <svg
                             viewBox="0 0 120 120"
