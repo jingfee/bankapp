@@ -104,20 +104,26 @@ describe('BankerPage', () => {
     expect(page.textContent).not.toContain('Inga banker är anslutna ännu.');
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
       bank: group.querySelector('h2')?.textContent?.trim(),
-      accounts: Array.from(group.querySelectorAll('li')).map((li) =>
-        Array.from(li.querySelectorAll(':scope > span:first-child > span')).map((span) =>
-          span.textContent?.trim(),
-        ),
+      accounts: Array.from(group.querySelectorAll('section > ul > li')).map((li) =>
+        li.querySelector('[data-account-name]')?.textContent?.trim(),
       ),
+      types: Array.from(group.querySelectorAll('section > ul > li')).map(
+        (li) => li.textContent?.match(/(Betalkonto|Sparkonto|Kortkonto)/)?.[1],
+      ),
+      count: group.querySelector('[data-account-count]')?.textContent?.trim(),
     }));
     expect(groups).toEqual([
-      { bank: 'Coop Mastercard', accounts: [['Coop Mastercard', 'Kortkonto']] },
+      {
+        bank: 'Coop Mastercard',
+        accounts: ['Coop Mastercard'],
+        types: ['Kortkonto'],
+        count: '1 konto',
+      },
       {
         bank: 'Swedbank',
-        accounts: [
-          ['Lönekonto', 'Betalkonto'],
-          ['Sparkonto', 'Sparkonto'],
-        ],
+        accounts: ['Lönekonto', 'Sparkonto'],
+        types: ['Betalkonto', 'Sparkonto'],
+        count: '2 konton',
       },
     ]);
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
@@ -164,7 +170,7 @@ describe('BankerPage', () => {
         ),
       );
 
-      const [first, second] = Array.from(page.querySelectorAll('li'));
+      const [first, second] = Array.from(page.querySelectorAll('section > ul > li'));
       expect(first?.querySelector('[data-balance]')?.textContent?.trim()).toBe(
         '−1\u00a0234,50\u00a0kr',
       );
@@ -175,7 +181,9 @@ describe('BankerPage', () => {
       expect(second?.querySelector('[data-synced]')?.textContent?.trim()).toBe(
         'Inte uppdaterad ännu',
       );
-      expect(page.querySelector('[role=status]')).toBeNull();
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
+        'Senast uppdaterad 10 nov. 13:00',
+      );
     });
 
     it('keeps the accounts and keeps polling when a refresh fails during a sync', async () => {
@@ -191,11 +199,12 @@ describe('BankerPage', () => {
         const page = fixture.nativeElement as HTMLElement;
         expect(page.querySelector('[role=alert]')).toBeNull();
         expect(page.textContent).toContain('Lönekonto');
+        expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
 
         await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
         http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], false));
         await vi.advanceTimersByTimeAsync(0);
-        expect(page.querySelector('[role=status]')).toBeNull();
+        expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
       } finally {
         vi.useRealTimers();
       }
@@ -210,7 +219,8 @@ describe('BankerPage', () => {
         http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
         await vi.advanceTimersByTimeAsync(0);
         const page = fixture.nativeElement as HTMLElement;
-        expect(page.querySelector('[role=status]')?.textContent).toContain('pågår');
+        expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
+        expect(page.querySelector('[data-sync-status] svg')?.classList).toContain('animate-spin');
 
         await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
         http.expectOne('/api/accounts').flush(
@@ -227,7 +237,7 @@ describe('BankerPage', () => {
         );
         await vi.advanceTimersByTimeAsync(0);
 
-        expect(page.querySelector('[role=status]')).toBeNull();
+        expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
         expect(page.querySelector('[data-balance]')?.textContent?.trim()).toBe('89,00\u00a0kr');
 
         // Done: it stops asking.
@@ -283,7 +293,7 @@ describe('BankerPage', () => {
       http.expectOne('/api/accounts').flush(swedbank(true));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(page.querySelector('[role=status]')?.textContent).toContain('Uppdaterar');
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain('Uppdaterar');
       expect(button()?.disabled).toBe(true);
 
       await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
@@ -292,7 +302,10 @@ describe('BankerPage', () => {
         .flush(swedbank(false, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(page.querySelector('[role=status]')?.textContent).toContain('3 nya transaktioner');
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
+        'Uppdaterad nyss · 3 nya transaktioner',
+      );
+      expect(page.querySelector('[data-sync-status] svg')?.classList).not.toContain('animate-spin');
       expect(button()?.disabled).toBe(false);
     });
 
@@ -309,7 +322,7 @@ describe('BankerPage', () => {
         await vi.advanceTimersByTimeAsync(0);
         http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: count })));
         await vi.advanceTimersByTimeAsync(0);
-        expect(page.querySelector('[role=status]')?.textContent).toContain(text);
+        expect(page.querySelector('[data-sync-status]')?.textContent).toContain(text);
       }
     });
 
@@ -326,7 +339,9 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('1 konto kunde inte');
-      expect(page.querySelector('[role=status]')?.textContent).toContain('2 nya transaktioner');
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
+        '2 nya transaktioner',
+      );
     });
 
     it('explains a rate limit and shows when the data is from', async () => {
@@ -361,7 +376,9 @@ describe('BankerPage', () => {
       http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: 2 })));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(page.querySelector('[role=status]')?.textContent).toContain('2 nya transaktioner');
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
+        '2 nya transaktioner',
+      );
       expect(button()?.disabled).toBe(false);
     });
 
@@ -403,10 +420,11 @@ describe('BankerPage', () => {
     it('shows the days left on a connection that is good for a while, without a warning', async () => {
       const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
 
-      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe(
-        'Kopplingen går ut om 60 dagar.',
-      );
+      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe('Giltig i 60 dagar');
+      expect(page.querySelector('[data-validity]')?.textContent).toContain('t.o.m.');
       expect(page.querySelector('[data-expiry]')).toBeNull();
+      expect(page.querySelector('.meter')?.classList).not.toContain('meter-warning');
+      expect(renewButton(page)?.classList).toContain('btn-secondary');
     });
 
     it('lets the owner renew a connection that is still active', async () => {
@@ -426,7 +444,11 @@ describe('BankerPage', () => {
 
       const banner = page.querySelector('[data-expiry]');
       expect(banner?.textContent).toContain('Kopplingen till Swedbank går ut om 10 dagar.');
-      expect(renewButton(page)).toBeDefined();
+      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe(
+        'Går ut om 10 dagar',
+      );
+      expect(page.querySelector('.meter')?.classList).toContain('meter-warning');
+      expect(renewButton(page)?.classList).toContain('btn-primary');
     });
 
     it('says "1 dag" when a day is left', async () => {
@@ -441,10 +463,11 @@ describe('BankerPage', () => {
       expect(page.querySelector('[data-expiry]')?.textContent).toContain(
         'Kopplingen till Swedbank har gått ut. Kontona uppdateras inte längre.',
       );
-      expect(page.querySelector('li [data-not-syncing]')?.textContent?.trim()).toBe(
+      expect(page.querySelector('section > ul > li [data-not-syncing]')?.textContent?.trim()).toBe(
         'Uppdateras inte',
       );
-      expect(renewButton(page)).toBeDefined();
+      expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe('Utgången');
+      expect(renewButton(page)?.classList).toContain('btn-primary');
     });
 
     it('sends the owner to BankID to renew the same bank', async () => {
@@ -479,6 +502,7 @@ describe('BankerPage', () => {
       const closed = page.querySelector('[data-closed-accounts]');
       expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
       expect(closed?.textContent).toContain('Sparkonto');
+      expect(closed?.textContent).toContain('Avslutat');
       expect(page.querySelector('section[data-bank] > ul')?.textContent).not.toContain('Sparkonto');
     });
   });
@@ -492,8 +516,10 @@ describe('BankerPage', () => {
       });
       const page = await render((request) => request.flush(response(false)));
       const button = page.querySelector<HTMLButtonElement>('[data-toggle-hidden]');
-      expect(button?.textContent?.trim()).toBe('Dölj konto');
-      expect(page.querySelector('[data-hidden]')).toBeNull();
+      expect(button?.textContent?.trim()).toBe('Visas');
+      expect(button?.getAttribute('aria-label')).toBe('Dölj kontot överallt');
+      expect(button?.getAttribute('title')).toBe('Dölj kontot överallt');
+      expect(page.querySelector('[data-hidden-row]')).toBeNull();
 
       button?.click();
       const http = TestBed.inject(HttpTestingController);
@@ -505,8 +531,11 @@ describe('BankerPage', () => {
       http.expectOne('/api/accounts').flush(response(true));
       await TestBed.inject(ApplicationRef).whenStable();
 
-      expect(page.querySelector('[data-hidden]')?.textContent?.trim()).toBe('Dold');
-      expect(page.querySelector('[data-toggle-hidden]')?.textContent?.trim()).toBe('Visa konto');
+      expect(page.querySelector('[data-hidden-row]')).not.toBeNull();
+      const after = page.querySelector('[data-toggle-hidden]');
+      expect(after?.textContent?.trim()).toBe('Dolt');
+      expect(after?.getAttribute('aria-label')).toBe('Visa kontot igen');
+      expect(after?.classList).toContain('border-dashed');
     });
   });
 

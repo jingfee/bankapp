@@ -13,7 +13,7 @@ import {
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
 import { ConnectionsService } from '../../connections.service';
-import { DateTimePipe } from '../../formatting/date-time.pipe';
+import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { SyncService } from '../../sync.service';
@@ -24,6 +24,24 @@ type Loaded = AccountsResponse | { failed: true };
 export const SYNC_POLL_INTERVAL_MS = 2000;
 
 const DAY_MS = 24 * 3600 * 1000;
+
+/** How long a bank connection is good for when it is made or renewed. */
+const CONNECTION_DAYS = 90;
+
+const DATE_TIME = new DateTimePipe();
+const DAY_FORMAT = new Intl.DateTimeFormat('sv-SE', { timeZone: APP_TIMEZONE });
+const TIME_FORMAT = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: APP_TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+const VALID_UNTIL_FORMAT = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: APP_TIMEZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
 
 const SHARE_LABELS: Record<ShareOption, string> = {
   me: 'Jag',
@@ -42,37 +60,68 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   selector: 'app-banker-page',
   imports: [RouterLink, DateTimePipe, MoneyPipe],
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <header>
-        <h1 class="text-3xl font-semibold tracking-tight">Banker</h1>
-        <p class="mt-1 text-zinc-600 dark:text-zinc-400">Dina kopplingar och konton.</p>
+    <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
+      @let result = loaded();
+      <header class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 class="font-display text-3xl font-semibold tracking-tight">Banker</h1>
+          @if (result && !('failed' in result)) {
+            <p
+              data-sync-status
+              role="status"
+              aria-live="polite"
+              class="mt-1 flex items-center gap-2 text-sm text-muted"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                [class.animate-spin]="result.syncing"
+                class="motion-reduce:animate-none"
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+              <span>{{ statusText(result) }}</span>
+            </p>
+          }
+        </div>
+        <div class="flex items-center gap-2">
+          @if (result && !('failed' in result) && result.banks.length > 0) {
+            <button
+              type="button"
+              data-sync
+              class="btn btn-secondary"
+              [disabled]="result.syncing || manualSyncPending()"
+              (click)="updateNow()"
+            >
+              Uppdatera
+            </button>
+          }
+          <a routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
+        </div>
       </header>
 
-      @let result = loaded();
       @if (!result) {
         <p aria-live="polite">Hämtar konton…</p>
       } @else if ('failed' in result) {
         <p role="alert">Kontona kunde inte hämtas. Försök igen senare.</p>
       } @else if (result.banks.length === 0) {
-        <section
-          class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-        >
+        <section class="card p-6">
           <p>Inga banker är anslutna ännu.</p>
-          <a routerLink="/anslut-bank" class="mt-4 inline-block font-medium underline"
-            >Anslut bank</a
-          >
         </section>
       } @else {
-        @if (result.syncing) {
-          <p role="status" aria-live="polite" class="text-sm text-zinc-600 dark:text-zinc-400">
-            {{ manualSyncPending() ? 'Uppdaterar…' : 'Första uppdateringen pågår…' }}
-          </p>
-        } @else if (summary(); as done) {
-          <p role="status" aria-live="polite" class="text-sm text-zinc-600 dark:text-zinc-400">
-            {{ newTransactionsText(done.newTransactions) }}
-          </p>
+        @if (summary(); as done) {
           @if (done.rateLimited) {
-            <p role="alert" class="text-sm text-amber-700 dark:text-amber-400">
+            <p role="alert" class="text-sm text-warning">
               Banken tillåter inte fler uppdateringar just nu.
               @if (lastSyncedAt(result); as at) {
                 Senast uppdaterad {{ at | dateTime }}.
@@ -80,7 +129,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             </p>
           }
           @if (done.failedAccounts > 0) {
-            <p role="alert" class="text-sm text-amber-700 dark:text-amber-400">
+            <p role="alert" class="text-sm text-warning">
               {{
                 done.failedAccounts === 1
                   ? '1 konto kunde inte uppdateras.'
@@ -90,152 +139,194 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           }
         }
         @if (renewFailed()) {
-          <p role="alert" class="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" class="text-sm text-danger">
             Förnyelsen kunde inte startas. Försök igen senare.
           </p>
         }
         @if (hideFailed()) {
-          <p role="alert" class="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" class="text-sm text-danger">
             Kontot kunde inte ändras. Försök igen senare.
           </p>
         }
         @if (shareFailed(); as message) {
-          <p role="alert" class="text-sm text-red-700 dark:text-red-400">{{ message }}</p>
+          <p role="alert" class="text-sm text-danger">{{ message }}</p>
         }
         @if (startFailed()) {
-          <p role="alert" class="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" class="text-sm text-danger">
             Uppdateringen kunde inte startas. Försök igen senare.
           </p>
         }
-        <button
-          type="button"
-          data-sync
-          class="self-start rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-          [disabled]="result.syncing || manualSyncPending()"
-          (click)="updateNow()"
-        >
-          Uppdatera
-        </button>
-        @for (group of result.banks; track group.bank) {
-          <section
-            [attr.data-bank]="group.bank"
-            class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-          >
-            <h2 class="text-lg font-semibold">{{ group.bank }}</h2>
-            @if (group.status === 'active') {
-              <div class="mt-1 flex flex-wrap items-center gap-3">
-                <p data-days-left class="text-sm text-zinc-500 dark:text-zinc-400">
-                  Kopplingen går ut om {{ daysLeftText(group) }}.
-                </p>
+        <div class="stagger grid items-start gap-4 lg:grid-cols-2">
+          @for (group of result.banks; track group.bank) {
+            <section [attr.data-bank]="group.bank" class="card flex flex-col gap-4 p-5">
+              <div class="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  class="grid size-11 flex-none place-content-center rounded-xl bg-accent/15 font-display text-lg font-semibold text-accent"
+                  >{{ monogram(group.bank) }}</span
+                >
+                <div class="min-w-0 flex-1">
+                  <h2 class="truncate font-display text-lg font-semibold">{{ group.bank }}</h2>
+                  <p data-account-count class="text-sm text-muted">
+                    {{ accountCountText(group.accounts.length) }}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  class="rounded-lg border border-zinc-300 px-3 py-1 text-sm font-medium disabled:opacity-50 dark:border-zinc-700"
+                  data-renew
+                  class="btn btn-sm"
+                  [class.btn-secondary]="group.status === 'active'"
+                  [class.btn-primary]="group.status !== 'active'"
                   [disabled]="renewing()"
-                  (click)="renew(group.bank, true)"
+                  (click)="renew(group.bank, group.status === 'active')"
                 >
                   Förnya
                 </button>
               </div>
-            }
-            @if (group.status !== 'active') {
-              <div
-                data-expiry
-                class="mt-3 flex flex-col gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
-              >
-                <p [attr.role]="group.status === 'expired' ? 'alert' : null">
-                  {{ expiryText(group) }}
-                </p>
-                <button
-                  type="button"
-                  class="self-start rounded-lg bg-zinc-900 px-3 py-1.5 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                  [disabled]="renewing()"
-                  (click)="renew(group.bank)"
-                >
-                  Förnya
-                </button>
+
+              <div data-validity [attr.data-status]="group.status">
+                <div class="flex items-baseline justify-between gap-3 text-sm">
+                  <span
+                    data-days-left
+                    [class.text-warning]="group.status !== 'active'"
+                    [class.text-muted]="group.status === 'active'"
+                    >{{ validityText(group) }}</span
+                  >
+                  <span class="text-muted">t.o.m. {{ validUntilText(group) }}</span>
+                </div>
+                <div class="meter mt-2" [class.meter-warning]="group.status !== 'active'">
+                  <span [style.width.%]="meterPercent(group)"></span>
+                </div>
+                @if (group.status === 'expired') {
+                  <p data-expiry role="alert" class="mt-2 text-sm text-warning">
+                    Kopplingen till {{ group.bank }} har gått ut. Kontona uppdateras inte längre.
+                  </p>
+                } @else if (group.status === 'expiring') {
+                  <p data-expiry class="mt-2 text-sm text-warning">
+                    Kopplingen till {{ group.bank }} går ut om {{ daysLeftText(group) }}.
+                  </p>
+                }
               </div>
-            }
-            <ul class="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-              @for (account of group.accounts; track account.id) {
-                <li class="flex items-baseline justify-between gap-3 py-2">
-                  <span class="flex flex-col">
-                    <span>{{ account.name }}</span>
-                    <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                      typeLabel(account.type)
-                    }}</span>
-                    @if (account.hidden) {
-                      <span data-hidden class="text-sm text-amber-700 dark:text-amber-400"
-                        >Dold</span
-                      >
-                    }
-                    <button
-                      type="button"
-                      data-toggle-hidden
-                      class="self-start text-sm underline disabled:opacity-50"
-                      [disabled]="togglingHidden()"
-                      (click)="setHidden(account.id, !account.hidden)"
+
+              <ul class="flex flex-col divide-y divide-line">
+                @for (account of group.accounts; track account.id) {
+                  <li
+                    class="flex flex-col gap-3 py-3 first:pt-0 last:pb-0"
+                    [attr.data-hidden-row]="account.hidden ? '' : null"
+                  >
+                    <div
+                      class="flex items-start justify-between gap-3"
+                      [class.opacity-55]="account.hidden"
                     >
-                      {{ account.hidden ? 'Visa konto' : 'Dölj konto' }}
-                    </button>
-                    <label class="flex items-center gap-2 text-sm">
-                      Andel
-                      <select
-                        data-share
-                        class="rounded-lg border border-zinc-300 bg-transparent px-2 py-1 disabled:opacity-50 dark:border-zinc-700"
-                        [value]="account.share"
-                        [disabled]="savingShare()"
-                        (change)="setShare(account, $event)"
-                      >
-                        @for (option of shareOptions; track option) {
-                          <option [value]="option" [selected]="option === account.share">
-                            {{ shareLabel(option) }}
-                          </option>
+                      <span class="flex min-w-0 flex-col">
+                        <span data-account-name class="truncate font-medium">{{
+                          account.name
+                        }}</span>
+                        <span class="text-sm text-muted">
+                          {{ typeLabel(account.type) }} ·
+                          <span class="amount" data-balance>{{
+                            account.balance
+                              ? (account.balance.amount | money: account.balance.currency)
+                              : '–'
+                          }}</span>
+                        </span>
+                      </span>
+                      <span class="flex flex-none flex-col items-end text-xs text-muted">
+                        <span data-synced>{{
+                          account.lastSyncedAt
+                            ? 'Uppdaterad ' + (account.lastSyncedAt | dateTime)
+                            : 'Inte uppdaterad ännu'
+                        }}</span>
+                        @if (group.status === 'expired') {
+                          <span class="text-warning" data-not-syncing>Uppdateras inte</span>
                         }
-                      </select>
-                    </label>
-                  </span>
-                  <span class="flex flex-col items-end">
-                    <span class="font-medium tabular-nums" data-balance>{{
-                      account.balance
-                        ? (account.balance.amount | money: account.balance.currency)
-                        : '–'
-                    }}</span>
-                    <span class="text-sm text-zinc-500 dark:text-zinc-400" data-synced>{{
-                      account.lastSyncedAt
-                        ? 'Uppdaterad ' + (account.lastSyncedAt | dateTime)
-                        : 'Inte uppdaterad ännu'
-                    }}</span>
-                    @if (group.status === 'expired') {
-                      <span class="text-sm text-amber-700 dark:text-amber-400" data-not-syncing
-                        >Uppdateras inte</span
+                      </span>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <label class="flex items-center gap-2 text-sm text-muted">
+                        Andel
+                        <select
+                          data-share
+                          class="input h-9 w-auto text-sm text-ink"
+                          [value]="account.share"
+                          [disabled]="savingShare()"
+                          (change)="setShare(account, $event)"
+                        >
+                          @for (option of shareOptions; track option) {
+                            <option [value]="option" [selected]="option === account.share">
+                              {{ shareLabel(option) }}
+                            </option>
+                          }
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        data-toggle-hidden
+                        class="btn btn-sm btn-secondary"
+                        [class.border-dashed]="account.hidden"
+                        [attr.aria-label]="
+                          account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
+                        "
+                        [attr.title]="account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'"
+                        [disabled]="togglingHidden()"
+                        (click)="setHidden(account.id, !account.hidden)"
                       >
+                        <svg
+                          aria-hidden="true"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          @if (account.hidden) {
+                            <path
+                              d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+                            />
+                            <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                            <path
+                              d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+                            />
+                            <path d="m2 2 20 20" />
+                          } @else {
+                            <path
+                              d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+                            />
+                            <circle cx="12" cy="12" r="3" />
+                          }
+                        </svg>
+                        <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
+                      </button>
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (group.closedAccounts.length > 0) {
+                <div data-closed-accounts>
+                  <h3 class="text-sm font-semibold text-muted">Avslutade konton</h3>
+                  <ul class="mt-2 flex flex-col divide-y divide-line">
+                    @for (account of group.closedAccounts; track account.id) {
+                      <li class="flex items-center justify-between gap-3 py-2">
+                        <span class="flex min-w-0 flex-col">
+                          <span class="truncate">{{ account.name }}</span>
+                          <span class="text-sm text-muted">{{ typeLabel(account.type) }}</span>
+                        </span>
+                        <span class="pill pill-neutral">Avslutat</span>
+                      </li>
                     }
-                  </span>
-                </li>
+                  </ul>
+                </div>
               }
-            </ul>
-            @if (group.closedAccounts.length > 0) {
-              <div data-closed-accounts class="mt-4">
-                <h3 class="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                  Avslutade konton
-                </h3>
-                <ul class="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
-                  @for (account of group.closedAccounts; track account.id) {
-                    <li class="flex flex-col py-2">
-                      <span>{{ account.name }}</span>
-                      <span class="text-sm text-zinc-500 dark:text-zinc-400">{{
-                        typeLabel(account.type)
-                      }}</span>
-                    </li>
-                  }
-                </ul>
-              </div>
-            }
-          </section>
-        }
-        <a routerLink="/anslut-bank" class="font-medium underline">Anslut bank</a>
+            </section>
+          }
+        </div>
       }
-      <a routerLink="/andelar" data-andelar-link class="font-medium underline">Andelar</a>
+      <a routerLink="/andelar" data-andelar-link class="text-sm font-medium text-accent underline"
+        >Andelar</a
+      >
     </main>
   `,
 })
@@ -361,11 +452,50 @@ export class BankerPage {
     });
   }
 
-  protected expiryText(group: BankAccounts): string {
-    if (group.status === 'expired') {
-      return `Kopplingen till ${group.bank} har gått ut. Kontona uppdateras inte längre.`;
+  /** The sync status under the heading: running, just finished, or when the data is from. */
+  protected statusText(result: AccountsResponse): string {
+    if (result.syncing) {
+      return this.manualSyncPending() ? 'Uppdaterar…' : 'Första uppdateringen pågår…';
     }
-    return `Kopplingen till ${group.bank} går ut om ${this.daysLeftText(group)}.`;
+    const done = this.summary();
+    if (done) return `Uppdaterad nyss · ${this.newTransactionsText(done.newTransactions)}`;
+    const at = this.lastSyncedAt(result);
+    return at ? `Senast uppdaterad ${this.dayAndTime(at)}` : 'Inte uppdaterad ännu';
+  }
+
+  /** "idag 06:00" for today, otherwise the date and time. */
+  private dayAndTime(timestamp: string): string {
+    const day = (value: Date) => DAY_FORMAT.format(value);
+    const date = new Date(timestamp);
+    if (day(date) !== day(new Date())) return DATE_TIME.transform(timestamp);
+    return `idag ${TIME_FORMAT.format(date)}`;
+  }
+
+  protected monogram(bank: string): string {
+    return bank.trim().charAt(0).toLocaleUpperCase('sv-SE');
+  }
+
+  protected accountCountText(count: number): string {
+    return count === 1 ? '1 konto' : `${count} konton`;
+  }
+
+  /** "Giltig i N dagar", "Går ut om N dagar" or "Utgången". */
+  protected validityText(group: BankAccounts): string {
+    if (group.status === 'expired') return 'Utgången';
+    return group.status === 'expiring'
+      ? `Går ut om ${this.daysLeftText(group)}`
+      : `Giltig i ${this.daysLeftText(group)}`;
+  }
+
+  protected validUntilText(group: BankAccounts): string {
+    return VALID_UNTIL_FORMAT.format(new Date(group.validUntil));
+  }
+
+  /** How much of a full connection period is left, for the meter. */
+  protected meterPercent(group: BankAccounts): number {
+    if (group.status === 'expired') return 0;
+    const left = (Date.parse(group.validUntil) - Date.now()) / DAY_MS;
+    return Math.min(100, Math.max(3, (left / CONNECTION_DAYS) * 100));
   }
 
   protected daysLeftText(group: BankAccounts): string {
@@ -374,8 +504,8 @@ export class BankerPage {
   }
 
   protected newTransactionsText(count: number): string {
-    if (count === 0) return 'Inga nya transaktioner.';
-    return count === 1 ? '1 ny transaktion.' : `${count} nya transaktioner.`;
+    if (count === 0) return 'Inga nya transaktioner';
+    return count === 1 ? '1 ny transaktion' : `${count} nya transaktioner`;
   }
 
   /** The most recent time any account was synced, i.e. how old the data shown is. */

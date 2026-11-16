@@ -324,10 +324,31 @@
     background: var(--color-positive);
     transition: width 0.45s ease;
   }
+  /* Banker: the validity meter, green normally and amber when the connection is expiring. */
+  .meter {
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+  }
+  .meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-positive);
+    transform-origin: left;
+    animation: meter-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .meter-warning > span {
+    background: var(--color-warning);
+  }
   @media (prefers-reduced-motion: reduce) {
     .collapsible,
     .progress > span {
       transition: none;
+    }
+    .meter > span {
+      animation: none;
     }
   }
 
@@ -652,6 +673,14 @@
     opacity: 1;
     transform: none;
     filter: none;
+  }
+}
+@keyframes meter-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 @keyframes toast-in {
