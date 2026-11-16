@@ -56,16 +56,8 @@ import { CLOCK, localDay, type Clock } from '../clock';
 import { SyncService } from '../sync/sync.service';
 import { filterCondition, type TransactionFilter } from './transaction-filter';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
-import {
-  categoryColumns,
-  isReplaced,
-  onVisibleAccount,
-  toAccount,
-  toCategory,
-  toTransaction,
-  type ListedRow,
-} from './transaction-rows';
-import { canChoose, effectiveShares, loadHouseholdRatio, ownerPart } from './shares';
+import { categoryOf, isReplaced, onVisibleAccount, queryTransactions } from '../transactions/query';
+import { canChoose, effectiveShares, loadHouseholdRatio } from './shares';
 import { parseTransactionDetails } from './transaction-details';
 import {
   SEARCH_LIMIT,
@@ -230,15 +222,6 @@ export class AccountsService {
     return this.householdRatio();
   }
 
-  /** The listed transactions with their effective shares. */
-  private toTransactions(rows: ListedRow[]): Transaction[] {
-    const shares = effectiveShares(
-      this.db,
-      rows.map((row) => row.transaction),
-    );
-    return rows.map((row) => toTransaction(row, shares.get(row.transaction.id)!));
-  }
-
   /** How the most recent finished sync went, or null if none has finished. */
   private lastSync(): SyncSummary | null {
     const run = this.db
@@ -283,23 +266,11 @@ export class AccountsService {
       );
     }
     const matching = and(onVisibleAccount(this.db), filterCondition(filter));
-    const rows = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        bank: connections.bankName,
-        category: categoryColumns,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(connections, eq(accounts.connectionId, connections.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(matching, after))
-      .orderBy(desc(transactions.date), desc(transactions.id))
-      .limit(TRANSACTIONS_PAGE_SIZE + 1)
-      .all();
+    const rows = queryTransactions(this.db, {
+      where: and(filterCondition(filter), after),
+      orderBy: [desc(transactions.date), desc(transactions.id)],
+      limit: TRANSACTIONS_PAGE_SIZE + 1,
+    });
     const totals = this.db
       .select({
         count: sql<number>`count(*)`,
@@ -313,9 +284,9 @@ export class AccountsService {
       .where(matching)
       .get()!;
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
-    const last = page.at(-1)?.transaction;
+    const last = page.at(-1);
     return {
-      transactions: this.toTransactions(page),
+      transactions: page,
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
       count: totals.count,
       sum:
@@ -353,25 +324,13 @@ export class AccountsService {
 
   /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
   listForReview(): TransactionReviewResponse {
-    const rows = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        bank: connections.bankName,
-        category: categoryColumns,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(connections, eq(accounts.connectionId, connections.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(this.needsReview)
-      .orderBy(desc(transactions.date), desc(transactions.id))
-      .all();
+    const rows = queryTransactions(this.db, {
+      where: this.needsReview,
+      orderBy: [desc(transactions.date), desc(transactions.id)],
+    });
     const replacements = this.replacementSuggestions();
     return {
-      transactions: this.toTransactions(rows),
+      transactions: rows,
       replacements,
       count: rows.length + replacements.length,
     };
@@ -523,23 +482,12 @@ export class AccountsService {
 
   /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */
   getTransaction(id: number): TransactionDetails | null {
-    const found = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        bank: connections.bankName,
-        category: categoryColumns,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(connections, eq(accounts.connectionId, connections.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(eq(transactions.id, id), onVisibleAccount(this.db)))
-      .get();
-    if (found === undefined) return null;
-    const { transaction: row, accountName, accountType, bank, category } = found;
+    const listed = queryTransactions(this.db, {
+      where: eq(transactions.id, id),
+      limit: 1,
+    })[0];
+    if (listed === undefined) return null;
+    const row = this.db.select().from(transactions).where(eq(transactions.id, id)).get()!;
     const purchase =
       row.offsetsTransactionId === null ? null : this.offsetTransaction(row.offsetsTransactionId);
     const linked = this.db
@@ -548,17 +496,16 @@ export class AccountsService {
       .where(eq(transactions.offsetsTransactionId, row.id))
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
-    const share = effectiveShares(this.db, [row]).get(row.id)!;
     return {
-      id: row.id,
-      status: row.status,
-      amount: { amount: row.amount, currency: row.currency },
-      description: row.description,
-      account: toAccount(row.accountId, accountName, bank, accountType),
-      category: toCategory(category),
-      paidBy: row.paidBy,
-      share,
-      ownerPart: ownerPart(row.amount, share.percent),
+      id: listed.id,
+      status: listed.status,
+      amount: listed.amount,
+      description: listed.description,
+      account: listed.account,
+      category: listed.category,
+      paidBy: listed.paidBy,
+      share: listed.share,
+      ownerPart: listed.ownerPart,
       transactionDate: row.transactionDate,
       bookingDate: row.bookingDate,
       ...parseTransactionDetails(row.raw, row.amount),
@@ -637,7 +584,8 @@ export class AccountsService {
     request: ManualTransactionRequest,
   ): Transaction | 'no-transaction' | 'not-manual' | 'no-subcategory' | 'no-ratio' {
     const current = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
-    if (current === undefined) return 'no-transaction';
+    // A manual transaction that a bank transaction has replaced is gone from the owner's view.
+    if (current === undefined || this.listedTransaction(id) === null) return 'no-transaction';
     if (current.accountId !== null) return 'not-manual';
     const checked = this.checkManual(request, current.paidBy);
     if (typeof checked === 'string') return checked;
@@ -695,22 +643,7 @@ export class AccountsService {
 
   /** One transaction as listed, or null when there is none. */
   private listedTransaction(id: number): Transaction | null {
-    const row = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        bank: connections.bankName,
-        category: categoryColumns,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(connections, eq(accounts.connectionId, connections.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(eq(transactions.id, id))
-      .get();
-    return row === undefined ? null : this.toTransactions([row])[0]!;
+    return queryTransactions(this.db, { where: eq(transactions.id, id), limit: 1 })[0] ?? null;
   }
 
   private offsetTransaction(id: number): OffsetTransaction | null {
@@ -774,71 +707,52 @@ export class AccountsService {
     if (refund === undefined) return 'no-transaction';
     const text = search?.trim() ?? '';
     const base = and(
-      onVisibleAccount(this.db),
       lt(transactions.amount, 0),
       eq(transactions.status, 'booked'),
       eq(transactions.currency, refund.currency),
       isNull(transactions.offsetsTransactionId),
       ne(transactions.id, id),
     );
-    const select = () =>
-      this.db
-        .select({
-          transaction: transactions,
-          accountName: accounts.name,
-          accountType: accounts.type,
-          bank: connections.bankName,
-          category: categoryColumns,
-        })
-        .from(transactions)
-        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-        .leftJoin(connections, eq(accounts.connectionId, connections.id))
-        .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-        .leftJoin(categories, eq(subcategories.categoryId, categories.id));
 
     if (text !== '') {
       const escaped = text.replace(/[\\%_]/g, (c) => `\\${c}`);
-      const rows = select()
-        .where(and(base, sql`${transactions.description} LIKE ${`%${escaped}%`} ESCAPE '\\'`))
-        .orderBy(desc(transactions.date), desc(transactions.id))
-        .limit(SEARCH_LIMIT)
-        .all();
-      return { transactions: this.toTransactions(rows) };
+      return {
+        transactions: queryTransactions(this.db, {
+          where: and(base, sql`${transactions.description} LIKE ${`%${escaped}%`} ESCAPE '\\'`),
+          orderBy: [desc(transactions.date), desc(transactions.id)],
+          limit: SEARCH_LIMIT,
+        }),
+      };
     }
 
     if (refund.amount <= 0) return { transactions: [] };
     const earliest = new Date(Date.parse(refund.date) - SUGGESTION_WINDOW_DAYS * 86_400_000)
       .toISOString()
       .slice(0, 10);
-    const rows = select()
-      .where(
-        and(
-          base,
-          gte(transactions.date, earliest),
-          lte(transactions.date, refund.date),
-          gte(sql`-${transactions.amount}`, refund.amount),
-        ),
-      )
-      .all();
+    const rows = queryTransactions(this.db, {
+      where: and(
+        base,
+        gte(transactions.date, earliest),
+        lte(transactions.date, refund.date),
+        gte(sql`-${transactions.amount}`, refund.amount),
+      ),
+    });
     const ranked = rows
-      .map((row) => ({
-        row,
-        match: descriptionMatch(refund.description, row.transaction.description),
-      }))
-      .filter(
-        (entry): entry is { row: (typeof rows)[number]; match: 0 | 1 } => entry.match !== null,
-      )
+      .flatMap((transaction) => {
+        const match = descriptionMatch(refund.description, transaction.description);
+        return match === null ? [] : [{ transaction, match }];
+      })
       .sort(
         (a, b) =>
           a.match - b.match ||
-          Math.abs(-a.row.transaction.amount - refund.amount) -
-            Math.abs(-b.row.transaction.amount - refund.amount) ||
-          daysBetween(a.row.transaction.date, refund.date) -
-            daysBetween(b.row.transaction.date, refund.date) ||
-          b.row.transaction.id - a.row.transaction.id,
+          Math.abs(-a.transaction.amount.amount - refund.amount) -
+            Math.abs(-b.transaction.amount.amount - refund.amount) ||
+          daysBetween(a.transaction.date, refund.date) -
+            daysBetween(b.transaction.date, refund.date) ||
+          b.transaction.id - a.transaction.id,
       )
       .slice(0, SUGGESTION_LIMIT);
-    return { transactions: this.toTransactions(ranked.map(({ row }) => row)) };
+    return { transactions: ranked.map(({ transaction }) => transaction) };
   }
 
   /**
@@ -910,14 +824,7 @@ export class AccountsService {
       }
 
       refreshRefundCategories(tx);
-      const row = tx
-        .select(categoryColumns)
-        .from(transactions)
-        .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-        .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-        .where(eq(transactions.id, id))
-        .get();
-      return { category: row ? toCategory(row) : null, updatedSimilar };
+      return { category: categoryOf(tx, id), updatedSimilar };
     });
   }
 

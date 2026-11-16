@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/sqlite-core';
 import type {
   CategoryIcon,
   OverviewCategory,
@@ -9,12 +8,12 @@ import type {
   OverviewTransactionsResponse,
   OverviewView,
 } from '@bankapp/shared';
-import { categoryColumns, onVisibleAccount, toTransaction } from '../accounts/transaction-rows';
 import { effectiveShares, ownerPart } from '../accounts/shares';
+import { onVisibleAccount, purchases, queryTransactions } from '../transactions/query';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
-import { accounts, categories, connections, subcategories, transactions } from '../db/schema';
+import { categories, subcategories, transactions } from '../db/schema';
 
 /** Whether `value` is a month as `YYYY-MM`. */
 export function isMonth(value: string): boolean {
@@ -27,9 +26,6 @@ function shiftMonth(month: string, by: number): string {
   const index = year * 12 + (number - 1) + by;
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
 }
-
-/** The purchase a transaction is offset against, if it is a kvittad refund (ADR 0006). */
-const purchases = alias(transactions, 'purchases');
 
 /** Money sums are floats; rounding to öre keeps the noise out of the API. */
 const round = (value: number) => Math.round(value * 100) / 100 + 0;
@@ -68,34 +64,12 @@ export class OverviewService {
 
   /** The transactions of one subcategory in `month`, newest first. */
   listForSubcategory(month: string, subcategoryId: number): OverviewTransactionsResponse {
-    const rows = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        accountType: accounts.type,
-        bank: connections.bankName,
-        category: categoryColumns,
-      })
-      .from(transactions)
-      .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(connections, eq(accounts.connectionId, connections.id))
-      .innerJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .innerJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(
-        and(
-          onVisibleAccount(this.db),
-          this.inMonth(month),
-          eq(transactions.subcategoryId, subcategoryId),
-        ),
-      )
-      .orderBy(desc(transactions.date), desc(transactions.id))
-      .all();
-    const shares = effectiveShares(
-      this.db,
-      rows.map((row) => row.transaction),
-    );
-    return { transactions: rows.map((row) => toTransaction(row, shares.get(row.transaction.id)!)) };
+    return {
+      transactions: queryTransactions(this.db, {
+        where: and(this.inMonth(month), eq(transactions.subcategoryId, subcategoryId)),
+        orderBy: [desc(transactions.date), desc(transactions.id)],
+      }),
+    };
   }
 
   /** In `month` by the transaction's date, or by its purchase's when it is a kvittad refund. */
