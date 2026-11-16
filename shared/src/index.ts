@@ -26,6 +26,7 @@ export type {
   SetTransactionOffsetRequest,
   StartSyncResponse,
   SyncSummary,
+  SyncTrigger,
   Transaction,
   TransactionAccount,
   TransactionCategory,

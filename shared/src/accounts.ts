@@ -53,11 +53,14 @@ export interface SyncSummary {
   rateLimited: boolean;
 }
 
+/** What started a sync: a new or renewed connection, the schedule, or the owner. */
+export type SyncTrigger = 'initial' | 'scheduled' | 'manual';
+
 /** Response body of `GET /api/accounts`, banks sorted by name and accounts by name. */
 export interface AccountsResponse {
   banks: BankAccounts[];
-  /** True while a sync is running; the overview refreshes until it is false. */
-  syncing: boolean;
+  /** What started the sync that is running, or null when none is; the overview refreshes until it is null. */
+  syncing: SyncTrigger | null;
   /** The most recent finished sync, or null if none has finished yet. */
   lastSync: SyncSummary | null;
 }

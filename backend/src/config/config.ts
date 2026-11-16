@@ -16,6 +16,8 @@ export interface AppConfig {
   timezone: string;
   /** Whether syncs run on a schedule; off in development, which shares the banks' request limit. */
   scheduledSyncs: boolean;
+  /** When scheduled syncs run each day in {@link timezone}, as sorted `HH:MM` times. */
+  syncTimes: string[];
   /** The owner's username; there is no registration. */
   username: string;
   /** scrypt hash of the owner's password, made with `pnpm hash-password`; never the password itself. */
@@ -28,6 +30,10 @@ export class ConfigError extends Error {
     this.name = 'ConfigError';
   }
 }
+
+/** Banks allow about four syncs a day without the owner present; more would be refused. */
+export const MAX_SYNC_TIMES = 4;
+export const DEFAULT_SYNC_TIMES = ['06:00', '11:00', '16:00', '21:00'];
 
 const required = (name: string) =>
   z
@@ -45,6 +51,25 @@ const schema = z.object({
   SCHEDULED_SYNCS: z
     .enum(['true', 'false', ''], { error: 'SCHEDULED_SYNCS must be true or false' })
     .optional(),
+  SYNC_TIMES: z
+    .string()
+    .optional()
+    .transform((value) =>
+      value?.trim()
+        ? [...new Set(value.split(',').map((time) => time.trim()))].sort()
+        : DEFAULT_SYNC_TIMES,
+    )
+    .pipe(
+      z
+        .array(
+          z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
+            error: 'SYNC_TIMES must be comma-separated HH:MM times, e.g. 06:00,18:00',
+          }),
+        )
+        .max(MAX_SYNC_TIMES, {
+          error: `SYNC_TIMES must have at most ${MAX_SYNC_TIMES} times: banks refuse more syncs a day`,
+        }),
+    ),
   BANKAPP_USERNAME: required('BANKAPP_USERNAME'),
   BANKAPP_PASSWORD_HASH: required('BANKAPP_PASSWORD_HASH').refine(isPasswordHash, {
     error: 'BANKAPP_PASSWORD_HASH is not a hash made by `pnpm hash-password`',
@@ -101,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dataDir: values.DATA_DIR,
     timezone: values.TIMEZONE,
     scheduledSyncs: values.SCHEDULED_SYNCS === 'true',
+    syncTimes: values.SYNC_TIMES,
     username: values.BANKAPP_USERNAME,
     passwordHash: values.BANKAPP_PASSWORD_HASH,
   };

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import type { SyncTrigger } from '@bankapp/shared';
 import { and, eq, gt, isNull, max } from 'drizzle-orm';
 import { CategoryGuesser } from '../categories/guessing/category-guesser';
 import { CLOCK, type Clock } from '../clock';
@@ -23,7 +24,7 @@ import {
   type PsuContext,
 } from '../enable-banking/enable-banking-client';
 
-export type SyncTrigger = 'initial' | 'scheduled' | 'manual';
+export type { SyncTrigger };
 
 /**
  * How many days before the last booked transaction a sync starts fetching again. Pending
@@ -81,14 +82,14 @@ export class SyncService implements OnModuleInit {
       .run();
   }
 
-  /** Whether a sync is running right now. */
-  isSyncing(): boolean {
+  /** What started the sync that is running right now, or null when none is. */
+  runningSync(): SyncTrigger | null {
     return (
       this.db
-        .select({ id: syncRuns.id })
+        .select({ trigger: syncRuns.trigger })
         .from(syncRuns)
         .where(isNull(syncRuns.finishedAt))
-        .get() !== undefined
+        .get()?.trigger ?? null
     );
   }
 

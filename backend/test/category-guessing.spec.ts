@@ -86,7 +86,7 @@ describe('guessing categories', () => {
 
   /** Waits for any sync running (such as the initial one) and runs a manual one. */
   async function sync(): Promise<void> {
-    await vi.waitFor(() => expect(app.get(SyncService).isSyncing()).toBe(false));
+    await vi.waitFor(() => expect(app.get(SyncService).runningSync()).toBeNull());
     await app.get(SyncService).start('manual').finished;
   }
 
