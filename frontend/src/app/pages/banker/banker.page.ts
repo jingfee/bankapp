@@ -364,7 +364,8 @@ export class BankerPage {
           tap((result) => (this.shown = result)),
           takeWhile(
             // A failed poll must not strand an owner who is waiting for their sync to finish.
-            (result) => this.manualSyncPending() || (!('failed' in result) && result.syncing),
+            (result) =>
+              this.manualSyncPending() || (!('failed' in result) && result.syncing !== null),
             true,
           ),
         ),
@@ -446,7 +447,7 @@ export class BankerPage {
   /** The sync status under the heading: running, just finished, or when the data is from. */
   protected statusText(result: AccountsResponse): string {
     if (result.syncing) {
-      return this.manualSyncPending() ? 'Uppdaterar…' : 'Första uppdateringen pågår…';
+      return result.syncing === 'initial' ? 'Första uppdateringen pågår…' : 'Uppdaterar…';
     }
     const done = this.summary();
     if (done) return `Uppdaterad nyss · ${this.newTransactionsText(done.newTransactions)}`;

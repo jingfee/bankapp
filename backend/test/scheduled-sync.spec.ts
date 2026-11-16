@@ -19,10 +19,14 @@ describe('scheduled syncs', () => {
     vi.useRealTimers();
   });
 
-  async function startAt(now: string, scheduledSyncs: boolean): Promise<void> {
+  async function startAt(
+    now: string,
+    scheduledSyncs: boolean,
+    syncTimes = testConfig.syncTimes,
+  ): Promise<void> {
     vi.setSystemTime(new Date(now));
     app = await createApp({
-      config: { ...testConfig, scheduledSyncs },
+      config: { ...testConfig, scheduledSyncs, syncTimes },
       enableBanking: new FakeEnableBankingClient(),
       database: { inMemory: true },
     });
@@ -36,7 +40,7 @@ describe('scheduled syncs', () => {
       .all()
       .map((run) => ({ trigger: run.trigger, startedAt: run.startedAt.toISOString() }));
 
-  it('syncs at 06:00 and 18:00 Stockholm time when the flag is on', async () => {
+  it('syncs at the configured times, Stockholm time, when the flag is on', async () => {
     // 2026-07-01 is CEST (UTC+2): 06:00 local is 04:00 UTC and 18:00 local is 16:00 UTC.
     await startAt('2026-07-01T03:00:00Z', true);
 
@@ -61,6 +65,20 @@ describe('scheduled syncs', () => {
     await vi.advanceTimersByTimeAsync(31 * 60 * 1000);
 
     expect(runs()).toEqual([{ trigger: 'scheduled', startedAt: '2026-12-01T05:00:00.000Z' }]);
+  });
+
+  it('syncs at times that are not on the hour', async () => {
+    // 2026-07-01 is CEST (UTC+2).
+    await startAt('2026-07-01T00:00:00Z', true, ['05:30', '11:00', '16:45', '21:15']);
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+
+    expect(runs().map((run) => run.startedAt)).toEqual([
+      '2026-07-01T03:30:00.000Z',
+      '2026-07-01T09:00:00.000Z',
+      '2026-07-01T14:45:00.000Z',
+      '2026-07-01T19:15:00.000Z',
+    ]);
   });
 
   it('never syncs on a schedule when the flag is off', async () => {

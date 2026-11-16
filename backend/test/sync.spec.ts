@@ -88,7 +88,7 @@ describe('the initial sync', () => {
     (await api(app).get('/api/accounts').expect(200)).body;
 
   const settled = () =>
-    vi.waitFor(async () => expect((await getAccounts()).syncing).toBe(false), { timeout: 2000 });
+    vi.waitFor(async () => expect((await getAccounts()).syncing).toBeNull(), { timeout: 2000 });
 
   /** Connects a bank through the HTTP API, as the owner returning from BankID would. */
   async function connect(bankName: string, accounts: EnableBankingAccount[]): Promise<void> {
@@ -130,7 +130,7 @@ describe('the initial sync', () => {
     await connect('Swedbank', [account('u1', 'Lönekonto')]);
 
     const during = await getAccounts();
-    expect(during.syncing).toBe(true);
+    expect(during.syncing).toBe('initial');
     expect(during.banks[0]!.accounts[0]).toMatchObject({ balance: null, lastSyncedAt: null });
 
     release();
@@ -369,7 +369,7 @@ describe('the initial sync', () => {
       .query({ state: 'made-up', code: 'c' })
       .expect(400);
 
-    expect((await getAccounts()).syncing).toBe(false);
+    expect((await getAccounts()).syncing).toBeNull();
     expect(db().select().from(syncRuns).all()).toEqual([]);
   });
   describe('transactions', () => {

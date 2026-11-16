@@ -413,7 +413,7 @@ describe('TransactionsPage', () => {
             closedAccounts: [],
           },
         ],
-        syncing: false,
+        syncing: null,
         lastSync: null,
       });
       http.expectOne('/api/categories').flush({ categories });

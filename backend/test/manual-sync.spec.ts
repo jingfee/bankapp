@@ -67,7 +67,7 @@ describe('the manual sync', () => {
     (await api(app).get('/api/accounts').expect(200)).body;
 
   const settled = () =>
-    vi.waitFor(async () => expect((await getAccounts()).syncing).toBe(false), { timeout: 2000 });
+    vi.waitFor(async () => expect((await getAccounts()).syncing).toBeNull(), { timeout: 2000 });
 
   async function connect(
     bankName: string,

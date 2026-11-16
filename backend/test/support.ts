@@ -27,6 +27,7 @@ export const testConfig: AppConfig = {
   dataDir: '/not/used/in/tests',
   timezone: 'Europe/Stockholm',
   scheduledSyncs: false,
+  syncTimes: ['06:00', '18:00'],
   username: 'owner',
   // The hash of TEST_PASSWORD, made once so tests do not pay for scrypt on every start.
   passwordHash: TEST_PASSWORD_HASH,

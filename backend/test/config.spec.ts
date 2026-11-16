@@ -39,6 +39,7 @@ describe('loadConfig', () => {
       dataDir: join(dir, 'data'),
       timezone: 'Europe/Stockholm',
       scheduledSyncs: false,
+      syncTimes: ['06:00', '11:00', '16:00', '21:00'],
       username: 'owner',
       passwordHash: hash,
     });
@@ -61,6 +62,23 @@ describe('loadConfig', () => {
 
   it.each(['false', ''])('keeps scheduled syncs off when SCHEDULED_SYNCS is %j', (value) => {
     expect(loadConfig({ ...validEnv, SCHEDULED_SYNCS: value }).scheduledSyncs).toBe(false);
+  });
+
+  it('reads SYNC_TIMES as sorted times without repeats', () => {
+    expect(loadConfig({ ...validEnv, SYNC_TIMES: ' 18:00, 06:30 ,18:00' }).syncTimes).toEqual([
+      '06:30',
+      '18:00',
+    ]);
+  });
+
+  it.each(['6:00', '24:00', '06:60', '06:00;18:00', '06:00,'])('rejects SYNC_TIMES %j', (value) => {
+    expect(() => loadConfig({ ...validEnv, SYNC_TIMES: value })).toThrow(/SYNC_TIMES/);
+  });
+
+  it('rejects more than four SYNC_TIMES, which banks would refuse', () => {
+    expect(() => loadConfig({ ...validEnv, SYNC_TIMES: '06:00,10:00,14:00,18:00,22:00' })).toThrow(
+      /at most 4/,
+    );
   });
 
   it('rejects an unclear SCHEDULED_SYNCS', () => {

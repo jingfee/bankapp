@@ -47,7 +47,7 @@ The backend refuses to start unless all of these are set and valid. Locally, cop
 
 **Login.** There is no registration: the one login comes from `BANKAPP_USERNAME` and `BANKAPP_PASSWORD_HASH`, and the app refuses to start without them. Make the hash with `pnpm hash-password`, which asks for the password without echoing it and prints a line like `scrypt:32768:8:1:…` to paste into the environment. Never put the password itself there. A login lasts 400 days, the longest a browser keeps a cookie; see [ADR 0012](docs/adr/0012-the-owner-logs-in-with-a-long-lived-session.md).
 
-**Production must set `SCHEDULED_SYNCS=true`.** It defaults to off, and without it no account is ever synced automatically. It syncs every account at 06:00 and 18:00 in `TIMEZONE`; leave it off in development, which shares the banks' daily request limit with production (ADR 0003).
+**Production must set `SCHEDULED_SYNCS=true`.** It defaults to off, and without it no account is ever synced automatically. It syncs every account at the times in `SYNC_TIMES` (comma-separated `HH:MM` in `TIMEZONE`, default `06:00,11:00,16:00,21:00`). At most four are allowed: banks refuse more than about four syncs a day made without the owner present, while a manual sync from the app is made on the owner's behalf and does not count. Leave scheduled syncs off in development, which shares the banks' daily request limit with production (ADR 0003).
 
 `REDIRECT_URL` must point at the backend callback, `<public address>/api/connections/callback`, and be registered with the Enable Banking application.
 

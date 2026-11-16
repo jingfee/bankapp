@@ -12,6 +12,7 @@ import type {
   BankAccounts,
   ConnectedAccount,
   SyncSummary,
+  SyncTrigger,
 } from '@bankapp/shared';
 import { Redirector } from '../../redirector';
 import { BankerPage, SYNC_POLL_INTERVAL_MS } from './banker.page';
@@ -72,7 +73,7 @@ describe('BankerPage', () => {
 
   const failed: Respond = (request) => request.error(new ProgressEvent('error'));
   const noAccounts: Respond = (request) =>
-    request.flush({ banks: [], syncing: false, lastSync: null } satisfies AccountsResponse);
+    request.flush({ banks: [], syncing: null, lastSync: null } satisfies AccountsResponse);
 
   it('has an empty state with a way to connect a bank', async () => {
     const page = await render();
@@ -90,7 +91,7 @@ describe('BankerPage', () => {
           group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
           group('Swedbank', [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')]),
         ],
-        syncing: false,
+        syncing: null,
         lastSync: null,
       } satisfies AccountsResponse),
     );
@@ -127,7 +128,7 @@ describe('BankerPage', () => {
     const page = await render((request) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
-        syncing: false,
+        syncing: null,
         lastSync: null,
       } satisfies AccountsResponse),
     );
@@ -139,7 +140,7 @@ describe('BankerPage', () => {
   describe('balances and syncing', () => {
     const swedbank = (
       accounts: ConnectedAccount[],
-      syncing: boolean,
+      syncing: SyncTrigger | null,
       lastSync: SyncSummary | null = null,
     ): AccountsResponse => ({
       banks: [group('Swedbank', accounts)],
@@ -159,7 +160,7 @@ describe('BankerPage', () => {
               },
               account('Lönekonto', 'payment'),
             ],
-            false,
+            null,
           ),
         ),
       );
@@ -186,7 +187,9 @@ describe('BankerPage', () => {
         const fixture = TestBed.createComponent(BankerPage);
         const http = TestBed.inject(HttpTestingController);
         await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
+        http
+          .expectOne('/api/accounts')
+          .flush(swedbank([account('Lönekonto', 'payment')], 'initial'));
         await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
         http.expectOne('/api/accounts').error(new ProgressEvent('error'));
         await vi.advanceTimersByTimeAsync(0);
@@ -196,7 +199,7 @@ describe('BankerPage', () => {
         expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
 
         await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], false));
+        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], null));
         await vi.advanceTimersByTimeAsync(0);
         expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
       } finally {
@@ -210,7 +213,9 @@ describe('BankerPage', () => {
         const fixture = TestBed.createComponent(BankerPage);
         const http = TestBed.inject(HttpTestingController);
         await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], true));
+        http
+          .expectOne('/api/accounts')
+          .flush(swedbank([account('Lönekonto', 'payment')], 'initial'));
         await vi.advanceTimersByTimeAsync(0);
         const page = fixture.nativeElement as HTMLElement;
         expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
@@ -226,7 +231,7 @@ describe('BankerPage', () => {
                 lastSyncedAt: '2026-11-10T12:00:00.000Z',
               },
             ],
-            false,
+            null,
           ),
         );
         await vi.advanceTimersByTimeAsync(0);
@@ -241,6 +246,18 @@ describe('BankerPage', () => {
         vi.useRealTimers();
       }
     });
+
+    it.each([
+      ['initial', 'Första uppdateringen pågår…'],
+      ['scheduled', 'Uppdaterar…'],
+      ['manual', 'Uppdaterar…'],
+    ] as const)('names a running %s sync', async (trigger, text) => {
+      const page = await render((request) =>
+        request.flush(swedbank([account('Lönekonto', 'payment')], trigger)),
+      );
+
+      expect(page.querySelector('[data-sync-status]')?.textContent?.trim()).toBe(text);
+    });
   });
 
   describe('the Uppdatera button', () => {
@@ -252,7 +269,7 @@ describe('BankerPage', () => {
       ...overrides,
     });
     const swedbank = (
-      syncing: boolean,
+      syncing: SyncTrigger | null,
       lastSync: SyncSummary | null = null,
       lastSyncedAt: string | null = null,
     ): AccountsResponse => ({
@@ -262,7 +279,7 @@ describe('BankerPage', () => {
     });
 
     /** Renders the page showing an idle overview, with fake timers so polling can be stepped. */
-    async function renderIdle(accounts: AccountsResponse = swedbank(false)) {
+    async function renderIdle(accounts: AccountsResponse = swedbank(null)) {
       vi.useFakeTimers();
       const fixture = TestBed.createComponent(BankerPage);
       const http = TestBed.inject(HttpTestingController);
@@ -284,7 +301,7 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(0);
       http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
       await vi.advanceTimersByTimeAsync(0);
-      http.expectOne('/api/accounts').flush(swedbank(true));
+      http.expectOne('/api/accounts').flush(swedbank('manual'));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain('Uppdaterar');
@@ -293,7 +310,7 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
       http
         .expectOne('/api/accounts')
-        .flush(swedbank(false, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
+        .flush(swedbank(null, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
@@ -314,7 +331,7 @@ describe('BankerPage', () => {
         await vi.advanceTimersByTimeAsync(0);
         http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
         await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: count })));
+        http.expectOne('/api/accounts').flush(swedbank(null, summary({ newTransactions: count })));
         await vi.advanceTimersByTimeAsync(0);
         expect(page.querySelector('[data-sync-status]')?.textContent).toContain(text);
       }
@@ -329,7 +346,7 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(0);
       http
         .expectOne('/api/accounts')
-        .flush(swedbank(false, summary({ newTransactions: 2, failedAccounts: 1 })));
+        .flush(swedbank(null, summary({ newTransactions: 2, failedAccounts: 1 })));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('1 konto kunde inte');
@@ -340,7 +357,7 @@ describe('BankerPage', () => {
 
     it('explains a rate limit and shows when the data is from', async () => {
       const { page, http, button } = await renderIdle(
-        swedbank(false, null, '2026-11-10T08:30:00.000Z'),
+        swedbank(null, null, '2026-11-10T08:30:00.000Z'),
       );
 
       button()!.click();
@@ -349,7 +366,7 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(0);
       http
         .expectOne('/api/accounts')
-        .flush(swedbank(false, summary({ rateLimited: true }), '2026-11-10T08:30:00.000Z'));
+        .flush(swedbank(null, summary({ rateLimited: true }), '2026-11-10T08:30:00.000Z'));
       await vi.advanceTimersByTimeAsync(0);
 
       const alert = page.querySelector('[role=alert]')?.textContent;
@@ -367,7 +384,7 @@ describe('BankerPage', () => {
       await vi.advanceTimersByTimeAsync(0);
       http.expectOne('/api/accounts').error(new ProgressEvent('error'));
       await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-      http.expectOne('/api/accounts').flush(swedbank(false, summary({ newTransactions: 2 })));
+      http.expectOne('/api/accounts').flush(swedbank(null, summary({ newTransactions: 2 })));
       await vi.advanceTimersByTimeAsync(0);
 
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
@@ -391,7 +408,7 @@ describe('BankerPage', () => {
     });
 
     it('is not offered when no bank is connected', async () => {
-      const { button } = await renderIdle({ banks: [], syncing: false, lastSync: null });
+      const { button } = await renderIdle({ banks: [], syncing: null, lastSync: null });
 
       expect(button()).toBeNull();
     });
@@ -403,7 +420,7 @@ describe('BankerPage', () => {
     const swedbank = (overrides: Partial<BankAccounts>) => (request: TestRequest) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment')], overrides)],
-        syncing: false,
+        syncing: null,
         lastSync: null,
       } satisfies AccountsResponse);
     const renewButton = (page: HTMLElement) =>
@@ -505,7 +522,7 @@ describe('BankerPage', () => {
     it('hides a shown account and fetches the accounts again', async () => {
       const response = (hidden: boolean): AccountsResponse => ({
         banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment', 7), hidden }])],
-        syncing: false,
+        syncing: null,
         lastSync: null,
       });
       const page = await render((request) => request.flush(response(false)));
@@ -536,7 +553,7 @@ describe('BankerPage', () => {
   describe('the share of an account', () => {
     const response = (share: ConnectedAccount['share']): AccountsResponse => ({
       banks: [group('Swedbank', [{ ...account('Coop Mastercard', 'card', 7), share }])],
-      syncing: false,
+      syncing: null,
       lastSync: null,
     });
     const select = (page: HTMLElement) => page.querySelector<HTMLSelectElement>('[data-share]');

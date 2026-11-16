@@ -94,7 +94,7 @@ export class AccountsService {
     }
     return {
       banks: [...byBank.values()],
-      syncing: this.sync.isSyncing(),
+      syncing: this.sync.runningSync(),
       lastSync: this.lastSync(),
     };
   }

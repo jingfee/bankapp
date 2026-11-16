@@ -94,7 +94,7 @@ describe('OverviewPage', () => {
 
   const accountsOf = (banks: BankAccounts[]): AccountsResponse => ({
     banks,
-    syncing: false,
+    syncing: null,
     lastSync: null,
   });
 
