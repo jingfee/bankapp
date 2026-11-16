@@ -3,8 +3,6 @@ import type { SyncTrigger } from '@bankapp/shared';
 import { and, eq, gt, isNull, max } from 'drizzle-orm';
 import { CategoryGuesser } from '../categories/guessing/category-guesser';
 import { CLOCK, type Clock } from '../clock';
-import { APP_CONFIG } from '../config/config.module';
-import type { AppConfig } from '../config/config';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import {
@@ -23,6 +21,7 @@ import {
   type EnableBankingTransaction,
   type PsuContext,
 } from '../enable-banking/enable-banking-client';
+import { reconcile } from './reconcile';
 
 export type { SyncTrigger };
 
@@ -44,21 +43,6 @@ const INSERT_BATCH_SIZE = 50;
 
 type AccountRow = typeof accounts.$inferSelect;
 
-/**
- * What the owner decided about a stored transaction, a category and a share, as handed from a
- * removed pending row to its replacement.
- */
-type StoredCategory = Partial<
-  Pick<
-    typeof transactions.$inferSelect,
-    | 'subcategoryId'
-    | 'categoryConfirmed'
-    | 'categoryConfirmedAt'
-    | 'share'
-    | 'replacesTransactionId'
-  >
->;
-
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
@@ -67,8 +51,7 @@ export class SyncService implements OnModuleInit {
 
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
-    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly enableBanking: EnableBankingClient,
     private readonly guesser: CategoryGuesser,
   ) {}
@@ -77,7 +60,7 @@ export class SyncService implements OnModuleInit {
   onModuleInit(): void {
     this.db
       .update(syncRuns)
-      .set({ finishedAt: this.now() })
+      .set({ finishedAt: this.clock.now() })
       .where(isNull(syncRuns.finishedAt))
       .run();
   }
@@ -105,7 +88,7 @@ export class SyncService implements OnModuleInit {
     let runId: number | undefined;
     let rows: AccountRow[];
     try {
-      const now = this.now();
+      const now = this.clock.now();
       const claimed = this.db.transaction((tx) => {
         if (
           tx.select({ id: syncRuns.id }).from(syncRuns).where(isNull(syncRuns.finishedAt)).get()
@@ -140,7 +123,7 @@ export class SyncService implements OnModuleInit {
       if (runId !== undefined) {
         this.db
           .update(syncRuns)
-          .set({ finishedAt: this.now() })
+          .set({ finishedAt: this.clock.now() })
           .where(eq(syncRuns.id, runId))
           .run();
       }
@@ -187,7 +170,11 @@ export class SyncService implements OnModuleInit {
         }
       }
     } finally {
-      this.db.update(syncRuns).set({ finishedAt: this.now() }).where(eq(syncRuns.id, runId)).run();
+      this.db
+        .update(syncRuns)
+        .set({ finishedAt: this.clock.now() })
+        .where(eq(syncRuns.id, runId))
+        .run();
     }
   }
 
@@ -199,7 +186,13 @@ export class SyncService implements OnModuleInit {
   ): void {
     this.db
       .insert(syncAccountResults)
-      .values({ syncRunId: runId, accountId: account.id, outcome, error, syncedAt: this.now() })
+      .values({
+        syncRunId: runId,
+        accountId: account.id,
+        outcome,
+        error,
+        syncedAt: this.clock.now(),
+      })
       .run();
   }
 
@@ -240,7 +233,7 @@ export class SyncService implements OnModuleInit {
       this.recordFailure(runId, account, outcome, String(cause));
       return outcome;
     }
-    const fetchedAt = this.now();
+    const fetchedAt = this.clock.now();
     this.db.transaction((tx) => {
       if (details) {
         tx.update(accounts)
@@ -296,12 +289,8 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
-   * Booked transactions are added unless already stored. A pending transaction keeps its stored
-   * row while the bank returns it, and the booked transaction it turns into updates that same
-   * row (ADR 0005); one the bank stops returning without a booked match is removed. A removed
-   * pending row hands its category to a newly stored twin, if there is one; other new
-   * transactions, and pending ones that book without a category, get a guessed category. The matching rules are provisional. Returns how many
-   * booked transactions were new.
+   * Applies what {@link reconcile} plans for the account's transactions, then guesses a category
+   * for each new row the owner decided none for. Returns how many booked transactions were new.
    */
   private storeTransactions(
     tx: Pick<AppDatabase, 'insert' | 'delete' | 'update' | 'select' | 'run'>,
@@ -309,194 +298,44 @@ export class SyncService implements OnModuleInit {
     fetched: EnableBankingTransaction[],
     fetchedAt: Date,
   ): number {
-    fetched = fetched.filter((transaction) => !isUpcoming(transaction));
-    const fetchedDay = localDay(fetchedAt, this.config.timezone);
-    const occurrences = new Map<string, number>();
-    const pendings = { count: 0 };
-    const entries = fetched.map((transaction) => {
-      const date =
-        transaction.transactionDate ??
-        transaction.valueDate ??
-        transaction.bookingDate ??
-        fetchedDay;
-      // Fingerprints must keep using the date they were first made from, or stored transactions
-      // would be stored again.
-      const dedupDate =
-        transaction.bookingDate ??
-        transaction.valueDate ??
-        transaction.transactionDate ??
-        fetchedDay;
-      return {
-        transaction,
-        claimed: false,
-        row: {
-          accountId: account.id,
-          status: transaction.status,
-          amount: transaction.amount,
-          currency: transaction.currency,
-          bookingDate: transaction.bookingDate,
-          valueDate: transaction.valueDate,
-          transactionDate: transaction.transactionDate,
-          date,
-          description: transaction.description,
-          entryReference: transaction.entryReference,
-          dedupKey: dedupKey(transaction, dedupDate, occurrences, pendings),
-          raw: transaction.raw,
-          fetchedAt,
-        },
-      };
-    });
-    const pending = entries.filter((entry) => entry.row.status === 'pending');
-    const booked = entries.filter((entry) => entry.row.status === 'booked');
+    const ofAccount = (status: 'pending' | 'booked') =>
+      and(eq(transactions.accountId, account.id), eq(transactions.status, status));
+    const plan = reconcile(
+      {
+        pending: tx.select().from(transactions).where(ofAccount('pending')).all(),
+        booked: tx
+          .select({
+            id: transactions.id,
+            dedupKey: transactions.dedupKey,
+            categoryConfirmed: transactions.categoryConfirmed,
+            share: transactions.share,
+            replacesTransactionId: transactions.replacesTransactionId,
+          })
+          .from(transactions)
+          .where(ofAccount('booked'))
+          .all(),
+      },
+      fetched,
+      this.clock.today(),
+    );
 
-    const stored = tx
-      .select()
-      .from(transactions)
-      .where(and(eq(transactions.accountId, account.id), eq(transactions.status, 'pending')))
-      .all();
-    // Only a pending transaction with an entry reference can be recognised across syncs.
-    const identified = stored.filter((row) => row.entryReference !== null);
-    const storedByKey = new Map(identified.map((row) => [row.dedupKey, row]));
-    const fetchedPendingKeys = new Set(pending.map((entry) => entry.row.dedupKey));
-    const kept = new Set<number>();
-
-    // Each booked transaction is the twin of at most one pending one: first the bank's own
-    // pending entry, else a stored one the bank no longer returns.
-    const merges: { stored: (typeof stored)[number]; booked: (typeof entries)[number] }[] = [];
-    for (const entry of booked) {
-      const signature = twinSignature(entry.row);
-      const twin = pending.find((p) => !p.claimed && areTwins(twinSignature(p.row), signature));
-      let row = twin ? storedByKey.get(twin.row.dedupKey) : undefined;
-      if (twin) twin.claimed = true;
-      else {
-        row = identified.find(
-          (candidate) =>
-            !kept.has(candidate.id) &&
-            !fetchedPendingKeys.has(candidate.dedupKey) &&
-            areTwins(twinSignature(candidate), signature),
-        );
-      }
-      if (row && !kept.has(row.id)) {
-        kept.add(row.id);
-        merges.push({ stored: row, booked: entry });
-      }
-    }
-
-    // A pending row that is removed hands its category on to the row that replaces it, so a
-    // category the owner set is not lost when the pending row cannot be kept.
-    const handedOn: { signature: TwinSignature; category: StoredCategory }[] = [];
-    const remove = (row: (typeof stored)[number]) => {
-      // Also when the owner removed the category: their twin must not be guessed either.
-      const hasCategory = row.subcategoryId !== null || row.categoryConfirmed;
-      if (hasCategory || row.share !== null || row.replacesTransactionId !== null) {
-        handedOn.push({
-          signature: twinSignature(row),
-          // Only what the owner decided: a share alone must not wipe a guessed category.
-          category: {
-            ...(hasCategory && {
-              subcategoryId: row.subcategoryId,
-              categoryConfirmed: row.categoryConfirmed,
-              categoryConfirmedAt: row.categoryConfirmedAt,
-            }),
-            ...(row.share !== null && { share: row.share }),
-            // The manual transaction it replaces stays hidden behind its twin (ADR 0009).
-            ...(row.replacesTransactionId !== null && {
-              replacesTransactionId: row.replacesTransactionId,
-            }),
-          },
-        });
-      }
-      tx.delete(transactions).where(eq(transactions.id, row.id)).run();
-    };
-    const takeHandedOn = (row: { amount: number; currency: string; description: string }) => {
-      const signature = twinSignature(row);
-      const index = handedOn.findIndex((entry) => areTwins(entry.signature, signature));
-      return index === -1 ? undefined : handedOn.splice(index, 1)[0]!.category;
-    };
-
+    // Removed first: a row that takes over from a removed one may take its manual transaction.
+    for (const id of plan.remove) tx.delete(transactions).where(eq(transactions.id, id)).run();
+    let added = 0;
     /** Rows without a category the owner decided, to be guessed once stored. */
     const toGuess: number[] = [];
-    let added = 0;
-    for (const merge of merges) {
-      const exists = tx
-        .select({ id: transactions.id, categoryConfirmed: transactions.categoryConfirmed })
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.accountId, account.id),
-            eq(transactions.dedupKey, merge.booked.row.dedupKey),
-          ),
-        )
-        .get();
-      if (exists) {
-        // The booked transaction is already stored, so the pending transaction is just a leftover.
-        remove(merge.stored);
-        const category = takeHandedOn(merge.stored);
-        if (category) {
-          const { share, ...decided } = category;
-          if (decided.categoryConfirmed !== undefined && !exists.categoryConfirmed) {
-            tx.update(transactions).set(decided).where(eq(transactions.id, exists.id)).run();
-          }
-          // The manual transaction the pending row replaced stays hidden behind the booked twin.
-          if (decided.replacesTransactionId !== undefined) {
-            tx.update(transactions)
-              .set({ replacesTransactionId: decided.replacesTransactionId })
-              .where(
-                and(eq(transactions.id, exists.id), isNull(transactions.replacesTransactionId)),
-              )
-              .run();
-          }
-          // A share the owner already set on the booked twin is theirs to keep.
-          if (share !== undefined && share !== null) {
-            tx.update(transactions)
-              .set({ share })
-              .where(and(eq(transactions.id, exists.id), isNull(transactions.share)))
-              .run();
-          }
-        }
-      } else {
-        // The reservation is dated when the purchase was made; the booked entry may carry a later
-        // transaction date, so the reservation's day stays.
-        const day =
-          merge.stored.transactionDate === null
-            ? {}
-            : { transactionDate: merge.stored.transactionDate, date: merge.stored.date };
-        tx.update(transactions)
-          .set({ ...merge.booked.row, ...day })
-          .where(eq(transactions.id, merge.stored.id))
-          .run();
-        added += 1;
-        // The booked description or merchant code may give a guess the pending one did not.
-        if (merge.stored.subcategoryId === null && !merge.stored.categoryConfirmed) {
-          toGuess.push(merge.stored.id);
-        }
-      }
+    for (const update of plan.update) {
+      tx.update(transactions)
+        .set({ ...update.row, fetchedAt })
+        .where(eq(transactions.id, update.id))
+        .run();
+      if (update.newlyBooked) added += 1;
+      if (update.guess) toGuess.push(update.id);
     }
-
-    for (const row of stored) {
-      if (
-        !kept.has(row.id) &&
-        !(row.entryReference !== null && fetchedPendingKeys.has(row.dedupKey))
-      ) {
-        remove(row);
-      }
+    for (const { id, inheritance } of plan.inherit) {
+      tx.update(transactions).set(inheritance).where(eq(transactions.id, id)).run();
     }
-    const inserts: ((typeof entries)[number]['row'] & Partial<StoredCategory>)[] = [];
-    for (const entry of entries) {
-      if (entry.row.status === 'booked') {
-        if (!merges.some((merge) => merge.booked === entry)) {
-          inserts.push({ ...entry.row, ...takeHandedOn(entry.row) });
-        }
-        continue;
-      }
-      if (entry.claimed) continue;
-      const existing = storedByKey.get(entry.row.dedupKey);
-      if (existing) {
-        tx.update(transactions).set(entry.row).where(eq(transactions.id, existing.id)).run();
-      } else {
-        inserts.push({ ...entry.row, ...takeHandedOn(entry.row) });
-      }
-    }
+    const inserts = plan.insert.map((row) => ({ ...row, accountId: account.id, fetchedAt }));
     for (let start = 0; start < inserts.length; start += INSERT_BATCH_SIZE) {
       const inserted = tx
         .insert(transactions)
@@ -519,78 +358,6 @@ export class SyncService implements OnModuleInit {
     this.guesser.guess(tx, toGuess);
     return added;
   }
-}
-
-/**
- * A payment the bank has scheduled but that has not happened yet, e.g. an invoice due or a
- * standing order: pending with a booking date to come and no transaction date. Unlike a card
- * reservation, which has a transaction date and no booking date, it is not stored until the
- * bank books it.
- */
-function isUpcoming(transaction: EnableBankingTransaction): boolean {
-  return (
-    transaction.status === 'pending' &&
-    transaction.transactionDate === null &&
-    transaction.bookingDate !== null
-  );
-}
-
-/**
- * Banks keep returning a pending transaction alongside the booked transaction it turned into, and may
- * hold a refund as pending with the wrong sign and describe the merchant differently. So two transactions
- * are twins when currency and size of the amount agree and the description's letters and digits agree,
- * or one only adds to the other, such as a reference number the bank appends when booking
- * ("lufthansa.com" becomes "Lufthansa.com 22041073").
- */
-interface TwinSignature {
-  size: number;
-  currency: string;
-  text: string;
-}
-
-function twinSignature(row: {
-  amount: number;
-  currency: string;
-  description: string;
-}): TwinSignature {
-  return {
-    size: Math.abs(row.amount),
-    currency: row.currency,
-    text: row.description.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''),
-  };
-}
-
-function areTwins(a: TwinSignature, b: TwinSignature): boolean {
-  if (a.size !== b.size || a.currency !== b.currency) return false;
-  if (a.text === b.text) return true;
-  const [short, long] = a.text.length <= b.text.length ? [a.text, b.text] : [b.text, a.text];
-  return short !== '' && long.startsWith(short);
-}
-
-/**
- * Identifies a booked transaction within its account: the bank's `entry_reference`, else a
- * fingerprint of date, amount and description plus how many identical ones came before it in
- * this response. Pending transactions are never compared, so theirs only needs to be filled in.
- */
-function dedupKey(
-  transaction: EnableBankingTransaction,
-  date: string,
-  occurrences: Map<string, number>,
-  pendings: { count: number },
-): string {
-  if (transaction.entryReference !== null) return `ref:${transaction.entryReference}`;
-  // Pending ones must not shift the index of booked ones, or a transaction would be stored again
-  // under a new key when it books.
-  if (transaction.status === 'pending') return `pending:${pendings.count++}:${date}`;
-  const fingerprint = JSON.stringify([date, transaction.amount, transaction.description]);
-  const index = occurrences.get(fingerprint) ?? 0;
-  occurrences.set(fingerprint, index + 1);
-  return `fp:${fingerprint}:${index}`;
-}
-
-/** The calendar day (`YYYY-MM-DD`) a moment falls on in the owner's timezone. */
-function localDay(moment: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(moment);
 }
 
 /** Card accounts must read negative when money is owed, whichever way the bank signs it. */

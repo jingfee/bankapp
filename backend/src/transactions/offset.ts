@@ -60,7 +60,7 @@ function linkablePurchase(refund: Row): SQL {
 export class Offset {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly categorising: Categorising,
   ) {}
 
@@ -100,7 +100,7 @@ export class Offset {
           .get() !== undefined;
       if (!linkable) throw new NotLinkable();
       tx.update(transactions)
-        .set({ offsetsTransactionId: purchaseId, categoryConfirmedAt: this.now() })
+        .set({ offsetsTransactionId: purchaseId, categoryConfirmedAt: this.clock.now() })
         .where(eq(transactions.id, id))
         .run();
       this.categorising.followPurchases(tx);

@@ -10,7 +10,7 @@ import type {
 } from '@bankapp/shared';
 import { effectiveShares, ownerPart, roundOre } from '../transactions/shares';
 import { onVisibleAccount } from '../transactions/query';
-import { CLOCK, type Clock, localDay } from '../clock';
+import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { accounts, balanceSettings, categories, subcategories, transactions } from '../db/schema';
@@ -40,7 +40,7 @@ interface Event {
 export class SettlementService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /** The balance now, its settlement periods and every balance setting, worked out live (ADR 0008). */
@@ -94,7 +94,7 @@ export class SettlementService {
 
   /** Today as `YYYY-MM-DD`. */
   today(): string {
-    return localDay(this.now());
+    return this.clock.today();
   }
 
   /** The settlement balance now, or null before the first balance setting. */
@@ -108,8 +108,8 @@ export class SettlementService {
       .insert(balanceSettings)
       .values({
         amount: round(amount),
-        asOf: asOf ?? localDay(this.now()),
-        createdAt: this.now(),
+        asOf: asOf ?? this.clock.today(),
+        createdAt: this.clock.now(),
       })
       .run();
     return this.get();

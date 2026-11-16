@@ -135,7 +135,7 @@ export const transactions = sqliteTable(
     date: text('date').notNull(),
     description: text('description').notNull(),
     entryReference: text('entry_reference'),
-    /** Identifies a booked transaction within its account; see `dedupKey` in the sync service. */
+    /** Identifies a booked transaction within its account; see `dedupKey` in `sync/reconcile.ts`. */
     dedupKey: text('dedup_key').notNull(),
     /** The transaction as the bank returned it, as JSON. */
     raw: text('raw').notNull(),

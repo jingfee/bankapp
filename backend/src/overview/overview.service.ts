@@ -34,13 +34,12 @@ const round = (value: number) => Math.round(value * 100) / 100 + 0;
 export class OverviewService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** The current month as `YYYY-MM`, in the server's own time like the frontend's. */
+  /** The current month as `YYYY-MM`, in the owner's timezone. */
   currentMonth(): string {
-    const now = this.now();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return this.clock.today().slice(0, 7);
   }
 
   /**
@@ -114,7 +113,7 @@ export class OverviewService {
         : undefined;
 
     const [year, number] = month.split('-').map(Number) as [number, number];
-    const daily: number[] = Array(new Date(year, number, 0).getDate()).fill(0);
+    const daily: number[] = Array(new Date(Date.UTC(year, number, 0)).getUTCDate()).fill(0);
     let uncategorised = 0;
     const byCategory = new Map<number, OverviewCategory>();
     for (const row of rows) {

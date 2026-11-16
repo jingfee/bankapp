@@ -1,5 +1,4 @@
 import type { INestApplication } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import type {
   CategoriesResponse,
   OverviewResponse,
@@ -12,18 +11,21 @@ import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db/database';
 import { DATABASE } from '../src/db/database.module';
 import { accounts, connections, transactions } from '../src/db/schema';
+import { SyncService } from '../src/sync/sync.service';
 import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('replacing a manual transaction with its bank transaction', () => {
   let app: INestApplication;
   let db: AppDatabase;
+  let enableBanking: FakeEnableBankingClient;
   let groceries: number;
   let keys = 0;
 
   beforeEach(async () => {
+    enableBanking = new FakeEnableBankingClient();
     app = await createApp({
       config: testConfig,
-      enableBanking: new FakeEnableBankingClient(),
+      enableBanking,
       database: { inMemory: true },
       now: () => new Date('2026-11-15T12:00:00'),
     });
@@ -170,10 +172,14 @@ describe('replacing a manual transaction with its bank transaction', () => {
 
   it('brings the manual transaction back when a replacing pending transaction is dropped', async () => {
     const m = await manual();
-    const b = bankTransaction({ status: 'pending' });
+    const b = bankTransaction({ status: 'pending', entryReference: 'p1', dedupKey: 'ref:p1' });
     await replace(m.id, b).expect(204);
     expect((await listed()).transactions.map((t) => t.id)).toEqual([b]);
-    db.delete(transactions).where(eq(transactions.id, b)).run();
+
+    // The bank stops returning the reservation, without a booked twin.
+    enableBanking.transactions.set('u', []);
+    await app.get(SyncService).start('manual').finished;
+
     expect((await listed()).transactions.map((t) => t.id)).toEqual([m.id]);
   });
 
