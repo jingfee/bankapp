@@ -8,7 +8,7 @@ import type {
   SettlementPeriod,
   SettlementResponse,
 } from '@bankapp/shared';
-import { effectiveShares, ownerPart, roundOre } from '../accounts/shares';
+import { effectiveShares, ownerPart, roundOre } from '../transactions/shares';
 import { onVisibleAccount } from '../transactions/query';
 import { CLOCK, type Clock, localDay } from '../clock';
 import type { AppDatabase } from '../db/database';

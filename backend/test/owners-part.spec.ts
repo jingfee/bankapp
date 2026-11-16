@@ -12,7 +12,7 @@ import type { AppDatabase } from '../src/db/database';
 import { DATABASE } from '../src/db/database.module';
 import { accounts, connections, subcategories, transactions } from '../src/db/schema';
 import { eq } from 'drizzle-orm';
-import { ownerPart } from '../src/accounts/shares';
+import { ownerPart } from '../src/transactions/shares';
 import { FakeEnableBankingClient, testConfig, api } from './support';
 
 describe('ownerPart', () => {

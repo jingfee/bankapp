@@ -1,40 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { alias } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  exists,
-  gte,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  max,
-  ne,
-  not,
-  or,
-} from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, lt, max, or, sql } from 'drizzle-orm';
 import type {
   AccountsResponse,
-  HouseholdRatioEntry,
-  ManualTransactionRequest,
-  PaidBy,
   Money,
-  OffsetTransaction,
-  ShareOption,
-  SubcategoryShare,
   SyncSummary,
-  TransactionCategory,
-  Transaction,
   TransactionDetails,
-  OffsetCandidatesResponse,
-  ReplacementSuggestion,
-  TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
 import { DATABASE } from '../db/database.module';
@@ -44,54 +14,24 @@ import {
   balances,
   categories,
   connections,
-  householdRatios,
-  replaceRejections,
   subcategories,
   syncAccountResults,
   syncRuns,
   transactions,
 } from '../db/schema';
 import { connectionStatus } from '../connections/connection-status';
-import { CLOCK, localDay, type Clock } from '../clock';
+import { CLOCK, type Clock } from '../clock';
+import { NoSuchAccount, InvalidInput } from '../domain-errors';
 import { SyncService } from '../sync/sync.service';
+import { onVisibleAccount, queryTransactions } from '../transactions/query';
 import { filterCondition, type TransactionFilter } from './transaction-filter';
-import { normaliseDescription } from '../categories/guessing/normalise-description';
-import { categoryOf, isReplaced, onVisibleAccount, queryTransactions } from '../transactions/query';
-import { canChoose, effectiveShares, loadHouseholdRatio } from './shares';
-import { parseTransactionDetails } from './transaction-details';
-import {
-  SEARCH_LIMIT,
-  SUGGESTION_LIMIT,
-  SUGGESTION_WINDOW_DAYS,
-  daysBetween,
-  descriptionMatch,
-  looksReplaceable,
-  refreshRefundCategories,
-} from './offsets';
+import { loadTransactionDetails } from './transaction-details';
 
 /**
  * Which balance the overview shows, most preferred first: booked closing, then booked
  * interim, then available. Provisional; revisit once real bank data has been seen.
  */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
-
-/**
- * The first day Att granska asks about (`YYYY-MM-DD`): the app went live in November 2026, and
- * the owner does not want to be reminded to categorise history from before then. Older
- * transactions are still guessed and can still be categorised from their detail page.
- */
-export const REVIEW_FROM = '2026-11-01';
-
-function toOffsetTransaction(row: typeof transactions.$inferSelect): OffsetTransaction {
-  return {
-    id: row.id,
-    description: row.description,
-    amount: { amount: row.amount, currency: row.currency },
-    date: row.date,
-  };
-}
-
-const refunds = alias(transactions, 'refunds');
 
 /** How many transactions one page of the transaction list holds. */
 export const TRANSACTIONS_PAGE_SIZE = 50;
@@ -159,67 +99,15 @@ export class AccountsService {
     };
   }
 
-  /** Hides or shows an account; `'no-account'` when there is none with this id. */
-  setHidden(id: number, hidden: boolean): 'ok' | 'no-account' {
+  /** Hides or shows an account. */
+  setHidden(id: number, hidden: boolean): void {
     const updated = this.db
       .update(accounts)
       .set({ hidden })
       .where(eq(accounts.id, id))
       .returning({ id: accounts.id })
       .get();
-    return updated === undefined ? 'no-account' : 'ok';
-  }
-
-  /**
-   * Sets the share the owner bears of an account's transactions; Jag clears it, so the
-   * subcategory's share can apply. Hushåll needs a household ratio first (ADR 0011).
-   */
-  setShare(id: number, share: ShareOption): 'ok' | 'no-account' | 'no-ratio' {
-    if (!canChoose(this.db, share)) return 'no-ratio';
-    const updated = this.db
-      .update(accounts)
-      .set({ share: share === 'me' ? null : share })
-      .where(eq(accounts.id, id))
-      .returning({ id: accounts.id })
-      .get();
-    return updated === undefined ? 'no-account' : 'ok';
-  }
-
-  /** Sets the subcategory's share option; Jag clears it. */
-  setSubcategoryShare(id: number, share: ShareOption): 'ok' | 'no-subcategory' | 'no-ratio' {
-    if (!canChoose(this.db, share)) return 'no-ratio';
-    const updated = this.db
-      .update(subcategories)
-      .set({ share: share === 'me' ? null : share })
-      .where(eq(subcategories.id, id))
-      .returning({ id: subcategories.id })
-      .get();
-    return updated === undefined ? 'no-subcategory' : 'ok';
-  }
-
-  /** The subcategories whose share is not Jag. */
-  subcategoryShares(): SubcategoryShare[] {
-    return this.db
-      .select({ subcategoryId: subcategories.id, share: subcategories.share })
-      .from(subcategories)
-      .where(isNotNull(subcategories.share))
-      .orderBy(asc(subcategories.id))
-      .all()
-      .flatMap(({ subcategoryId, share }) => (share === null ? [] : [{ subcategoryId, share }]));
-  }
-
-  /** The household ratio, earliest entry first. */
-  householdRatio(): HouseholdRatioEntry[] {
-    return loadHouseholdRatio(this.db);
-  }
-
-  /** Replaces the household ratio with `entries`, which the caller has validated. */
-  setHouseholdRatio(entries: HouseholdRatioEntry[]): HouseholdRatioEntry[] {
-    this.db.transaction((tx) => {
-      tx.delete(householdRatios).run();
-      tx.insert(householdRatios).values(entries).run();
-    });
-    return this.householdRatio();
+    if (updated === undefined) throw new NoSuchAccount();
   }
 
   /** How the most recent finished sync went, or null if none has finished. */
@@ -247,18 +135,15 @@ export class AccountsService {
   /**
    * One page of the transactions of every account, newest first. `before` is the `nextCursor` of
    * the previous page; the cursor is a position rather than an offset, so transactions arriving
-   * from a sync while the owner scrolls neither repeat nor skip. `'bad-cursor'` for a cursor
-   * that is not one we handed out. `filter` narrows the list, and `count` and `sum` cover every
+   * from a sync while the owner scrolls neither repeat nor skip. A cursor
+   * that is not one we handed out is invalid input. `filter` narrows the list, and `count` and `sum` cover every
    * match rather than the page.
    */
-  listTransactions(
-    before?: string,
-    filter: TransactionFilter = {},
-  ): TransactionsResponse | 'bad-cursor' {
+  listTransactions(before?: string, filter: TransactionFilter = {}): TransactionsResponse {
     let after = undefined;
     if (before !== undefined) {
       const match = /^(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(before);
-      if (match === null) return 'bad-cursor';
+      if (match === null) throw new InvalidInput('The cursor is not valid');
       const [, date, id] = match as unknown as [string, string, string];
       after = or(
         lt(transactions.date, date),
@@ -296,536 +181,9 @@ export class AccountsService {
     };
   }
 
-  /**
-   * The transactions waiting for review: guessed or uncategorised, not yet decided by the owner,
-   * and listed on or after `REVIEW_FROM`.
-   */
-  private get needsReview() {
-    return and(
-      onVisibleAccount(this.db),
-      eq(transactions.categoryConfirmed, false),
-      gte(transactions.date, REVIEW_FROM),
-      // A refund follows its purchase, so there is nothing to ask about it.
-      isNull(transactions.offsetsTransactionId),
-      // A purchase that has been offset, and so has a category its refunds follow, is settled.
-      not(
-        and(
-          isNotNull(transactions.subcategoryId),
-          exists(
-            this.db
-              .select({ one: sql`1` })
-              .from(refunds)
-              .where(eq(refunds.offsetsTransactionId, transactions.id)),
-          ),
-        )!,
-      ),
-    );
-  }
-
-  /** Every transaction the owner has yet to confirm, newest first, with how many there are. */
-  listForReview(): TransactionReviewResponse {
-    const rows = queryTransactions(this.db, {
-      where: this.needsReview,
-      orderBy: [desc(transactions.date), desc(transactions.id)],
-    });
-    const replacements = this.replacementSuggestions();
-    return {
-      transactions: rows,
-      replacements,
-      count: rows.length + replacements.length,
-    };
-  }
-
-  /** How many transactions are waiting for review, with the suggested replacements. */
-  countForReview(): number {
-    const n = this.db.select({ n: count() }).from(transactions).where(this.needsReview).get()?.n;
-    return (n ?? 0) + this.replacementSuggestions().length;
-  }
-
-  /**
-   * Bank transactions that may be the purchase of a manual transaction paid by the owner
-   * (ADR 0009), closest first. Each manual and each bank transaction is in at most one pair, so
-   * the owner is never offered contradicting choices.
-   */
-  private replacementSuggestions(): ReplacementSuggestion[] {
-    const manuals = this.db
-      .select()
-      .from(transactions)
-      .where(
-        and(
-          isNull(transactions.accountId),
-          eq(transactions.paidBy, 'owner'),
-          lt(transactions.amount, 0),
-          not(isReplaced(this.db)),
-        ),
-      )
-      .all();
-    if (manuals.length === 0) return [];
-    const rejected = new Set(
-      this.db
-        .select()
-        .from(replaceRejections)
-        .all()
-        .map((r) => `${r.manualTransactionId}:${r.bankTransactionId}`),
-    );
-    const banks = this.db
-      .select()
-      .from(transactions)
-      .where(
-        and(
-          onVisibleAccount(this.db),
-          isNotNull(transactions.accountId),
-          lt(transactions.amount, 0),
-          eq(transactions.currency, 'SEK'),
-          isNull(transactions.replacesTransactionId),
-          isNull(transactions.offsetsTransactionId),
-        ),
-      )
-      .all();
-    const pairs = manuals
-      .flatMap((manual) =>
-        banks
-          .filter(
-            (bank) => looksReplaceable(manual, bank) && !rejected.has(`${manual.id}:${bank.id}`),
-          )
-          .map((bank) => ({ manual, bank })),
-      )
-      .sort(
-        (a, b) =>
-          Math.abs(a.manual.amount - a.bank.amount) - Math.abs(b.manual.amount - b.bank.amount) ||
-          Math.abs(daysBetween(a.manual.date, a.bank.date)) -
-            Math.abs(daysBetween(b.manual.date, b.bank.date)) ||
-          b.bank.id - a.bank.id,
-      );
-    const usedManuals = new Set<number>();
-    const usedBanks = new Set<number>();
-    const chosen = pairs.filter(({ manual, bank }) => {
-      if (usedManuals.has(manual.id) || usedBanks.has(bank.id)) return false;
-      usedManuals.add(manual.id);
-      usedBanks.add(bank.id);
-      return true;
-    });
-    return chosen.map(({ manual, bank }) => ({
-      manual: this.listedTransaction(manual.id)!,
-      bank: this.listedTransaction(bank.id)!,
-    }));
-  }
-
-  /**
-   * The bank transaction replaces the manual one (ADR 0009): it takes the manual transaction's
-   * subcategory (confirmed) and share, and the manual one is hidden from then on.
-   */
-  replaceManual(
-    manualId: number,
-    bankId: number,
-  ): 'ok' | 'no-transaction' | 'not-replaceable' | 'taken' {
-    return this.db.transaction((tx) => {
-      const manual = tx.select().from(transactions).where(eq(transactions.id, manualId)).get();
-      const bank = tx.select().from(transactions).where(eq(transactions.id, bankId)).get();
-      if (manual === undefined || bank === undefined) return 'no-transaction' as const;
-      if (
-        manual.accountId !== null ||
-        manual.paidBy !== 'owner' ||
-        manual.amount >= 0 ||
-        bank.accountId === null ||
-        bank.amount >= 0 ||
-        bank.currency !== 'SEK' ||
-        bank.offsetsTransactionId !== null
-      ) {
-        return 'not-replaceable' as const;
-      }
-      const taken = tx
-        .select({ id: transactions.id })
-        .from(transactions)
-        .where(
-          or(
-            eq(transactions.replacesTransactionId, manualId),
-            and(eq(transactions.id, bankId), isNotNull(transactions.replacesTransactionId)),
-          ),
-        )
-        .get();
-      if (taken !== undefined) return 'taken' as const;
-      tx.update(transactions)
-        .set({
-          replacesTransactionId: manualId,
-          subcategoryId: manual.subcategoryId,
-          categoryConfirmed: true,
-          categoryConfirmedAt: this.now(),
-          // The share the manual transaction counted with, so the purchase keeps its split.
-          share: effectiveShares(tx, [manual]).get(manualId)!.option,
-          // A refund offset against the manual transaction follows the bank one instead.
-        })
-        .where(eq(transactions.id, bankId))
-        .run();
-      tx.update(transactions)
-        .set({ offsetsTransactionId: bankId })
-        .where(eq(transactions.offsetsTransactionId, manualId))
-        .run();
-      refreshRefundCategories(tx);
-      return 'ok' as const;
-    });
-  }
-
-  /** Stores that the two are not the same purchase, so they are not suggested again. */
-  rejectReplacement(manualId: number, bankId: number): 'ok' | 'no-transaction' | 'not-replaceable' {
-    const manual = this.db.select().from(transactions).where(eq(transactions.id, manualId)).get();
-    const bank = this.db.select().from(transactions).where(eq(transactions.id, bankId)).get();
-    if (manual === undefined || bank === undefined) return 'no-transaction';
-    if (manual.accountId !== null || bank.accountId === null) return 'not-replaceable';
-    this.db
-      .insert(replaceRejections)
-      .values({ manualTransactionId: manualId, bankTransactionId: bankId })
-      .onConflictDoNothing()
-      .run();
-    return 'ok';
-  }
-
   /** One transaction in full, or null when there is none with this id (pending ones get a new id when they book). */
   getTransaction(id: number): TransactionDetails | null {
-    const listed = queryTransactions(this.db, {
-      where: eq(transactions.id, id),
-      limit: 1,
-    })[0];
-    if (listed === undefined) return null;
-    const row = this.db.select().from(transactions).where(eq(transactions.id, id)).get()!;
-    const purchase =
-      row.offsetsTransactionId === null ? null : this.offsetTransaction(row.offsetsTransactionId);
-    const linked = this.db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.offsetsTransactionId, row.id))
-      .orderBy(desc(transactions.date), desc(transactions.id))
-      .all();
-    return {
-      id: listed.id,
-      status: listed.status,
-      amount: listed.amount,
-      description: listed.description,
-      account: listed.account,
-      category: listed.category,
-      paidBy: listed.paidBy,
-      share: listed.share,
-      ownerPart: listed.ownerPart,
-      transactionDate: row.transactionDate,
-      bookingDate: row.bookingDate,
-      ...parseTransactionDetails(row.raw, row.amount),
-      offsets: purchase,
-      refunds: linked.map(toOffsetTransaction),
-      netAmount:
-        linked.length === 0
-          ? null
-          : {
-              amount:
-                Math.round((row.amount + linked.reduce((sum, r) => sum + r.amount, 0)) * 100) /
-                  100 +
-                0,
-              currency: row.currency,
-            },
-      raw: row.raw,
-    };
-  }
-
-  /**
-   * Sets the transaction's own share, or removes it with null so the account's and subcategory's
-   * apply again. An offset refund takes its purchase's share and cannot have its own. Hushåll
-   * needs a household ratio first (ADR 0011).
-   */
-  setTransactionShare(
-    id: number,
-    share: ShareOption | null,
-  ): TransactionDetails | 'no-transaction' | 'offset' | 'no-ratio' {
-    const current = this.db
-      .select({ offsets: transactions.offsetsTransactionId })
-      .from(transactions)
-      .where(eq(transactions.id, id))
-      .get();
-    if (current === undefined) return 'no-transaction';
-    if (current.offsets !== null) return 'offset';
-    if (share !== null && !canChoose(this.db, share)) return 'no-ratio';
-    this.db.update(transactions).set({ share }).where(eq(transactions.id, id)).run();
-    return this.getTransaction(id) ?? 'no-transaction';
-  }
-
-  /**
-   * Adds a manual transaction (ADR 0009): no account, booked, its subcategory confirmed. The
-   * date is today and the share the subcategory's unless given. The caller has validated the
-   * request's shape.
-   */
-  addManualTransaction(
-    request: ManualTransactionRequest,
-  ): Transaction | 'no-subcategory' | 'no-ratio' {
-    const checked = this.checkManual(request);
-    if (typeof checked === 'string') return checked;
-    const now = this.now();
-    const date = request.date ?? localDay(now);
-    const id = this.db
-      .insert(transactions)
-      .values({
-        accountId: null,
-        status: 'booked',
-        currency: 'SEK',
-        dedupKey: `manual:${randomUUID()}`,
-        raw: '{}',
-        fetchedAt: now,
-        categoryConfirmed: true,
-        categoryConfirmedAt: now,
-        ...checked,
-        date,
-        transactionDate: date,
-      })
-      .returning({ id: transactions.id })
-      .get().id;
-    return this.listedTransaction(id)!;
-  }
-
-  /** Replaces what the owner entered for a manual transaction; a bank transaction cannot be edited. */
-  editManualTransaction(
-    id: number,
-    request: ManualTransactionRequest,
-  ): Transaction | 'no-transaction' | 'not-manual' | 'no-subcategory' | 'no-ratio' {
-    const current = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
-    // A manual transaction that a bank transaction has replaced is gone from the owner's view.
-    if (current === undefined || this.listedTransaction(id) === null) return 'no-transaction';
-    if (current.accountId !== null) return 'not-manual';
-    const checked = this.checkManual(request, current.paidBy);
-    if (typeof checked === 'string') return checked;
-    const date = request.date ?? current.date;
-    this.db.transaction((tx) => {
-      // Refunds are money in and purchases money out, so a change of direction ends the links.
-      if (Math.sign(request.amount) !== Math.sign(current.amount)) {
-        tx.update(transactions)
-          .set({ offsetsTransactionId: null })
-          .where(or(eq(transactions.offsetsTransactionId, id), eq(transactions.id, id)))
-          .run();
-      }
-      tx.update(transactions)
-        .set({ ...checked, date, transactionDate: date, categoryConfirmedAt: this.now() })
-        .where(eq(transactions.id, id))
-        .run();
-    });
-    return this.listedTransaction(id)!;
-  }
-
-  /** Deletes a manual transaction; a bank transaction is never deleted. */
-  deleteManualTransaction(id: number): 'ok' | 'no-transaction' | 'not-manual' {
-    return this.db.transaction((tx) => {
-      const current = tx.select().from(transactions).where(eq(transactions.id, id)).get();
-      if (current === undefined) return 'no-transaction' as const;
-      if (current.accountId !== null) return 'not-manual' as const;
-      // Refunds offset against it become ordinary again, keeping the category they took.
-      tx.update(transactions)
-        .set({ offsetsTransactionId: null })
-        .where(eq(transactions.offsetsTransactionId, id))
-        .run();
-      tx.delete(transactions).where(eq(transactions.id, id)).run();
-      return 'ok' as const;
-    });
-  }
-
-  /** The columns a manual transaction takes from the request, or why they cannot be set. */
-  private checkManual(request: ManualTransactionRequest, current?: PaidBy) {
-    const subcategory = this.db
-      .select({ id: subcategories.id })
-      .from(subcategories)
-      .where(eq(subcategories.id, request.subcategoryId))
-      .get();
-    if (subcategory === undefined) return 'no-subcategory' as const;
-    const share = request.share ?? null;
-    if (share !== null && !canChoose(this.db, share)) return 'no-ratio' as const;
-    return {
-      amount: request.amount,
-      description: request.description.trim(),
-      subcategoryId: request.subcategoryId,
-      share,
-      paidBy: request.paidBy ?? current ?? 'owner',
-    };
-  }
-
-  /** One transaction as listed, or null when there is none. */
-  private listedTransaction(id: number): Transaction | null {
-    return queryTransactions(this.db, { where: eq(transactions.id, id), limit: 1 })[0] ?? null;
-  }
-
-  private offsetTransaction(id: number): OffsetTransaction | null {
-    const row = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
-    return row === undefined ? null : toOffsetTransaction(row);
-  }
-
-  /**
-   * Offsets (kvittar) a money-in transaction against the purchase it pays back, or removes the
-   * link with `purchaseId` null. The refund takes the purchase's subcategory as confirmed
-   * (ADR 0006); unlinking leaves it with that category. Both must be booked, in the same
-   * currency, money in and money out, and the purchase must not itself be a refund.
-   */
-  setOffset(
-    id: number,
-    purchaseId: number | null,
-  ): TransactionDetails | 'no-transaction' | 'no-purchase' | 'not-linkable' {
-    const result = this.db.transaction((tx) => {
-      const refund = tx.select().from(transactions).where(eq(transactions.id, id)).get();
-      if (refund === undefined) return 'no-transaction' as const;
-      if (purchaseId === null) {
-        tx.update(transactions)
-          .set({ offsetsTransactionId: null })
-          .where(eq(transactions.id, id))
-          .run();
-        return 'ok' as const;
-      }
-      const purchase = tx.select().from(transactions).where(eq(transactions.id, purchaseId)).get();
-      if (purchase === undefined) return 'no-purchase' as const;
-      const hasRefunds =
-        tx
-          .select({ id: transactions.id })
-          .from(transactions)
-          .where(eq(transactions.offsetsTransactionId, id))
-          .get() !== undefined;
-      if (
-        refund.amount <= 0 ||
-        purchase.amount >= 0 ||
-        refund.status !== 'booked' ||
-        purchase.status !== 'booked' ||
-        refund.currency !== purchase.currency ||
-        purchase.offsetsTransactionId !== null ||
-        hasRefunds
-      ) {
-        return 'not-linkable' as const;
-      }
-      tx.update(transactions)
-        .set({ offsetsTransactionId: purchaseId, categoryConfirmedAt: this.now() })
-        .where(eq(transactions.id, id))
-        .run();
-      refreshRefundCategories(tx);
-      return 'ok' as const;
-    });
-    if (result !== 'ok') return result;
-    return this.getTransaction(id) ?? 'no-transaction';
-  }
-
-  /** Purchases a money-in transaction could be offset against; see `OffsetCandidatesResponse`. */
-  offsetCandidates(id: number, search?: string): OffsetCandidatesResponse | 'no-transaction' {
-    const refund = this.db.select().from(transactions).where(eq(transactions.id, id)).get();
-    if (refund === undefined) return 'no-transaction';
-    const text = search?.trim() ?? '';
-    const base = and(
-      lt(transactions.amount, 0),
-      eq(transactions.status, 'booked'),
-      eq(transactions.currency, refund.currency),
-      isNull(transactions.offsetsTransactionId),
-      ne(transactions.id, id),
-    );
-
-    if (text !== '') {
-      const escaped = text.replace(/[\\%_]/g, (c) => `\\${c}`);
-      return {
-        transactions: queryTransactions(this.db, {
-          where: and(base, sql`${transactions.description} LIKE ${`%${escaped}%`} ESCAPE '\\'`),
-          orderBy: [desc(transactions.date), desc(transactions.id)],
-          limit: SEARCH_LIMIT,
-        }),
-      };
-    }
-
-    if (refund.amount <= 0) return { transactions: [] };
-    const earliest = new Date(Date.parse(refund.date) - SUGGESTION_WINDOW_DAYS * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const rows = queryTransactions(this.db, {
-      where: and(
-        base,
-        gte(transactions.date, earliest),
-        lte(transactions.date, refund.date),
-        gte(sql`-${transactions.amount}`, refund.amount),
-      ),
-    });
-    const ranked = rows
-      .flatMap((transaction) => {
-        const match = descriptionMatch(refund.description, transaction.description);
-        return match === null ? [] : [{ transaction, match }];
-      })
-      .sort(
-        (a, b) =>
-          a.match - b.match ||
-          Math.abs(-a.transaction.amount.amount - refund.amount) -
-            Math.abs(-b.transaction.amount.amount - refund.amount) ||
-          daysBetween(a.transaction.date, refund.date) -
-            daysBetween(b.transaction.date, refund.date) ||
-          b.transaction.id - a.transaction.id,
-      )
-      .slice(0, SUGGESTION_LIMIT);
-    return { transactions: ranked.map(({ transaction }) => transaction) };
-  }
-
-  /**
-   * Assigns the owner's chosen subcategory to a transaction as confirmed, or makes it
-   * uncategorised for good when `subcategoryId` is null. Returns the category it now has and,
-   * when a category was chosen, how many other transactions with the same normalised description
-   * were guessed anew to match (ADR 0004). Confirmed transactions are never touched.
-   */
-  setCategory(
-    id: number,
-    subcategoryId: number | null,
-  ):
-    | { category: TransactionCategory | null; updatedSimilar: number }
-    | 'no-transaction'
-    | 'no-subcategory'
-    | 'offset' {
-    if (
-      subcategoryId !== null &&
-      this.db
-        .select({ id: subcategories.id })
-        .from(subcategories)
-        .where(eq(subcategories.id, subcategoryId))
-        .get() === undefined
-    ) {
-      return 'no-subcategory';
-    }
-    return this.db.transaction((tx) => {
-      const current = tx
-        .select({ offsets: transactions.offsetsTransactionId })
-        .from(transactions)
-        .where(eq(transactions.id, id))
-        .get();
-      if (current === undefined) return 'no-transaction' as const;
-      // A kvittad refund follows its purchase; the owner changes the purchase instead.
-      if (current.offsets !== null) return 'offset' as const;
-      const updated = tx
-        .update(transactions)
-        // Removing is the owner's decision too, so the app does not guess the transaction again.
-        .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
-        .where(eq(transactions.id, id))
-        .returning({ id: transactions.id, description: transactions.description })
-        .get();
-      if (updated === undefined) return 'no-transaction' as const;
-
-      let updatedSimilar = 0;
-      if (subcategoryId !== null) {
-        // What the guesser's history layer would answer now: the subcategory just confirmed.
-        const target = normaliseDescription(updated.description);
-        const similar = tx
-          .select({
-            id: transactions.id,
-            description: transactions.description,
-            subcategoryId: transactions.subcategoryId,
-          })
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.categoryConfirmed, false),
-              ne(transactions.id, id),
-              isNull(transactions.offsetsTransactionId),
-            ),
-          )
-          .all()
-          .filter((row) => normaliseDescription(row.description) === target);
-        for (const row of similar) {
-          tx.update(transactions).set({ subcategoryId }).where(eq(transactions.id, row.id)).run();
-          if (row.subcategoryId !== subcategoryId) updatedSimilar += 1;
-        }
-      }
-
-      refreshRefundCategories(tx);
-      return { category: categoryOf(tx, id), updatedSimilar };
-    });
+    return loadTransactionDetails(this.db, id);
   }
 
   /** The balance of the preferred type from each account's most recent fetch. */

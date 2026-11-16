@@ -9,7 +9,7 @@ import type {
 } from '@bankapp/shared';
 import { and, eq, exists, inArray, isNull, not, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { effectiveShares, ownerPart } from '../accounts/shares';
+import { effectiveShares, ownerPart } from './shares';
 import type { AppDatabase } from '../db/database';
 import { accounts, categories, connections, subcategories, transactions } from '../db/schema';
 
@@ -181,4 +181,9 @@ export function categoryOf(
     .where(eq(transactions.id, id))
     .get();
   return row ? toCategory(row) : null;
+}
+
+/** One transaction as listed, or null when there is none or it does not count. */
+export function listedTransaction(db: Pick<AppDatabase, 'select'>, id: number): Transaction | null {
+  return queryTransactions(db, { where: eq(transactions.id, id), limit: 1 })[0] ?? null;
 }

@@ -1,4 +1,5 @@
 import { type DynamicModule, Global, Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { AccountsModule } from './accounts/accounts.module';
@@ -15,6 +16,8 @@ import type { EnableBankingClient } from './enable-banking/enable-banking-client
 import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
 import { OverviewModule } from './overview/overview.module';
+import { TransactionsModule } from './transactions/transactions.module';
+import { DomainErrorFilter } from './domain-error.filter';
 import { SettlementModule } from './settlement/settlement.module';
 
 export const API_PREFIX = 'api';
@@ -48,7 +51,10 @@ export class AppModule {
 
     return {
       module: AppModule,
-      providers: [{ provide: CLOCK, useValue: options.now ?? (() => new Date()) }],
+      providers: [
+        { provide: CLOCK, useValue: options.now ?? (() => new Date()) },
+        { provide: APP_FILTER, useClass: DomainErrorFilter },
+      ],
       exports: [CLOCK],
       imports: [
         ConfigModule.register(options.config),
@@ -59,6 +65,7 @@ export class AppModule {
         BanksModule,
         CategoriesModule,
         ConnectionsModule,
+        TransactionsModule,
         AccountsModule,
         OverviewModule,
         SettlementModule,

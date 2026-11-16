@@ -1,0 +1,102 @@
+/** How a domain error is reported over HTTP; `DomainErrorFilter` is the only place that maps it. */
+export type DomainErrorKind = 'bad-request' | 'not-found' | 'conflict';
+
+/** A rule of the domain that a request broke. Modules throw these; controllers never branch on them. */
+export abstract class DomainError extends Error {
+  abstract readonly kind: DomainErrorKind;
+}
+
+/** Input that is malformed or breaks a validation rule. */
+export class InvalidInput extends DomainError {
+  readonly kind = 'bad-request';
+}
+
+export class NoSuchAccount extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such account');
+  }
+}
+
+export class NoSuchTransaction extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such transaction');
+  }
+}
+
+/** A subcategory addressed by the route. */
+export class NoSuchSubcategory extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such subcategory');
+  }
+}
+
+/** A subcategory named in a request body. */
+export class UnknownSubcategory extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super('There is no such subcategory');
+  }
+}
+
+/** A purchase named in a request body. */
+export class NoSuchPurchase extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super('There is no such purchase');
+  }
+}
+
+export class NoHouseholdRatio extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('Set a household ratio before choosing Hushåll');
+  }
+}
+
+export class NotLinkable extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super(
+      'Only a booked money-in transaction can be offset against a booked purchase in the same currency',
+    );
+  }
+}
+
+export class NotReplaceable extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super('Only a bank transaction can replace a manual transaction paid by the owner');
+  }
+}
+
+export class NotAManualAndBankPair extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super('Expected a manual transaction and a bank transaction');
+  }
+}
+
+export class AlreadyReplaced extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('One of them is already replaced or replacing');
+  }
+}
+
+export class NotManual extends DomainError {
+  readonly kind = 'conflict';
+  constructor(action: 'edited' | 'deleted') {
+    super(`Only a manual transaction can be ${action}`);
+  }
+}
+
+/** A kvittad refund takes its purchase's category and share. */
+export class FollowsPurchase extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('A kvittad refund follows its purchase; change the purchase');
+  }
+}
