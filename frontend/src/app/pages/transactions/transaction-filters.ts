@@ -90,16 +90,14 @@ export interface Period {
   to: string;
 }
 
-const iso = dayOf;
-
 /** The quick periods, counted from `today` in the owner's own time. */
 export function periodPresets(today: Date): { last7: Period; month: Period } {
   const weekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
   return {
-    last7: { from: iso(weekAgo), to: '' },
+    last7: { from: dayOf(weekAgo), to: '' },
     month: {
-      from: iso(new Date(today.getFullYear(), today.getMonth(), 1)),
-      to: iso(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+      from: dayOf(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: dayOf(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
     },
   };
 }

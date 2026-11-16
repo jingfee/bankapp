@@ -8,7 +8,7 @@ import type {
   SettlementPeriod,
   SettlementResponse,
 } from '@bankapp/shared';
-import { effectiveShares, ownerPart } from '../accounts/shares';
+import { effectiveShares, ownerPart, roundOre } from '../accounts/shares';
 import { isReplaced } from '../accounts/transaction-rows';
 import { CLOCK, type Clock, localDay } from '../clock';
 import type { AppDatabase } from '../db/database';
@@ -21,8 +21,8 @@ export const SETTLEMENT_SUBCATEGORY = 'Avräkning delade utgifter';
 /** What a manual transaction shows where an account's name would be. */
 export const MANUAL_ACCOUNT_NAME = 'Manuell';
 
-/** Money sums are floats; rounding to öre keeps the noise out of the API. */
-const round = (value: number) => Math.round(value * 100) / 100 + 0;
+/** Money sums are floats; rounding to öre (half away from zero, like the owner's part) keeps the noise out of the API. */
+const round = roundOre;
 
 /** What the replay of one transaction needs: where it falls and what it adds to the balance. */
 interface Event {
@@ -164,12 +164,12 @@ export class SettlementService {
       const paidByPartner = transaction.paidBy === 'partner';
       if (!isSettlement && !paidByPartner && share.percent === 100) continue;
       // The partner's part of what the owner paid; the owner's part of what the partner paid.
-      const owners = ownerPart(transaction.amount, share.percent);
+      const ownersPart = ownerPart(transaction.amount, share.percent);
       const partnerPart = isSettlement
         ? -transaction.amount
         : paidByPartner
-          ? owners
-          : round(owners - transaction.amount);
+          ? ownersPart
+          : round(ownersPart - transaction.amount);
       events.push({
         date: transaction.date,
         order: 1,

@@ -1,4 +1,3 @@
-import { MANUAL_LABEL } from '../../share-display';
 import {
   Component,
   type ElementRef,
@@ -10,6 +9,7 @@ import {
 } from '@angular/core';
 import type { Category } from '@bankapp/shared';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
+import { MANUAL_LABEL } from '../../share-display';
 import {
   AMOUNT_PRESETS,
   type Period,

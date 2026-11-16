@@ -28,9 +28,15 @@ export function householdPercent(entries: HouseholdRatioEntry[], date: string): 
  */
 export function ownerPart(amount: number, percent: number): number {
   const ore = Math.round(Math.abs(amount) * 100);
-  const part = Math.round((ore * percent) / 100) / 100;
-  return amount < 0 ? -part || 0 : part;
+  return signed(amount, Math.round((ore * percent) / 100) / 100);
 }
+
+/** `value` rounded half away from zero to whole öre, never negative zero. */
+export function roundOre(value: number): number {
+  return signed(value, Math.round(Math.abs(value) * 100) / 100);
+}
+
+const signed = (like: number, magnitude: number) => (like < 0 ? -magnitude || 0 : magnitude);
 
 export interface ShareSources {
   transaction: ShareOption | null;

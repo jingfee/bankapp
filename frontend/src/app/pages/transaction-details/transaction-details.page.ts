@@ -570,8 +570,8 @@ export class TransactionDetailsPage {
   private loadingCategories = false;
 
   protected readonly shareError = signal<string | null>(null);
-  /** The household ratio, fetched once the page is shown; null until then or if that failed. */
   protected readonly manualLabel = MANUAL_LABEL;
+  /** The household ratio, fetched once the page is shown; null until then or if that failed. */
   protected readonly ratio = signal<HouseholdRatioEntry[] | null>(null);
   private loadingRatio = false;
   private shareRequest: Subscription | undefined;
