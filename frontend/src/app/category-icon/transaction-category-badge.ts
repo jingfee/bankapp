@@ -39,5 +39,5 @@ import { CategoryIconComponent } from './category-icon';
 export class TransactionCategoryBadge {
   readonly category = input.required<TransactionCategory | null>();
   readonly pending = input(false);
-  readonly size = input<28 | 36 | 40 | 60>(40);
+  readonly size = input<18 | 28 | 36 | 40 | 60>(40);
 }

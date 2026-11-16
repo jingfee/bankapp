@@ -266,6 +266,71 @@
     color: var(--color-ink);
   }
 
+  .btn-positive {
+    background: color-mix(in srgb, var(--color-positive) 90%, transparent);
+    color: #04210f;
+  }
+  .btn-positive:hover:not(:disabled) {
+    background: var(--color-positive);
+  }
+
+  /* Review: the guess label, a tinted chip that stays evenly padded when its text wraps. */
+  .guess-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 9px 3px 3px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--category-colour) 16%, transparent);
+    color: var(--category-tint);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .guess-tag-none {
+    --category-colour: var(--color-muted);
+    --category-tint: var(--color-muted);
+    padding-left: 9px;
+  }
+
+  /* Review: a handled row collapses (height and opacity) and the next one moves up. */
+  .collapsible {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition:
+      grid-template-rows 0.45s ease,
+      opacity 0.45s ease;
+  }
+  .collapsible > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .collapsible[data-leaving] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  .progress {
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+  }
+  .progress > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-positive);
+    transition: width 0.45s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .collapsible,
+    .progress > span {
+      transition: none;
+    }
+  }
+
   /* Chip */
   .chip {
     display: inline-flex;

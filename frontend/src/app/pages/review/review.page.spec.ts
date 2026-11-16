@@ -71,14 +71,15 @@ describe('ReviewPage', () => {
     return { fixture, page: fixture.nativeElement as HTMLElement, http };
   }
 
+  /** Ids of the rows still open; a row collapsing away after being handled does not count. */
   const ids = (root: ParentNode) =>
-    Array.from(root.querySelectorAll('li[data-transaction]')).map((li) =>
+    Array.from(root.querySelectorAll('li[data-transaction]:not([data-leaving])')).map((li) =>
       li.getAttribute('data-id'),
     );
 
-  it('lists guesses and uncategorised transactions in two groups, newest first', async () => {
+  it('lists guesses before uncategorised transactions in one Bekräfta kategori section', async () => {
     const { page } = await render({
-      count: 3,
+      count: 4,
       transactions: [
         transaction(4, { category: guess }),
         transaction(3),
@@ -87,22 +88,115 @@ describe('ReviewPage', () => {
       ],
     });
 
-    const groups = Array.from(page.querySelectorAll('section[data-group]')).map((section) => ({
-      heading: section.querySelector('h2')?.textContent?.trim(),
-      ids: ids(section),
-    }));
-    expect(groups).toEqual([
-      { heading: 'Gissade', ids: ['4', '2'] },
-      { heading: 'Okategoriserade', ids: ['3', '1'] },
-    ]);
+    const section = page.querySelector('section[data-categories]') as HTMLElement;
+    expect(section.querySelector('h2')?.textContent?.trim()).toBe('Bekräfta kategori');
+    expect(section.querySelector('[data-section-count]')?.textContent?.trim()).toBe(
+      '4 gissade eller okategoriserade',
+    );
+    expect(ids(section)).toEqual(['4', '2', '3', '1']);
   });
 
-  it('leaves out a group that has nothing in it', async () => {
-    const { page } = await render({ count: 1, transactions: [transaction(1)] });
+  it('labels the guess, or says there is none', async () => {
+    const { page } = await render({
+      count: 2,
+      transactions: [transaction(2, { category: guess }), transaction(1)],
+    });
 
-    expect(Array.from(page.querySelectorAll('h2')).map((h) => h.textContent?.trim())).toEqual([
-      'Okategoriserade',
-    ]);
+    expect(page.querySelector('li[data-id="2"] [data-guess-tag]')?.textContent?.trim()).toBe(
+      'Gissad: Livsmedel',
+    );
+    expect(page.querySelector('li[data-id="2"] [data-guess-tag] [data-guess-mark]')).toBeNull();
+    expect(page.querySelector('li[data-id="1"] [data-guess-tag]')?.textContent?.trim()).toBe(
+      'Ingen gissning',
+    );
+    expect(page.querySelector('li[data-id="2"] [data-change]')?.textContent?.trim()).toBe('Ändra');
+    expect(page.querySelector('li[data-id="1"] [data-change]')?.textContent?.trim()).toBe(
+      'Välj kategori',
+    );
+  });
+
+  it('says how many are left and how far along the visit is', async () => {
+    const { fixture, page, http } = await render({
+      count: 4,
+      transactions: [
+        transaction(4, { category: guess }),
+        transaction(3, { category: guess }),
+        transaction(2),
+        transaction(1),
+      ],
+    });
+    const bar = () => page.querySelector('[data-progress]') as HTMLElement;
+
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Att granska');
+    expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe('4 kvar att bekräfta');
+    expect(bar().getAttribute('aria-valuenow')).toBe('0');
+    expect(bar().getAttribute('aria-valuemax')).toBe('4');
+
+    (page.querySelector('li[data-id="4"] [data-confirm]') as HTMLButtonElement).click();
+    http
+      .expectOne('/api/transactions/4/category')
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+    await fixture.whenStable();
+
+    expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe('3 kvar att bekräfta');
+    expect(bar().getAttribute('aria-valuenow')).toBe('1');
+    expect(bar().getAttribute('aria-valuemax')).toBe('4');
+  });
+
+  describe('long lists', () => {
+    const thirteen = Array.from({ length: 13 }, (_, i) => transaction(13 - i));
+
+    it('shows the first 5 and a Visa alla button, and keeps 5 showing as rows are confirmed', async () => {
+      const { fixture, page, http } = await render({ count: 13, transactions: thirteen });
+      expect(ids(page)).toEqual(['13', '12', '11', '10', '9']);
+      expect(page.querySelector('[data-show-all]')?.textContent?.trim()).toBe('Visa alla 13');
+
+      (page.querySelector('li[data-id="13"] [data-change]') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      http.expectOne('/api/categories').flush(categories);
+      await fixture.whenStable();
+      (page.querySelector('li[data-id="13"] [data-subcategory="13"]') as HTMLButtonElement).click();
+      http
+        .expectOne('/api/transactions/13/category')
+        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+      await fixture.whenStable();
+
+      expect(ids(page)).toEqual(['12', '11', '10', '9', '8']);
+      expect(page.querySelector('[data-show-all]')?.textContent?.trim()).toBe('Visa alla 12');
+    });
+
+    it('shows every row after Visa alla', async () => {
+      const { fixture, page } = await render({ count: 13, transactions: thirteen });
+
+      (page.querySelector('[data-show-all]') as HTMLButtonElement).click();
+      await fixture.whenStable();
+
+      expect(ids(page)).toHaveLength(13);
+      expect(page.querySelector('[data-show-all]')).toBeNull();
+    });
+  });
+
+  it('collapses a confirmed row away before removing it', async () => {
+    const { fixture, page, http } = await render({
+      count: 1,
+      transactions: [transaction(1, { category: guess })],
+    });
+    vi.useFakeTimers();
+    try {
+      (page.querySelector('[data-confirm]') as HTMLButtonElement).click();
+      http
+        .expectOne('/api/transactions/1/category')
+        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      expect(page.querySelector('li[data-id="1"]')?.hasAttribute('data-leaving')).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(500);
+      fixture.detectChanges();
+      expect(page.querySelector('li[data-id="1"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('offers one-tap confirm on guesses only', async () => {
@@ -209,12 +303,13 @@ describe('ReviewPage', () => {
     expect(page.querySelector('[role="alert"]')?.textContent).toContain('kunde inte sparas');
   });
 
-  it('says so when nothing is left to review', async () => {
+  it('celebrates when nothing is left to review, with a way back to the overview', async () => {
     const { page } = await render({ count: 0, transactions: [] });
 
-    expect(page.querySelector('[data-empty]')?.textContent?.trim()).toBe(
-      'Inget att granska just nu.',
-    );
+    expect(page.querySelector('[data-empty]')?.textContent).toContain('Allt är granskat');
+    expect(page.querySelector('[data-empty] a')?.getAttribute('href')).toBe('/');
+    expect(page.querySelector('[data-empty] a')?.textContent?.trim()).toBe('Till översikten');
+    expect(page.querySelector('[data-progress]')).toBeNull();
   });
 
   describe('suggested replacements', () => {
@@ -231,7 +326,7 @@ describe('ReviewPage', () => {
       }),
     };
 
-    it('shows both rows with Ersätt and Inte samma', async () => {
+    it('shows both rows with Ersätt med banktransaktionen and Inte samma', async () => {
       const { page } = await render({ count: 1, transactions: [], replacements: [pair] });
 
       const rows = Array.from(page.querySelectorAll('[data-replacement-row]')).map((row) =>
@@ -240,9 +335,22 @@ describe('ReviewPage', () => {
       expect(rows[0]).toContain('Coop');
       expect(rows[0]).toContain('Manuell');
       expect(rows[1]).toContain('COOP KONSUM');
-      expect(page.querySelector('[data-replace]')?.textContent?.trim()).toBe('Ersätt');
+      expect(page.querySelector('[data-replace]')?.textContent?.trim()).toBe(
+        'Ersätt med banktransaktionen',
+      );
       expect(page.querySelector('[data-not-same]')?.textContent?.trim()).toBe('Inte samma');
       expect(page.querySelector('[data-empty]')).toBeNull();
+      expect(page.querySelector('[data-section-count]')?.textContent?.trim()).toBe(
+        '1 förslag · en manuell transaktion som verkar ha kommit från banken',
+      );
+      expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe(
+        '1 kvar att bekräfta',
+      );
+    });
+
+    it('leaves the section out when there are no suggestions', async () => {
+      const { page } = await render({ count: 1, transactions: [transaction(1)] });
+      expect(page.querySelector('[data-replacements]')).toBeNull();
     });
 
     it('replaces the manual transaction and fetches the list again', async () => {
@@ -261,8 +369,9 @@ describe('ReviewPage', () => {
         .flush({ count: 0, transactions: [], replacements: [] });
       await fixture.whenStable();
 
-      expect(page.querySelector('[data-replacement]')).toBeNull();
-      expect(page.querySelector('[data-empty]')).not.toBeNull();
+      expect(page.querySelector('[data-replacement]:not([data-leaving])')).toBeNull();
+      expect(page.querySelector('[data-replacement]')?.hasAttribute('data-leaving')).toBe(true);
+      expect(page.querySelector('[data-remaining]')).toBeNull();
       expect(TestBed.inject(TransactionsService).reviewCount()).toBe(0);
     });
 
@@ -282,7 +391,7 @@ describe('ReviewPage', () => {
         .flush({ count: 0, transactions: [], replacements: [] });
       await fixture.whenStable();
 
-      expect(page.querySelector('[data-replacement]')).toBeNull();
+      expect(page.querySelector('[data-replacement]:not([data-leaving])')).toBeNull();
     });
 
     it('keeps the pair and says so when saving fails', async () => {

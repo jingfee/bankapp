@@ -36,7 +36,7 @@ export class CategoryIconComponent {
   readonly colour = input.required<CategoryColour>();
   /** What the icon stands for, e.g. the subcategory's name; without it the icon is decorative. */
   readonly label = input<string>();
-  readonly size = input<28 | 36 | 40 | 60>(40);
+  readonly size = input<18 | 28 | 36 | 40 | 60>(40);
   /** The category is only a guess, not yet confirmed by the owner. */
   readonly guessed = input(false);
   /** The transaction is still pending at the bank. */
