@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gte, isNotNull, isNull, not, or } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, isNull, or } from 'drizzle-orm';
 import type {
   BalanceSetting,
   CategoryColour,
@@ -9,7 +9,7 @@ import type {
   SettlementResponse,
 } from '@bankapp/shared';
 import { effectiveShares, ownerPart, roundOre } from '../accounts/shares';
-import { isReplaced } from '../accounts/transaction-rows';
+import { onVisibleAccount } from '../transactions/query';
 import { CLOCK, type Clock, localDay } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -135,20 +135,7 @@ export class SettlementService {
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(
-        and(
-          or(isNull(transactions.accountId), eq(accounts.hidden, false)),
-          gte(transactions.date, from),
-          // A transaction that replaces a manual one stands in for it, so it counts even when
-          // dated before its account was connected (ADR 0009).
-          or(
-            isNull(accounts.connectedOn),
-            gte(transactions.date, accounts.connectedOn),
-            isNotNull(transactions.replacesTransactionId),
-          ),
-          not(isReplaced(this.db)),
-        ),
-      )
+      .where(and(onVisibleAccount(this.db), gte(transactions.date, from), connectedBefore()))
       .all();
     const shares = effectiveShares(
       this.db,
@@ -157,9 +144,8 @@ export class SettlementService {
     const events: Event[] = [];
     for (const row of rows) {
       const { transaction } = row;
-      const isSettlement =
-        row.kind === 'transfer' && row.subcategoryName === SETTLEMENT_SUBCATEGORY;
-      if (row.kind === 'transfer' && !isSettlement) continue;
+      if (!movesBalance(row.kind, row.subcategoryName)) continue;
+      const isSettlement = row.kind === 'transfer';
       const share = shares.get(transaction.id)!;
       const paidByPartner = transaction.paidBy === 'partner';
       if (!isSettlement && !paidByPartner && share.percent === 100) continue;
@@ -190,6 +176,23 @@ export class SettlementService {
     }
     return events;
   }
+}
+
+/**
+ * Days before an account was first connected are left out, unless the transaction replaces a
+ * manual one: it stands in for that and so counts even when dated earlier (ADR 0009).
+ */
+function connectedBefore() {
+  return or(
+    isNull(accounts.connectedOn),
+    gte(transactions.date, accounts.connectedOn),
+    isNotNull(transactions.replacesTransactionId),
+  );
+}
+
+/** Among transfers only the settlements (Avräkning) move the balance. */
+function movesBalance(kind: string | null, subcategoryName: string | null): boolean {
+  return kind !== 'transfer' || subcategoryName === SETTLEMENT_SUBCATEGORY;
 }
 
 function emptyPeriod(carriedIn: number): SettlementPeriod {
