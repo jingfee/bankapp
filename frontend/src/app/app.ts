@@ -6,6 +6,7 @@ import { filter } from 'rxjs';
 import { AuthService } from './auth/auth.service';
 import { Toast } from './toast/toast';
 import { ToastService } from './toast/toast.service';
+import { CategoriesService } from './categories.service';
 import { TransactionsService } from './transactions.service';
 
 interface NavItem {
@@ -189,6 +190,7 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
 })
 export class App {
   private readonly transactions = inject(TransactionsService);
+  private readonly categories = inject(CategoriesService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
@@ -221,6 +223,7 @@ export class App {
     this.auth.logout().subscribe({
       next: () => {
         this.transactions.reviewCount.set(0);
+        this.categories.reset();
         void this.router.navigateByUrl('/logga-in');
       },
       error: () => this.toast.show('Det gick inte att logga ut. Försök igen.'),
