@@ -19,7 +19,13 @@ describe('ReviewPage', () => {
     });
   });
 
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    // Every change makes the service fetch the review count again.
+    TestBed.inject(HttpTestingController)
+      .match('/api/transactions/review/count')
+      .forEach((r) => (r.cancelled ? undefined : r.flush({ count: 0 })));
+    TestBed.inject(HttpTestingController).verify();
+  });
 
   const guess: TransactionCategory = {
     category: { id: 2, name: 'Mat & Dryck', colour: 'green' },

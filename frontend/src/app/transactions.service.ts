@@ -81,23 +81,33 @@ export class TransactionsService {
       });
   }
 
+  /**
+   * Every mutation ends here: what changed may affect what waits for review, so the count is
+   * fetched again, and the list kept for the way back is dropped, or replaced by `keep` when the
+   * caller has already brought it up to date.
+   */
+  private changed(keep: ListedTransactions | null = null): void {
+    this.listed = keep;
+    this.refreshReviewCount();
+  }
+
   /** Adds a manual transaction. The list kept for the way back is dropped: it has a new row. */
   addManual(request: ManualTransactionRequest): Observable<Transaction> {
     return this.http
       .post<Transaction>('/api/transactions', request)
-      .pipe(tap(() => (this.listed = null)));
+      .pipe(tap(() => this.changed()));
   }
 
   /** Replaces what the owner entered for a manual transaction. */
   editManual(id: number, request: ManualTransactionRequest): Observable<Transaction> {
     return this.http
       .put<Transaction>(`/api/transactions/${id}`, request)
-      .pipe(tap(() => (this.listed = null)));
+      .pipe(tap(() => this.changed()));
   }
 
   /** Deletes a manual transaction. */
   deleteManual(id: number): Observable<void> {
-    return this.http.delete<void>(`/api/transactions/${id}`).pipe(tap(() => (this.listed = null)));
+    return this.http.delete<void>(`/api/transactions/${id}`).pipe(tap(() => this.changed()));
   }
 
   /**
@@ -107,12 +117,14 @@ export class TransactionsService {
   replace(request: ReplacementRequest): Observable<void> {
     return this.http
       .post<void>('/api/transactions/replace', request)
-      .pipe(tap(() => (this.listed = null)));
+      .pipe(tap(() => this.changed()));
   }
 
   /** Says the two are not the same purchase, so they are not suggested again. */
   notSame(request: ReplacementRequest): Observable<void> {
-    return this.http.post<void>('/api/transactions/not-same', request);
+    return this.http
+      .post<void>('/api/transactions/not-same', request)
+      .pipe(tap(() => this.changed()));
   }
 
   /** One transaction in full; errors with a 404 when it no longer exists. */
@@ -131,17 +143,16 @@ export class TransactionsService {
       .put<TransactionCategoryResponse>(`/api/transactions/${id}/category`, body)
       .pipe(
         tap(({ category, updatedSimilar }) => {
-          if (this.listed === null) return;
-          if (updatedSimilar > 0) {
-            this.listed = null;
+          if (this.listed === null || updatedSimilar > 0) {
+            this.changed();
             return;
           }
-          this.listed = {
+          this.changed({
             ...this.listed,
             transactions: this.listed.transactions.map((t) =>
               t.id === id ? { ...t, category } : t,
             ),
-          };
+          });
         }),
       );
   }
@@ -159,12 +170,9 @@ export class TransactionsService {
    */
   setOffset(id: number, purchaseId: number | null): Observable<TransactionDetails> {
     const body: SetTransactionOffsetRequest = { purchaseId };
-    return this.http.put<TransactionDetails>(`/api/transactions/${id}/offset`, body).pipe(
-      tap(() => {
-        this.listed = null;
-        this.refreshReviewCount();
-      }),
-    );
+    return this.http
+      .put<TransactionDetails>(`/api/transactions/${id}/offset`, body)
+      .pipe(tap(() => this.changed()));
   }
 
   /**
@@ -175,6 +183,6 @@ export class TransactionsService {
     const body: SetTransactionShareRequest = { share };
     return this.http
       .put<TransactionDetails>(`/api/transactions/${id}/share`, body)
-      .pipe(tap(() => (this.listed = null)));
+      .pipe(tap(() => this.changed()));
   }
 }

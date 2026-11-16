@@ -64,7 +64,12 @@ describe('the manual transaction form over its page', () => {
     harness = await RouterTestingHarness.create();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http
+      .match('/api/transactions/review/count')
+      .forEach((r) => (r.cancelled ? undefined : r.flush({ count: 0 })));
+    http.verify();
+  });
 
   const page = () => harness.routeNativeElement as HTMLElement;
   const settle = async () => {

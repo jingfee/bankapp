@@ -11,7 +11,7 @@ import {
   type Subcategory,
 } from '@bankapp/shared';
 import { catchError, forkJoin, map, of } from 'rxjs';
-import { CategoriesService } from '../../categories.service';
+import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -448,20 +448,23 @@ export class DelatPage {
   /** The share of each subcategory that is not Jag. */
   private readonly subcategoryShares = signal(new Map<number, ShareOption>());
   private readonly categories = signal<Category[]>([]);
+  private readonly allSubcategories = signal<CategorisedSubcategory[]>([]);
   protected readonly picking = signal(false);
 
   protected readonly loaded = toSignal<State>(
     forkJoin({
       categories: this.categoriesService.list(),
+      subcategories: this.categoriesService.subcategories(),
       shares: this.shares.subcategoryShares(),
       ratio: this.shares.householdRatio(),
       settlement: this.settlementService.get(),
     }).pipe(
-      map(({ categories, shares, ratio, settlement }): State => {
+      map(({ categories, subcategories, shares, ratio, settlement }): State => {
         this.subcategoryShares.set(new Map(shares.map((s) => [s.subcategoryId, s.share])));
         this.ratio.set([...ratio].sort((a, b) => a.from.localeCompare(b.from)));
         this.settlement.set(settlement);
         this.categories.set(categories);
+        this.allSubcategories.set(subcategories);
         return { categories };
       }),
       catchError(() => of<State>({ failed: true })),
@@ -505,12 +508,10 @@ export class DelatPage {
 
   protected readonly sharedRows = computed<SharedRow[]>(() => {
     const shares = this.subcategoryShares();
-    return this.categories().flatMap((category) =>
-      category.subcategories.flatMap((subcategory) => {
-        const share = shares.get(subcategory.id);
-        return share === undefined || share === 'me' ? [] : [{ subcategory, category, share }];
-      }),
-    );
+    return this.allSubcategories().flatMap(({ category, subcategory }) => {
+      const share = shares.get(subcategory.id);
+      return share === undefined || share === 'me' ? [] : [{ subcategory, category, share }];
+    });
   });
   /** The categories with only the subcategories that are still Jag. */
   protected readonly pickable = computed(() => {
