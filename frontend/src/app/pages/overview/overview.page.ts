@@ -571,7 +571,7 @@ export class OverviewPage {
               ? 'Partnern är skyldig dig'
               : 'Du är skyldig partnern',
         positive: false,
-        link: { path: '/avrakning', params: {} },
+        link: { path: '/delat', params: {} },
       });
     }
     return tiles;

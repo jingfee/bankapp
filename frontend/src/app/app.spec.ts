@@ -59,7 +59,7 @@ describe('App', () => {
           '/',
           '/transaktioner',
           '/granska',
-          '/avrakning',
+          '/delat',
           '/banker',
         ]);
       }
@@ -86,7 +86,7 @@ describe('App', () => {
       ['/transaktioner', 'Transaktioner'],
       ['/transaktioner/7', 'Transaktioner'],
       ['/banker', 'Banker'],
-      ['/avrakning', 'Delat'],
+      ['/delat', 'Delat'],
     ] as const) {
       await navigate(fixture, url);
       for (const nav of [sidebar(fixture), tabs(fixture)]) {

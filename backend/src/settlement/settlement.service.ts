@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gte, isNotNull, isNull, not, or } from 'drizzle-orm';
 import type {
   BalanceSetting,
+  CategoryColour,
+  CategoryIcon,
   SettlementItem,
   SettlementPeriod,
   SettlementResponse,
@@ -126,6 +128,8 @@ export class SettlementService {
         connectedOn: accounts.connectedOn,
         kind: categories.kind,
         subcategoryName: subcategories.name,
+        subcategoryIcon: subcategories.icon,
+        categoryColour: categories.colour,
       })
       .from(transactions)
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
@@ -175,6 +179,8 @@ export class SettlementService {
           date: transaction.date,
           description: transaction.description,
           accountName: row.accountName ?? MANUAL_ACCOUNT_NAME,
+          icon: row.subcategoryIcon as CategoryIcon | null,
+          colour: row.categoryColour as CategoryColour | null,
           amount: transaction.amount,
           share: share.option,
           partnerPart,

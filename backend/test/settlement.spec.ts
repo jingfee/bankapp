@@ -233,6 +233,23 @@ describe('the settlement balance', () => {
       expect(periods[2]?.balanceSettings).toEqual([{ amount: 100, asOf: '2026-10-01' }]);
     });
 
+    it('give each item its subcategory’s icon and category colour, null when uncategorised', async () => {
+      await setBalance(0, '2026-11-01');
+      store(2, -100, '2026-11-02', inCategory('Livsmedel'));
+      store(2, -100, '2026-11-03');
+      const { periods } = await get();
+      const categories = (await api(app).get('/api/categories').expect(200))
+        .body as CategoriesResponse;
+      const category = categories.categories.find((c) =>
+        c.subcategories.some((s) => s.name === 'Livsmedel'),
+      )!;
+      const sub = category.subcategories.find((s) => s.name === 'Livsmedel')!;
+      expect(periods[0]?.items.map((i) => [i.icon, i.colour])).toEqual([
+        [sub.icon, category.colour],
+        [null, null],
+      ]);
+    });
+
     it('show a balance setting where it was made', async () => {
       await setBalance(100, '2026-10-01');
       settle(100, '2026-10-05');

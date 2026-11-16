@@ -1,3 +1,5 @@
+import type { CategoryIcon } from './category-icons';
+import type { CategoryColour } from './category-palette';
 import type { ShareOption } from './shares';
 
 /** The owner stating the settlement balance was `amount` as of a day (ADR 0008). */
@@ -14,6 +16,9 @@ export interface SettlementItem {
   date: string;
   description: string;
   accountName: string;
+  /** The subcategory's icon and its category's colour; null while uncategorised. */
+  icon: CategoryIcon | null;
+  colour: CategoryColour | null;
   /** The transaction's own amount, negative when money left the account. */
   amount: number;
   share: ShareOption;
