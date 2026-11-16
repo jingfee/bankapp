@@ -237,9 +237,9 @@ function today(): string {
           <div class="flex flex-col gap-4">
             <section data-ratio-card class="card flex flex-col gap-4 p-6">
               <h2 class="text-sm font-medium text-muted">Hushållsandel</h2>
-              @if (current(); as entry) {
+              @if (current()) {
                 <p data-ratio-heading class="amount text-4xl">
-                  {{ entry.percent }}/{{ 100 - entry.percent }}
+                  {{ sliderValue() }}/{{ 100 - sliderValue() }}
                 </p>
               } @else {
                 <p data-ratio-heading class="text-lg font-semibold">Ingen hushållsandel inställd</p>
@@ -376,20 +376,20 @@ function today(): string {
 
               <ul class="flex flex-col divide-y divide-line">
                 @for (row of sharedRows(); track row.subcategory.id) {
-                  <li data-shared class="flex flex-wrap items-center gap-3 py-3">
+                  <li data-shared class="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                     <app-category-icon
                       [icon]="row.subcategory.icon"
                       [colour]="row.category.colour"
                       [size]="28"
                     />
-                    <span class="min-w-0 flex-1">
+                    <span class="min-w-0 flex-1 basis-40">
                       <span data-name class="block truncate text-sm font-medium">{{
                         row.subcategory.name
                       }}</span>
                       <span class="text-xs text-muted">{{ row.category.name }}</span>
                     </span>
                     <span
-                      class="segmented"
+                      class="segmented order-last w-full sm:order-none sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none"
                       role="group"
                       [attr.aria-label]="'Andel för ' + row.subcategory.name"
                     >
