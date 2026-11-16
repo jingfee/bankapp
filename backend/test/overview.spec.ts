@@ -88,6 +88,7 @@ describe('overview of a month', () => {
       previous: { income: 0, spending: 0, net: 0 },
       categories: [],
       uncategorised: 0,
+      spendingByDay: { current: Array(30).fill(0), previous: Array(31).fill(0) },
     });
   });
 
@@ -141,6 +142,59 @@ describe('overview of a month', () => {
     const body = await overview('2026-01');
     expect(body.previous).toEqual({ income: 1000, spending: 100, net: 900 });
     expect(body.totals).toEqual({ income: 0, spending: 40, net: -40 });
+  });
+
+  describe('spending by day', () => {
+    it('accumulates spending day by day for the month and the month before', async () => {
+      store(-100, '2026-10-02', 'Livsmedel');
+      store(-50, '2026-10-31', 'Restaurang');
+      store(-200, '2026-11-01', 'Livsmedel');
+      store(-30, '2026-11-03', 'Livsmedel');
+      store(-20, '2026-11-03', 'Restaurang');
+      const { spendingByDay } = await overview('2026-11');
+      expect(spendingByDay.current).toHaveLength(30);
+      expect(spendingByDay.current.slice(0, 4)).toEqual([200, 200, 250, 250]);
+      expect(spendingByDay.current[29]).toBe(250);
+      expect(spendingByDay.previous).toHaveLength(31);
+      expect(spendingByDay.previous.slice(0, 3)).toEqual([0, 100, 100]);
+      expect(spendingByDay.previous[30]).toBe(150);
+    });
+
+    it('ends on the month totals and leaves income and transfers out', async () => {
+      store(30000, '2026-11-25', 'Lön');
+      store(-5000, '2026-11-02', 'Kortbetalning');
+      store(-100, '2026-11-03', 'Livsmedel');
+      store(40, '2026-11-05', 'Livsmedel');
+      const { spendingByDay, totals } = await overview('2026-11');
+      expect(spendingByDay.current.at(-1)).toBe(totals.spending);
+      expect(spendingByDay.current.slice(0, 5)).toEqual([0, 0, 100, 100, 60]);
+    });
+
+    it('counts a kvittad refund on its purchase day', async () => {
+      const purchase = store(-100, '2026-10-20', 'Livsmedel');
+      const refund = store(30, '2026-11-05', 'Livsmedel');
+      db.update(transactions)
+        .set({ offsetsTransactionId: purchase })
+        .where(eq(transactions.id, refund))
+        .run();
+      const { spendingByDay } = await overview('2026-11');
+      expect(spendingByDay.current.at(-1)).toBe(0);
+      expect(spendingByDay.previous[19]).toBe(70);
+    });
+
+    it('weights each amount by its share in Min andel', async () => {
+      store(-100, '2026-11-03', 'Livsmedel');
+      const body = (
+        await api(app).get('/api/overview').query({ month: '2026-11', view: 'mine' }).expect(200)
+      ).body as OverviewResponse;
+      expect(body.spendingByDay.current.at(-1)).toBe(body.totals.spending);
+    });
+
+    it('follows the length of February in a leap year', async () => {
+      const { spendingByDay } = await overview('2028-02');
+      expect(spendingByDay.current).toHaveLength(29);
+      expect(spendingByDay.previous).toHaveLength(31);
+    });
   });
 
   it('counts uncategorised transactions outside the totals', async () => {

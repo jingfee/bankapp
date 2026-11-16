@@ -63,6 +63,7 @@ describe('OverviewPage', () => {
     month: '2026-11',
     totals: totals(0, 0),
     previous: totals(0, 0),
+    spendingByDay: { current: Array(30).fill(0), previous: Array(31).fill(0) },
     categories: [],
     uncategorised: 0,
     ...overrides,
@@ -181,6 +182,161 @@ describe('OverviewPage', () => {
       const { page } = await render(overview(), accountsOf([]), 'error');
 
       expect(card(page)).toBeNull();
+    });
+  });
+
+  describe('the spending comparison chart', () => {
+    /** Cumulative spending: `step` kr more each day. */
+    const ramp = (days: number, step: number) =>
+      Array.from({ length: days }, (_, i) => (i + 1) * step);
+    const chart = (page: HTMLElement) => page.querySelector('[data-spending-chart]');
+    const points = (page: HTMLElement, line: string) =>
+      page
+        .querySelector(`[data-spending-chart] [data-line="${line}"]`)
+        ?.getAttribute('points')
+        ?.split(' ').length;
+
+    it('draws this month up to today against the whole previous month', async () => {
+      const { page } = await render(
+        overview({
+          totals: totals(0, 1500),
+          previous: totals(0, 3100),
+          spendingByDay: { current: ramp(30, 100), previous: ramp(31, 100) },
+        }),
+      );
+
+      expect(points(page, 'current')).toBe(15);
+      expect(points(page, 'previous')).toBe(31);
+    });
+
+    it('says how far ahead or behind last month the spending is on the same day', async () => {
+      const { page } = await render(
+        overview({
+          totals: totals(0, 1500),
+          previous: totals(0, 3100),
+          spendingByDay: { current: ramp(30, 100), previous: ramp(31, 80) },
+        }),
+      );
+
+      // Day 15: 1 500 kr this month against 1 200 kr at the same point last month.
+      expect(text(page.querySelector('[data-spending-chart-summary]'))).toBe(
+        'Hittills 1 500,00 kr, 300,00 kr mer än vid samma tidpunkt förra månaden (1 200,00 kr).',
+      );
+    });
+
+    it('says less when spending is below last month', async () => {
+      const { page } = await render(
+        overview({
+          totals: totals(0, 600),
+          previous: totals(0, 3100),
+          spendingByDay: { current: ramp(30, 40), previous: ramp(31, 80) },
+        }),
+      );
+
+      expect(text(page.querySelector('[data-spending-chart-summary]'))).toContain(
+        '600,00 kr mindre än vid samma tidpunkt förra månaden (1 200,00 kr)',
+      );
+    });
+
+    it('draws a past month in full, against the month before it', async () => {
+      const { fixture, page, http } = await render();
+
+      await click(fixture, page.querySelector('[data-previous-month]'));
+      await answer(
+        http,
+        overview({
+          month: '2026-10',
+          totals: totals(0, 3100),
+          previous: totals(0, 3000),
+          spendingByDay: { current: ramp(31, 100), previous: ramp(30, 100) },
+        }),
+      );
+      await fixture.whenStable();
+
+      expect(points(page, 'current')).toBe(31);
+      expect(points(page, 'previous')).toBe(30);
+      expect(text(page.querySelector('[data-spending-chart-summary]'))).toBe(
+        'Totalt 3 100,00 kr, 100,00 kr mer än förra månaden (3 000,00 kr).',
+      );
+    });
+
+    it('still draws this month on its first day', async () => {
+      vi.setSystemTime(new Date('2026-11-01T12:00:00'));
+      const { page } = await render(
+        overview({
+          totals: totals(0, 100),
+          spendingByDay: { current: ramp(30, 100), previous: ramp(31, 100) },
+        }),
+      );
+
+      expect(page.querySelector('[data-line="current"]')?.getAttribute('points')).toMatch(/\d/);
+    });
+
+    describe('axes and hovering', () => {
+      const plain = (value: string | undefined) => value?.replace(/\u00a0/g, ' ');
+      const ticks = (page: HTMLElement, axis: 'x' | 'y') =>
+        Array.from(page.querySelectorAll(`[data-${axis}-tick]`)).map((t) => plain(text(t)));
+      const data = () =>
+        overview({
+          totals: totals(0, 1500),
+          previous: totals(0, 3100),
+          spendingByDay: { current: ramp(30, 100), previous: ramp(31, 100) },
+        });
+      const hover = async (
+        fixture: { whenStable(): Promise<unknown> },
+        page: HTMLElement,
+        day: number,
+      ) => {
+        page
+          .querySelector(`[data-chart-day="${day}"]`)
+          ?.dispatchEvent(new Event('pointerenter', { bubbles: false }));
+        await fixture.whenStable();
+      };
+      const tooltip = (page: HTMLElement) => page.querySelector('[data-chart-tooltip]');
+
+      it('labels the amounts on the y axis and the days on the x axis', async () => {
+        const { page } = await render(data());
+
+        expect(ticks(page, 'y')).toEqual(['0 kr', '1 550 kr', '3 100 kr']);
+        expect(ticks(page, 'x')).toEqual(['1', '8', '15', '22', '31']);
+      });
+
+      it('shows both months amounts and dates for the hovered day', async () => {
+        const { fixture, page } = await render(data());
+        expect(tooltip(page)).toBeNull();
+
+        await hover(fixture, page, 10);
+
+        const said = plain(text(tooltip(page)));
+        expect(said).toContain('10 november 1 000,00 kr');
+        expect(said).toContain('10 oktober 1 000,00 kr');
+      });
+
+      it('shows only last month for a day that has not come yet', async () => {
+        const { fixture, page } = await render(data());
+
+        await hover(fixture, page, 20);
+
+        expect(plain(text(tooltip(page)))).toBe('20 oktober 2 000,00 kr');
+      });
+
+      it('hides the tooltip when the pointer leaves the chart', async () => {
+        const { fixture, page } = await render(data());
+        await hover(fixture, page, 10);
+
+        page
+          .querySelector('[data-chart-plot]')
+          ?.dispatchEvent(new Event('pointerleave', { bubbles: false }));
+        await fixture.whenStable();
+
+        expect(tooltip(page)).toBeNull();
+      });
+    });
+
+    it('is left out when neither month has any spending', async () => {
+      const { page } = await render();
+
+      expect(chart(page)).toBeNull();
     });
   });
 

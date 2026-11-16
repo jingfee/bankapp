@@ -55,10 +55,12 @@ export class OverviewService {
    */
   overview(month: string, view: OverviewView = 'full'): OverviewResponse {
     const current = this.summarise(month, view);
+    const previous = this.summarise(shiftMonth(month, -1), view);
     return {
       month,
       totals: current.totals,
-      previous: this.summarise(shiftMonth(month, -1), view).totals,
+      previous: previous.totals,
+      spendingByDay: { current: current.spendingByDay, previous: previous.spendingByDay },
       categories: current.categories,
       uncategorised: current.uncategorised,
     };
@@ -105,10 +107,13 @@ export class OverviewService {
   private summarise(
     month: string,
     view: OverviewView,
-  ): Pick<OverviewResponse, 'totals' | 'categories' | 'uncategorised'> {
+  ): Pick<OverviewResponse, 'totals' | 'categories' | 'uncategorised'> & {
+    spendingByDay: number[];
+  } {
     const rows = this.db
       .select({
         transaction: transactions,
+        purchaseDate: purchases.date,
         subcategoryId: subcategories.id,
         subcategoryName: subcategories.name,
         subcategoryIcon: subcategories.icon,
@@ -134,6 +139,8 @@ export class OverviewService {
           )
         : undefined;
 
+    const [year, number] = month.split('-').map(Number) as [number, number];
+    const daily: number[] = Array(new Date(year, number, 0).getDate()).fill(0);
     let uncategorised = 0;
     const byCategory = new Map<number, OverviewCategory>();
     for (const row of rows) {
@@ -147,6 +154,10 @@ export class OverviewService {
         ? (row.transaction.amount * shares.get(row.transaction.id)!.percent) / 100
         : row.transaction.amount;
       const value = row.kind === 'expense' ? -amount : amount;
+      if (row.kind === 'expense') {
+        const day = Number((row.purchaseDate ?? row.transaction.date).slice(8, 10));
+        daily[day - 1]! += value;
+      }
       let category = byCategory.get(row.categoryId);
       if (category === undefined) {
         category = {
@@ -192,6 +203,8 @@ export class OverviewService {
       net: 0,
     };
     totals.net = round(totals.income - totals.spending);
-    return { totals, categories: list, uncategorised };
+    let running = 0;
+    const spendingByDay = daily.map((value) => round((running += value)));
+    return { totals, categories: list, uncategorised, spendingByDay };
   }
 }
