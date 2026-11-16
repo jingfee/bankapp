@@ -38,12 +38,23 @@ export interface OverviewCategory {
 export const OVERVIEW_VIEWS = ['mine', 'full'] as const;
 export type OverviewView = (typeof OVERVIEW_VIEWS)[number];
 
+/**
+ * Spending accumulated day by day: entry 0 is day 1 of the month, the last entry the month's
+ * `spending` total. One entry per calendar day, also for days still to come.
+ */
+export interface OverviewSpendingByDay {
+  current: number[];
+  /** The same for the month before. */
+  previous: number[];
+}
+
 /** Response body of `GET /api/overview?month=YYYY-MM&view=`; `view` defaults to `full`. */
 export interface OverviewResponse {
   month: string;
   totals: OverviewTotals;
   /** The same totals for the month before. */
   previous: OverviewTotals;
+  spendingByDay: OverviewSpendingByDay;
   /** Categories with transactions that month, largest first; income and expense together. */
   categories: OverviewCategory[];
   /** Transactions of the month without a subcategory; they are in no total. */

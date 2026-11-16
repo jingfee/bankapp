@@ -60,6 +60,18 @@ interface DonutSegment {
   offset: number;
 }
 
+/** The spending chart's drawing area, in the SVG's own units. */
+const CHART_WIDTH = 300;
+const CHART_HEIGHT = 120;
+
+interface SpendingChart {
+  /** `x,y` pairs of this month up to today (the whole month once it is over). */
+  current: string;
+  /** `x,y` pairs of the whole month before. */
+  previous: string;
+  summary: string;
+}
+
 interface Tile {
   kind: TotalKind | 'settlement';
   label: string;
@@ -257,6 +269,54 @@ function bars<T extends { id: number; name: string; total: number }>(
               [class.xl:grid-cols-[minmax(0,1fr)_320px]]="accountRows()"
             >
               <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
+                @if (chart(); as c) {
+                  <section data-spending-chart class="card p-4 sm:p-5">
+                    <h2 class="mb-1 text-lg font-semibold">Utgifter jämfört med förra månaden</h2>
+                    <p data-spending-chart-summary class="mb-4 text-sm text-muted">
+                      {{ c.summary }}
+                    </p>
+                    <svg
+                      viewBox="-4 -6 308 132"
+                      class="h-36 w-full overflow-visible"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                    >
+                      <polyline
+                        data-line="previous"
+                        [attr.points]="c.previous"
+                        fill="none"
+                        stroke="var(--color-muted)"
+                        stroke-width="2"
+                        stroke-dasharray="5 4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      <polyline
+                        data-line="current"
+                        [attr.points]="c.current"
+                        fill="none"
+                        stroke="var(--color-accent)"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </svg>
+                    <p class="mt-3 flex gap-4 text-xs text-muted">
+                      <span class="flex items-center gap-1.5"
+                        ><span class="h-0.5 w-4 rounded bg-accent"></span>{{ monthTitle() }}</span
+                      >
+                      <span class="flex items-center gap-1.5"
+                        ><span
+                          class="h-0.5 w-4 rounded border-t-2 border-dashed border-muted"
+                        ></span
+                        >Förra månaden</span
+                      >
+                    </p>
+                  </section>
+                }
+
                 @if (spending().length > 0 || income().length > 0) {
                   <section data-section="spending" class="card @container p-4 sm:p-5">
                     <h2 class="mb-4 text-lg font-semibold">Utgifter per kategori</h2>
@@ -507,6 +567,43 @@ export class OverviewPage {
   protected readonly spendingBars = computed(() =>
     bars(this.spending(), this.overview()?.totals.spending ?? 0),
   );
+
+  /** Spending so far this month against the month before, accumulated day by day. */
+  protected readonly chart = computed<SpendingChart | null>(() => {
+    const o = this.overview();
+    if (o === null) return null;
+    const { current, previous } = o.spendingByDay;
+    if ((current.at(-1) ?? 0) <= 0 && (previous.at(-1) ?? 0) <= 0) return null;
+
+    const isCurrentMonth = o.month === this.currentMonth;
+    const days = isCurrentMonth ? Math.min(new Date().getDate(), current.length) : current.length;
+    const shown = current.slice(0, days);
+    const last = Math.max(current.length, previous.length) - 1;
+    const top = Math.max(...shown, ...previous, 1);
+    // A refund can take the running total below zero; the scale then reaches down to it.
+    const bottom = Math.min(...shown, ...previous, 0);
+    const x = (day: number) => (day / last) * CHART_WIDTH;
+    const y = (value: number) => CHART_HEIGHT - ((value - bottom) / (top - bottom)) * CHART_HEIGHT;
+    // A single point (the 1st of the month) is doubled so the round line cap draws a dot.
+    const line = (values: number[]) =>
+      (values.length === 1 ? [...values, ...values] : values)
+        .map((value, day) => `${x(day).toFixed(1)},${y(value).toFixed(1)}`)
+        .join(' ');
+
+    const spent = shown.at(-1) ?? 0;
+    const before = previous[Math.min(days, previous.length) - 1] ?? 0;
+    const diff = Math.round((spent - before) * 100) / 100;
+    const compared = isCurrentMonth ? 'vid samma tidpunkt förra månaden' : 'förra månaden';
+    const against =
+      diff === 0
+        ? `lika mycket som ${compared}`
+        : `${money.transform(Math.abs(diff))} ${diff > 0 ? 'mer' : 'mindre'} än ${compared}`;
+    return {
+      current: line(shown),
+      previous: line(previous),
+      summary: `${isCurrentMonth ? 'Hittills' : 'Totalt'} ${money.transform(spent)}, ${against} (${money.transform(before)}).`,
+    };
+  });
 
   /** One ring segment per spending category, in the category's colour. */
   protected readonly donut = computed<DonutSegment[]>(() => {
