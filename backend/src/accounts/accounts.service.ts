@@ -40,7 +40,7 @@ export const TRANSACTIONS_PAGE_SIZE = 50;
 export class AccountsService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly sync: SyncService,
   ) {}
 
@@ -72,7 +72,7 @@ export class AccountsService {
     );
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
-    const now = this.now();
+    const now = this.clock.now();
     for (const { id, bank, name, type, closed, hidden, share, validUntil } of rows) {
       const group = byBank.get(bank) ?? {
         bank,

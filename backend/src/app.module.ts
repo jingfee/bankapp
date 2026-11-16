@@ -8,7 +8,7 @@ import { BackupModule } from './backup/backup.module';
 import { BanksModule } from './banks/banks.module';
 import { CategoriesModule } from './categories/categories.module';
 import type { AppConfig } from './config/config';
-import { CLOCK, type Clock } from './clock';
+import { CLOCK, clock } from './clock';
 import { ConnectionsModule } from './connections/connections.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule, type DatabaseLocation } from './db/database.module';
@@ -32,7 +32,7 @@ export interface AppOptions {
   /** Directory holding the built frontend. When omitted, only the API is served (e.g. in development). */
   staticDir?: string;
   /** Current time; injectable for tests. */
-  now?: Clock;
+  now?: () => Date;
 }
 
 @Global()
@@ -52,7 +52,10 @@ export class AppModule {
     return {
       module: AppModule,
       providers: [
-        { provide: CLOCK, useValue: options.now ?? (() => new Date()) },
+        {
+          provide: CLOCK,
+          useValue: clock(options.now ?? (() => new Date()), options.config.timezone),
+        },
         { provide: APP_FILTER, useClass: DomainErrorFilter },
       ],
       exports: [CLOCK],

@@ -54,7 +54,7 @@ export class CategoryGuesser implements OnApplicationBootstrap {
 
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly categorising: Categorising,
   ) {}
 
@@ -71,7 +71,7 @@ export class CategoryGuesser implements OnApplicationBootstrap {
         .all()
         .map((row) => row.id);
       const guessed = this.guess(tx, ids);
-      tx.insert(startupTasks).values({ name: GUESS_EXISTING, completedAt: this.now() }).run();
+      tx.insert(startupTasks).values({ name: GUESS_EXISTING, completedAt: this.clock.now() }).run();
       this.logger.log(`Guessed categories for ${guessed} of ${ids.length} stored transactions`);
     });
   }

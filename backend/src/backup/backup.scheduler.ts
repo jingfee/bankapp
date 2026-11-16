@@ -25,7 +25,7 @@ export class BackupScheduler implements OnModuleInit {
     private readonly registry: SchedulerRegistry,
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   onModuleInit(): void {
@@ -80,6 +80,6 @@ export class BackupScheduler implements OnModuleInit {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(this.now());
+    }).format(this.clock.now());
   }
 }

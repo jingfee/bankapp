@@ -35,7 +35,7 @@ function refreshRefundCategories(db: Pick<AppDatabase, 'run'>): void {
 export class Categorising {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
@@ -70,7 +70,7 @@ export class Categorising {
   confirm(db: Database, id: number, subcategoryId: number | null): void {
     db.update(transactions)
       // Removing is the owner's decision too, so the app does not guess the transaction again.
-      .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.now() })
+      .set({ subcategoryId, categoryConfirmed: true, categoryConfirmedAt: this.clock.now() })
       .where(eq(transactions.id, id))
       .run();
     this.followPurchases(db);

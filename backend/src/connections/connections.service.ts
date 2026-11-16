@@ -4,7 +4,7 @@ import { and, eq, lt, notInArray } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
-import { CLOCK, type Clock, localDay } from '../clock';
+import { CLOCK, type Clock } from '../clock';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import { accounts, authorisations, banks, connections } from '../db/schema';
@@ -27,7 +27,7 @@ export class ConnectionsService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly enableBanking: EnableBankingClient,
     private readonly sync: SyncService,
   ) {}
@@ -43,11 +43,13 @@ export class ConnectionsService {
 
     this.db
       .delete(authorisations)
-      .where(lt(authorisations.createdAt, new Date(this.now().getTime() - AUTHORISATION_TTL_MS)))
+      .where(
+        lt(authorisations.createdAt, new Date(this.clock.now().getTime() - AUTHORISATION_TTL_MS)),
+      )
       .run();
 
     const state = randomBytes(24).toString('base64url');
-    const now = this.now();
+    const now = this.clock.now();
     let url: string;
     try {
       ({ url } = await this.enableBanking.startAuthorisation({
@@ -85,7 +87,8 @@ export class ConnectionsService {
       ? this.db.select().from(authorisations).where(eq(authorisations.state, state)).get()
       : undefined;
     if (!state || !authorisation) return { outcome: 'unknown-state' };
-    const expired = authorisation.createdAt.getTime() < this.now().getTime() - AUTHORISATION_TTL_MS;
+    const expired =
+      authorisation.createdAt.getTime() < this.clock.now().getTime() - AUTHORISATION_TTL_MS;
     // A state is good for one return only, whatever comes of it.
     this.db.delete(authorisations).where(eq(authorisations.state, state)).run();
     if (expired) return { outcome: 'unknown-state' };
@@ -112,7 +115,7 @@ export class ConnectionsService {
           .returning({ id: connections.id })
           .get();
         if (session.accounts.length > 0) {
-          const connectedOn = localDay(this.now());
+          const connectedOn = this.clock.today();
           tx.insert(accounts)
             .values(
               session.accounts.map((account) => ({
@@ -177,7 +180,7 @@ export class ConnectionsService {
           .run();
       } else {
         tx.insert(accounts)
-          .values({ ...account, connectionId, connectedOn: localDay(this.now()) })
+          .values({ ...account, connectionId, connectedOn: this.clock.today() })
           .run();
       }
     }
@@ -206,6 +209,6 @@ export class ConnectionsService {
       .from(connections)
       .where(eq(connections.bankName, bankName))
       .get();
-    return !existing || connectionStatus(existing.validUntil, this.now()) !== 'active';
+    return !existing || connectionStatus(existing.validUntil, this.clock.now()) !== 'active';
   }
 }

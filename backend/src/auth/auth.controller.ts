@@ -33,7 +33,7 @@ export class AuthController {
 
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly sessions: SessionService,
   ) {}
 
@@ -45,7 +45,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    const retryAfter = this.throttle.retryAfterSeconds(this.now());
+    const retryAfter = this.throttle.retryAfterSeconds(this.clock.now());
     if (retryAfter > 0) {
       this.logger.warn(`Login refused: too many failed attempts (from ${request.ip})`);
       response.setHeader('Retry-After', String(retryAfter));
@@ -53,7 +53,7 @@ export class AuthController {
     }
 
     // Counted as a failure until it proves otherwise; see LoginThrottle.recordFailure.
-    const attempt = this.throttle.recordFailure(this.now());
+    const attempt = this.throttle.recordFailure(this.clock.now());
     const { username, password } = (body ?? {}) as { username?: unknown; password?: unknown };
     const given = typeof username === 'string' ? username : '';
     // Both checks always run, and neither short-circuits, so timing reveals nothing about which

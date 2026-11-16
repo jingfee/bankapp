@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ManualTransactionRequest, PaidBy, Transaction } from '@bankapp/shared';
 import { eq, or } from 'drizzle-orm';
 import { Categorising } from '../categories/guessing/categorising';
-import { CLOCK, isDay, localDay, type Clock } from '../clock';
+import { CLOCK, isDay, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { SHARE_OPTIONS } from '../db/share-options';
@@ -59,7 +59,7 @@ function parse(input: unknown): ManualTransactionRequest {
 export class ManualTransactions {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
     private readonly categorising: Categorising,
   ) {}
 
@@ -70,8 +70,8 @@ export class ManualTransactions {
   add(input: unknown): Transaction {
     const request = parse(input);
     this.check(request);
-    const now = this.now();
-    const date = request.date ?? localDay(now);
+    const now = this.clock.now();
+    const date = request.date ?? this.clock.today();
     return this.db.transaction((tx) => {
       const id = tx
         .insert(transactions)

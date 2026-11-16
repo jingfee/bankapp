@@ -19,12 +19,12 @@ const hashId = (id: string) => createHash('sha256').update(id).digest('hex');
 export class SessionService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
-    @Inject(CLOCK) private readonly now: Clock,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /** Starts a session and returns its id, which only the caller's cookie will ever hold. */
   create(): string {
-    const now = this.now();
+    const now = this.clock.now();
     this.db.delete(sessions).where(lte(sessions.expiresAt, now)).run();
     const id = randomBytes(32).toString('base64url');
     this.db
@@ -44,7 +44,7 @@ export class SessionService {
       .from(sessions)
       .where(eq(sessions.idHash, hashId(id)))
       .get();
-    return row !== undefined && row.expiresAt.getTime() > this.now().getTime();
+    return row !== undefined && row.expiresAt.getTime() > this.clock.now().getTime();
   }
 
   revoke(id: string): void {
