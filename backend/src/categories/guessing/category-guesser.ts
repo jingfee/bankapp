@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../../clock';
-import { refreshRefundCategories } from '../../accounts/offsets';
+import { Categorising } from './categorising';
+import { categoryHistory } from './category-history';
 import type { AppDatabase } from '../../db/database';
 import { DATABASE } from '../../db/database.module';
 import { categories, startupTasks, subcategories, transactions } from '../../db/schema';
@@ -54,6 +55,7 @@ export class CategoryGuesser implements OnApplicationBootstrap {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(CLOCK) private readonly now: Clock,
+    private readonly categorising: Categorising,
   ) {}
 
   /** Guesses once for the transactions stored before guessing existed. */
@@ -81,11 +83,11 @@ export class CategoryGuesser implements OnApplicationBootstrap {
   guess(db: Database, ids: readonly number[]): number {
     if (ids.length === 0) return 0;
     const subcategoryIds = this.subcategoryIds(db);
-    const history = this.history(db);
+    const history = categoryHistory(db);
     // Trained from the confirmed categories as they are now, and only if a transaction needs it.
     let classifier: TextClassifier<number> | undefined;
     const classify = (row: ClassifierInput) => (classifier ??= this.classifier(db)).predict(row);
-    let guessed = 0;
+    const guesses: { id: number; subcategoryId: number }[] = [];
     for (let start = 0; start < ids.length; start += BATCH_SIZE) {
       const rows = db
         .select({
@@ -111,36 +113,12 @@ export class CategoryGuesser implements OnApplicationBootstrap {
           lookUp(subcategoryIds, fromCode(row.raw)) ??
           classify(row);
         if (subcategoryId === undefined) continue;
-        db.update(transactions)
-          .set({ subcategoryId, categoryConfirmed: false })
-          .where(eq(transactions.id, row.id))
-          .run();
-        guessed += 1;
+        guesses.push({ id: row.id, subcategoryId });
       }
     }
     // A guess for a purchase is also its refunds' category.
-    refreshRefundCategories(db);
-    return guessed;
-  }
-
-  /** The most recently confirmed subcategory for each normalised description. */
-  private history(db: Database): Map<string, number> {
-    const rows = db
-      .select({ description: transactions.description, subcategoryId: transactions.subcategoryId })
-      .from(transactions)
-      .where(eq(transactions.categoryConfirmed, true))
-      .orderBy(
-        sql`${transactions.categoryConfirmedAt} IS NULL`,
-        desc(transactions.categoryConfirmedAt),
-        desc(transactions.id),
-      )
-      .all();
-    const history = new Map<string, number>();
-    for (const { description, subcategoryId } of rows) {
-      const key = normaliseDescription(description);
-      if (subcategoryId !== null && !history.has(key)) history.set(key, subcategoryId);
-    }
-    return history;
+    this.categorising.guess(db, guesses);
+    return guesses.length;
   }
 
   /** A classifier trained on every confirmed category, so it follows each new confirmation. */

@@ -8,7 +8,7 @@ import type {
   OverviewTransactionsResponse,
   OverviewView,
 } from '@bankapp/shared';
-import { effectiveShares, ownerPart } from '../accounts/shares';
+import { effectiveShares, ownerPart } from '../transactions/shares';
 import { onVisibleAccount, purchases, queryTransactions } from '../transactions/query';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
