@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CATEGORY_PALETTE,
@@ -116,6 +116,7 @@ const COLLAPSE_MS = 450;
                   class="collapsible"
                   [attr.data-manual]="pair.manual.id"
                   [attr.data-leaving]="leavingPairs().has(pair.bank.id) ? '' : null"
+                  [attr.inert]="leavingPairs().has(pair.bank.id) ? '' : null"
                 >
                   <div>
                     <div class="card flex flex-col gap-4 p-4">
@@ -194,6 +195,7 @@ const COLLAPSE_MS = 450;
                     class="collapsible"
                     [attr.data-id]="t.id"
                     [attr.data-leaving]="leaving().has(t.id) ? '' : null"
+                    [attr.inert]="leaving().has(t.id) ? '' : null"
                   >
                     <div>
                       <div class="border-b border-line px-2 py-3 sm:px-3">
@@ -305,6 +307,7 @@ const COLLAPSE_MS = 450;
 })
 export class ReviewPage {
   private readonly service = inject(TransactionsService);
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
 
   protected readonly status = signal<Status>('loading');
@@ -365,7 +368,8 @@ export class ReviewPage {
   /** Marks a row as handled; it collapses, then is dropped from `remove`'s list. */
   private collapse(set: typeof this.leaving, id: number, remove: () => void): void {
     set.update((ids) => new Set(ids).add(id));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
       remove();
       set.update((ids) => {
         const next = new Set(ids);
@@ -373,9 +377,11 @@ export class ReviewPage {
         return next;
       });
     }, COLLAPSE_MS);
+    this.timers.add(timer);
   }
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.timers.forEach(clearTimeout));
     this.service.review().subscribe({
       next: (response) => {
         this.transactions.set(response.transactions);
@@ -415,7 +421,7 @@ export class ReviewPage {
 
   /** Replaces the manual transaction with the bank one, or says they are not the same. */
   protected decide(pair: ReplacementSuggestion, choice: 'replace' | 'notSame'): void {
-    if (this.deciding() !== null) return;
+    if (this.deciding() !== null || this.leavingPairs().has(pair.bank.id)) return;
     this.deciding.set(pair.bank.id);
     this.error.set(null);
     const request = { manualId: pair.manual.id, bankId: pair.bank.id };
@@ -455,7 +461,7 @@ export class ReviewPage {
 
   /** Saves the subcategory as confirmed; the transaction then leaves the list. */
   protected save(transaction: Transaction, subcategoryId: number): void {
-    if (this.saving() !== null) return; // one save at a time; the buttons are disabled meanwhile
+    if (this.saving() !== null || this.leaving().has(transaction.id)) return; // one save at a time; the buttons are disabled meanwhile
     this.saving.set(transaction.id);
     this.refreshes += 1; // outdates any refresh still on its way
     this.error.set(null);
