@@ -91,6 +91,8 @@ export interface Transaction {
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */
   share: EffectiveShare;
+  /** What the owner bears of `amount`: its share's percentage, rounded half away from zero to whole öre. */
+  ownerPart: number;
   /** Who paid it; always the owner for a bank transaction (ADR 0009). */
   paidBy: PaidBy;
 }
@@ -211,6 +213,8 @@ export interface TransactionDetails {
   category: TransactionCategory | null;
   /** The share the owner bears of it, and where that comes from. */
   share: EffectiveShare;
+  /** What the owner bears of `amount`: its share's percentage, rounded half away from zero to whole öre. */
+  ownerPart: number;
   /** Who paid it; always the owner for a bank transaction (ADR 0009). */
   paidBy: PaidBy;
   /** `YYYY-MM-DD`: the day the owner made the transaction. */

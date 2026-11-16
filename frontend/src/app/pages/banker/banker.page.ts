@@ -16,6 +16,7 @@ import { ConnectionsService } from '../../connections.service';
 import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
+import { SHARE_LABELS } from '../../share-display';
 import { SyncService } from '../../sync.service';
 
 type Loaded = AccountsResponse | { failed: true };
@@ -42,13 +43,6 @@ const VALID_UNTIL_FORMAT = new Intl.DateTimeFormat('sv-SE', {
   month: 'short',
   year: 'numeric',
 });
-
-const SHARE_LABELS: Record<ShareOption, string> = {
-  me: 'Jag',
-  half: '50/50',
-  household: 'Hushåll',
-  partner: 'Partner',
-};
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   payment: 'Betalkonto',

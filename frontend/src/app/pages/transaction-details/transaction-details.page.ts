@@ -22,6 +22,13 @@ import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesService } from '../../shares.service';
+import {
+  MANUAL_LABEL,
+  SHARE_LABELS,
+  SHARE_OPTION_ORDER,
+  householdPercentLabel,
+  shareLabel,
+} from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsService } from '../../transactions.service';
 
@@ -40,24 +47,6 @@ const ACCOUNT_TYPES: Record<AccountType, string> = {
   savings: 'Sparkonto',
   card: 'Kortkonto',
 };
-
-const SHARE_OPTION_ORDER: ShareOption[] = ['me', 'half', 'household', 'partner'];
-
-/** What each option is called when choosing; Hushåll adds the ratio, so it is built separately. */
-const SHARE_CHOICE_LABELS: Record<Exclude<ShareOption, 'household'>, string> = {
-  me: 'Jag',
-  half: '50/50',
-  partner: 'Partner',
-};
-
-/** The household ratio in force on `date`: the latest entry from then or before, else the first. */
-function ratioOn(entries: HouseholdRatioEntry[], date: string | null): number | null {
-  const inForce = entries.filter((e) => date !== null && e.from <= date).at(-1) ?? entries[0];
-  return inForce?.percent ?? null;
-}
-
-const householdLabel = (percent: number | null) =>
-  percent === null ? 'Hushåll' : `Hushåll (${percent}/${100 - percent})`;
 
 /** Said next to Andel: where the effective share comes from. */
 const SHARE_SOURCES: Record<TransactionDetails['share']['source'], string> = {
@@ -152,7 +141,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       <span data-share-pill class="pill pill-neutral">Delad · {{ label }}</span>
                     }
                     @if (t.account === null) {
-                      <span data-manual-pill class="pill pill-accent">Manuell</span>
+                      <span data-manual-pill class="pill pill-accent">{{ manualLabel }}</span>
                     }
                   </div>
                   @if (pending) {
@@ -581,6 +570,7 @@ export class TransactionDetailsPage {
   private loadingCategories = false;
 
   protected readonly shareError = signal<string | null>(null);
+  protected readonly manualLabel = MANUAL_LABEL;
   /** The household ratio, fetched once the page is shown; null until then or if that failed. */
   protected readonly ratio = signal<HouseholdRatioEntry[] | null>(null);
   private loadingRatio = false;
@@ -624,7 +614,7 @@ export class TransactionDetailsPage {
       label: 'Konto',
       key: 'account',
       value:
-        t.account === null ? 'Manuell' : `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
+        t.account === null ? MANUAL_LABEL : `${t.account.name} (${ACCOUNT_TYPES[t.account.type]})`,
     });
     fields.push({
       label: 'Betald av',
@@ -718,8 +708,8 @@ export class TransactionDetailsPage {
     const share = this.details()?.share;
     if (share === undefined) return '';
     return share.option === 'household'
-      ? householdLabel(share.percent)
-      : SHARE_CHOICE_LABELS[share.option];
+      ? householdPercentLabel(share.percent)
+      : SHARE_LABELS[share.option];
   });
 
   protected readonly shareSource = computed(() => {
@@ -731,13 +721,13 @@ export class TransactionDetailsPage {
   protected readonly sharedLabel = computed(() => {
     const share = this.details()?.share;
     if (share === undefined || share.option === 'me') return null;
-    return share.option === 'household' ? 'Hushåll' : SHARE_CHOICE_LABELS[share.option];
+    return SHARE_LABELS[share.option];
   });
 
   /** The owner's part of the amount, signed like the amount. */
   protected readonly ownerPart = computed(() => {
     const t = this.details();
-    return t === null ? 0 : Math.round(t.amount.amount * t.share.percent) / 100 + 0;
+    return t?.ownerPart ?? 0;
   });
 
   /** What the partner bears of the amount, signed like the amount. */
@@ -749,12 +739,12 @@ export class TransactionDetailsPage {
   protected readonly shareChoices = computed(() => {
     const t = this.details();
     const entries = this.ratio();
-    const percent = t === null || entries === null ? null : ratioOn(entries, t.transactionDate);
+    const ratio = { entries, date: t?.transactionDate ?? null };
     return SHARE_OPTION_ORDER.map((option) => ({
       option,
       current: t?.share.option === option,
-      label: option === 'household' ? 'Hushåll' : SHARE_CHOICE_LABELS[option],
-      title: option === 'household' ? householdLabel(percent) : SHARE_CHOICE_LABELS[option],
+      label: SHARE_LABELS[option],
+      title: shareLabel(option, ratio),
       // Unknown (not fetched) leaves it enabled; the server refuses it and the error says so.
       disabled: option === 'household' && entries !== null && entries.length === 0,
     }));

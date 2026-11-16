@@ -10,7 +10,7 @@ import type {
   OverviewView,
 } from '@bankapp/shared';
 import { categoryColumns, onVisibleAccount, toTransaction } from '../accounts/transaction-rows';
-import { effectiveShares } from '../accounts/shares';
+import { effectiveShares, ownerPart } from '../accounts/shares';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -151,7 +151,7 @@ export class OverviewService {
       if (row.kind === 'transfer') continue;
       // Spending is money out, so expenses are negated; income is counted as it is.
       const amount = shares
-        ? (row.transaction.amount * shares.get(row.transaction.id)!.percent) / 100
+        ? ownerPart(row.transaction.amount, shares.get(row.transaction.id)!.percent)
         : row.transaction.amount;
       const value = row.kind === 'expense' ? -amount : amount;
       if (row.kind === 'expense') {

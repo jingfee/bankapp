@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import type { Category } from '@bankapp/shared';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
+import { MANUAL_LABEL } from '../../share-display';
 import {
   AMOUNT_PRESETS,
   type Period,
@@ -262,7 +263,7 @@ export class FilterPanel {
 
   protected readonly accountOptions = computed(() => [
     ...this.accounts().map((a) => ({ key: String(a.id), label: a.label })),
-    { key: 'manual', label: 'Manuell' },
+    { key: 'manual', label: MANUAL_LABEL },
   ]);
 
   protected change(change: Partial<TransactionFilters>): void {

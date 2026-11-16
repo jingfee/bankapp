@@ -167,6 +167,14 @@ _Avoid_: Match, link (in the UI), reconcile, refund category
 The part of a transaction the owner bears; the rest is borne by the partner. A share is one of four options, never a free percentage: _Jag_ (100%, not shared), _50/50_ (50%), _Hushåll_ (the household ratio in force on the transaction's date) and _Partner_ (0%, the partner bears it all). Transactions, accounts and subcategories store the option, not the percentage. A transaction's share is its own, if the owner set one, otherwise its account's, otherwise its subcategory's, otherwise _Jag_; which accounts and subcategories have which option is the owner's setting, nothing is built in; an offset refund instead always takes its purchase's share and cannot have its own, so a fully refunded shared purchase adds up to 0 kr for the owner. It applies whatever the category kind, so a refund on a shared card is shared like the purchase. Shares are current settings, not history: changing an account's or subcategory's share changes every month it touches. The household ratio is the exception (ADR 0011). The transaction itself always keeps the bank's full amount; only overview totals can show the owner's share.
 _Avoid_: Split, ratio, portion, my part, percentage (for the option)
 
+**Owner's part** (sv: _Min andel_):
+What the owner bears of a transaction: its share's percentage of the full amount, rounded half away from zero to whole öre, so a purchase and its full refund always add up to 0 kr. _Min andel_ totals on the overview are the sum of each transaction's owner's part.
+_Avoid_: My share, own amount, net amount
+
+**Partner's part** (sv: _Partnerns andel_):
+What the partner bears of a transaction: the full amount minus the owner's part, so the two always add up to the amount. The settlement balance moves by it for a transaction paid by the owner, and by the owner's part for one paid by the partner.
+_Avoid_: Partner share, other half, remainder
+
 **Household ratio** (sv: _Hushållsandel_):
 The owner's part of costs shared as _Hushåll_, such as the mortgage, broadband and electricity: a whole percentage, shown as e.g. _Hushåll (60/40)_. It is a short dated list, each entry in force from its date until the next, so changing it leaves earlier transactions, months and settled periods as they were (ADR 0011).
 _Avoid_: Custom share, split ratio, household share

@@ -65,7 +65,7 @@ import {
   toTransaction,
   type ListedRow,
 } from './transaction-rows';
-import { canChoose, effectiveShares, loadHouseholdRatio } from './shares';
+import { canChoose, effectiveShares, loadHouseholdRatio, ownerPart } from './shares';
 import { parseTransactionDetails } from './transaction-details';
 import {
   SEARCH_LIMIT,
@@ -548,6 +548,7 @@ export class AccountsService {
       .where(eq(transactions.offsetsTransactionId, row.id))
       .orderBy(desc(transactions.date), desc(transactions.id))
       .all();
+    const share = effectiveShares(this.db, [row]).get(row.id)!;
     return {
       id: row.id,
       status: row.status,
@@ -556,7 +557,8 @@ export class AccountsService {
       account: toAccount(row.accountId, accountName, bank, accountType),
       category: toCategory(category),
       paidBy: row.paidBy,
-      share: effectiveShares(this.db, [row]).get(row.id)!,
+      share,
+      ownerPart: ownerPart(row.amount, share.percent),
       transactionDate: row.transactionDate,
       bookingDate: row.bookingDate,
       ...parseTransactionDetails(row.raw, row.amount),

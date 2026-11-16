@@ -22,6 +22,8 @@ import type {
 import { catchError, of } from 'rxjs';
 import { CategoriesService } from '../categories.service';
 import { CategoryTiles } from '../category-tiles/category-tiles';
+import { today } from '../dates';
+import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
 import { SharesService } from '../shares.service';
 import { TransactionsService } from '../transactions.service';
 
@@ -29,19 +31,12 @@ type Status = 'loading' | 'ready' | 'failed' | 'gone';
 
 const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
 
-const SHARE_CHOICES: { value: ShareOption; label: string }[] = [
-  { value: 'me', label: 'Jag' },
-  { value: 'half', label: '50/50' },
-  { value: 'household', label: 'Hushåll' },
-  { value: 'partner', label: 'Partner' },
-];
+const SHARE_CHOICES: { value: ShareOption; label: string }[] = SHARE_OPTION_ORDER.map((value) => ({
+  value,
+  label: SHARE_LABELS[value],
+}));
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** Today as `YYYY-MM-DD` in the owner's own time zone. */
-function today(): string {
-  return new Date().toLocaleDateString('sv-SE');
-}
 
 /**
  * The form for adding a manual transaction, or editing one when `transactionId` is set (ADR 0009).
