@@ -370,10 +370,8 @@ function bars<T extends { id: number; name: string; total: number }>(
                             <div
                               data-chart-tooltip
                               class="pointer-events-none absolute top-0 z-10 flex flex-col gap-1 rounded-[10px] border border-line-strong bg-surface-3 px-3 py-2 text-xs whitespace-nowrap shadow-lg"
-                              [style.left]="t.pct <= 50 ? 'calc(' + t.pct + '% + 8px)' : null"
-                              [style.right]="
-                                t.pct > 50 ? 'calc(' + (100 - t.pct) + '% + 8px)' : null
-                              "
+                              [style.left.%]="t.pct"
+                              [style.transform]="'translateX(-' + t.pct + '%)'"
                             >
                               @if (t.current; as cur) {
                                 <span class="flex items-center gap-2"
