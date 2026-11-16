@@ -161,7 +161,7 @@ describe('OverviewPage', () => {
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('4\u00a0312,00\u00a0kr');
       expect(text(card(page))).toContain('Partnern är skyldig dig');
-      expect(card(page)?.getAttribute('href')).toBe('/avrakning');
+      expect(card(page)?.getAttribute('href')).toBe('/delat');
     });
 
     it('says the reverse when the balance is negative', async () => {

@@ -42,10 +42,10 @@ describe('authentication', () => {
       await first;
       http.match(() => true);
 
-      await harness.navigateByUrl('/andelar');
+      await harness.navigateByUrl('/delat');
       http.match((r) => r.url !== '/api/auth/me');
 
-      expect(TestBed.inject(Router).url).toBe('/andelar');
+      expect(TestBed.inject(Router).url).toBe('/delat');
     });
 
     it('does not guard the login page', async () => {

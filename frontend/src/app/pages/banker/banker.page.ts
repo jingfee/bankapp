@@ -324,9 +324,6 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           }
         </div>
       }
-      <a routerLink="/andelar" data-andelar-link class="text-sm font-medium text-accent underline"
-        >Andelar</a
-      >
     </main>
   `,
 })

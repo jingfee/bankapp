@@ -910,3 +910,41 @@ router-outlet + * {
     }
   }
 }
+
+/* Delat: the balance card's faint violet glow and the household ratio slider. */
+@layer components {
+  .glow-violet {
+    background-image: radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-accent) 14%, transparent),
+      transparent 60%
+    );
+  }
+  .slider {
+    width: 100%;
+    height: 6px;
+    appearance: none;
+    border-radius: 999px;
+    cursor: pointer;
+    background: linear-gradient(
+      to right,
+      var(--color-accent) var(--fill, 50%),
+      var(--color-surface-3) var(--fill, 50%)
+    );
+  }
+  .slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    border: 3px solid var(--color-surface-1);
+  }
+  .slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    border: 3px solid var(--color-surface-1);
+  }
+}

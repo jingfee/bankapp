@@ -43,7 +43,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     reviewCount: true,
   },
   {
-    path: '/avrakning',
+    path: '/delat',
     label: 'Delat',
     tabLabel: 'Delat',
     exact: false,
