@@ -308,8 +308,10 @@ function bars<T extends { id: number; name: string; total: number }>(
                       <div class="min-w-0 flex-1">
                         <div
                           data-chart-plot
-                          class="relative h-36"
+                          class="relative h-36 touch-pan-y"
                           (pointerleave)="hoveredDay.set(null)"
+                          (pointerdown)="touchDay($event)"
+                          (pointermove)="touchDay($event)"
                         >
                           @for (tick of c.yTicks; track tick.pct) {
                             <div
@@ -753,6 +755,19 @@ export class OverviewPage {
       previous: at(c.previousDays, number - 2),
     };
   });
+
+  /**
+   * Follows a finger across the chart. A touch pointer is captured by the element it
+   * landed on, so the per-day columns never see it enter; map its x position to a day instead.
+   */
+  protected touchDay(event: PointerEvent): void {
+    const length = this.chart()?.length ?? 0;
+    if (event.pointerType !== 'touch' || length < 1) return;
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    if (box.width <= 0) return;
+    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
+    this.hoveredDay.set(Math.round(ratio * (length - 1)) + 1);
+  }
 
   /** One hover column per day of the chart. */
   protected readonly chartDays = computed(() =>
