@@ -225,6 +225,27 @@ describe('reconciling stored transactions with what the bank returns', () => {
       ]);
     });
 
+    it('updates the stored row in place when it books under the same entry reference', () => {
+      const plan = reconcile(
+        { pending: [pending(1, -10, { description: 'Cafe' })], booked: [] },
+        [fetched(-10, { description: 'Cafe', entryReference: 'p1' })],
+        TODAY,
+      );
+      expect(plan).toEqual({
+        remove: [],
+        update: [
+          {
+            id: 1,
+            row: expect.objectContaining({ status: 'booked', dedupKey: 'ref:p1' }),
+            newlyBooked: true,
+            guess: true,
+          },
+        ],
+        inherit: [],
+        insert: [],
+      });
+    });
+
     it('updates a stored row the bank still returns as pending, and keeps it', () => {
       const plan = reconcile(
         { pending: [pending(1, -10, { description: 'Cafe' })], booked: [] },
@@ -262,8 +283,9 @@ describe('reconciling stored transactions with what the bank returns', () => {
     it.each([
       ['cancelled (CNCL)', 'Bokning avbruten'],
       ['rejected (RJCT)', 'Köp nekat'],
-    ])('removes a reservation the bank no longer returns because it was %s', (_, description) => {
-      // The client leaves out RJCT and CNCL entries, so the reservation is simply gone.
+    ])('removes a pending row the bank no longer returns because it was %s', (_, description) => {
+      // The client leaves out RJCT and CNCL entries (see http-enable-banking-client.spec.ts), so
+      // all reconcile sees is that the pending row is gone and nothing booked matches it.
       const plan = reconcile(
         { pending: [pending(1, -99, { description })], booked: [] },
         [fetched(-35)],
