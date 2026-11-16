@@ -78,7 +78,7 @@ describe('the manual transaction form over its page', () => {
       .flush({ transactions: [], nextCursor: null, count: 0, sum: null });
 
   function fill(selector: string, value: string) {
-    const el = page().querySelector(selector) as HTMLInputElement;
+    const el = document.querySelector(selector) as HTMLInputElement;
     el.value = value;
     el.dispatchEvent(new Event('input'));
   }
@@ -100,21 +100,21 @@ describe('the manual transaction form over its page', () => {
     await harness.navigateByUrl('/transaktioner');
     emptyList();
     await settle();
-    expect(page().querySelector('[data-sheet]')).toBeNull();
+    expect(document.querySelector('[data-sheet]')).toBeNull();
 
     (page().querySelector('[data-add]') as HTMLAnchorElement).click();
     await settle();
     openedForm();
     await settle();
-    expect(page().querySelector('[data-sheet]')).not.toBeNull();
+    expect(document.querySelector('[data-sheet]')).not.toBeNull();
 
     fill('[data-description]', 'ICA Maxi');
     fill('[data-amount]', '300');
-    (page().querySelector('[data-category-tile="1"]') as HTMLElement).click();
+    (document.querySelector('[data-category-tile="1"]') as HTMLElement).click();
     await settle();
-    (page().querySelector('[data-subcategory="11"]') as HTMLElement).click();
+    (document.querySelector('[data-subcategory="11"]') as HTMLElement).click();
     await settle();
-    (page().querySelector('[data-save]') as HTMLButtonElement).click();
+    (document.querySelector('[data-save]') as HTMLButtonElement).click();
     http.expectOne({ method: 'POST', url: '/api/transactions' }).flush({ id: 9 });
     await settle();
 
@@ -122,7 +122,7 @@ describe('the manual transaction form over its page', () => {
     emptyList();
     await settle();
     expect(TestBed.inject(Router).url).toBe('/transaktioner');
-    expect(page().querySelector('[data-sheet]')).toBeNull();
+    expect(document.querySelector('[data-sheet]')).toBeNull();
     expect(TestBed.inject(ToastService).message()).toBe('Transaktionen sparades');
   });
 
@@ -131,12 +131,12 @@ describe('the manual transaction form over its page', () => {
     emptyList();
     openedForm();
     await settle();
-    expect(page().querySelector('[data-sheet]')).not.toBeNull();
+    expect(document.querySelector('[data-sheet]')).not.toBeNull();
 
-    (page().querySelector('[data-cancel]') as HTMLButtonElement).click();
+    (document.querySelector('[data-cancel]') as HTMLButtonElement).click();
     await settle();
     expect(TestBed.inject(Router).url).toBe('/transaktioner');
-    expect(page().querySelector('[data-sheet]')).toBeNull();
+    expect(document.querySelector('[data-sheet]')).toBeNull();
   });
 
   it('edits from the /transaktioner/:id/redigera deep link, over the transaction', async () => {
@@ -146,17 +146,17 @@ describe('the manual transaction form over its page', () => {
     await settle();
     answer();
     await settle();
-    expect(page().querySelector('[data-sheet]')).not.toBeNull();
+    expect(document.querySelector('[data-sheet]')).not.toBeNull();
     expect(page().querySelector('[data-summary]')).not.toBeNull();
 
     fill('[data-amount]', '350');
-    (page().querySelector('[data-save]') as HTMLButtonElement).click();
+    (document.querySelector('[data-save]') as HTMLButtonElement).click();
     http.expectOne({ method: 'PUT', url: '/api/transactions/5' }).flush({ id: 5 });
     await settle();
 
     answer();
     await settle();
     expect(TestBed.inject(Router).url).toBe('/transaktioner/5');
-    expect(page().querySelector('[data-sheet]')).toBeNull();
+    expect(document.querySelector('[data-sheet]')).toBeNull();
   });
 });

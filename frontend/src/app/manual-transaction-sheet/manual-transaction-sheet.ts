@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
-  type ElementRef,
+  ElementRef,
   DestroyRef,
   type OnInit,
   computed,
@@ -66,7 +66,7 @@ function today(): string {
       aria-modal="true"
       [attr.aria-label]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
       data-sheet
-      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 top-9 bottom-0 z-50 flex flex-col rounded-t-3xl border sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[90dvh] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
+      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[90dvh] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
       (keydown)="trapFocus($event)"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
@@ -297,6 +297,10 @@ export class ManualTransactionSheet implements OnInit {
   private readonly opener = document.activeElement;
 
   constructor() {
+    // The sheet is positioned against the window, so it must not sit inside the routed page,
+    // which is animated and scrolls with the list.
+    const host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
+    document.body.append(host);
     inject(DestroyRef).onDestroy(() => {
       if (this.opener instanceof HTMLElement && this.opener.isConnected) this.opener.focus();
     });
