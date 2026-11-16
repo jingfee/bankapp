@@ -1,5 +1,5 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CATEGORY_PALETTE, type Category, type Money, type Transaction } from '@bankapp/shared';
 import {
@@ -16,6 +16,8 @@ import { AccountsService } from '../../accounts.service';
 import { CategoriesService } from '../../categories.service';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
+import { ToastService } from '../../toast/toast.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { TransactionsService } from '../../transactions.service';
 import { FilterPanel, type PanelAccount } from './filter-panel';
@@ -45,16 +47,22 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 @Component({
   selector: 'app-transactions-page',
-  imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe],
+  imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe, ManualTransactionSheet],
   // The routed page is its own stacking context (see `router-outlet + *`), so while the filter
-  // panel is open it must rise above the side menu and bottom tabs (z-20). Otherwise the page
-  // would cover the bottom tabs.
-  host: { class: 'relative', '[class.z-30]': 'panelOpen()' },
+  // panel or the add form is open it must rise above the side menu and bottom tabs (z-20).
+  // Otherwise the page would cover the bottom tabs.
+  host: { class: 'relative', '[class.z-30]': 'panelOpen() || adding()' },
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-10">
       <header class="flex items-center justify-between gap-3">
         <h1 class="text-3xl font-semibold tracking-tight">Transaktioner</h1>
-        <a routerLink="/transaktioner/ny" data-add class="btn btn-secondary btn-sm">+ Manuell</a>
+        <a
+          routerLink="/transaktioner/ny"
+          queryParamsHandling="preserve"
+          data-add
+          class="btn btn-secondary btn-sm"
+          >+ Manuell</a
+        >
       </header>
 
       <div class="flex gap-2">
@@ -219,6 +227,10 @@ const SEARCH_DEBOUNCE_MS = 250;
       }
     </main>
 
+    @if (adding()) {
+      <app-manual-transaction-sheet (saved)="onAdded()" (closed)="closeSheet()" />
+    }
+
     @if (panelOpen()) {
       <app-filter-panel
         [filters]="filters()"
@@ -243,6 +255,13 @@ export class TransactionsPage {
   private readonly accountsService = inject(AccountsService);
   private readonly categoriesService = inject(CategoriesService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
+
+  /** `/transaktioner/ny` opens the add form over the list. */
+  protected readonly adding = toSignal(
+    this.route.url.pipe(map((segments) => segments.length === 2)),
+    { initialValue: false },
+  );
 
   protected readonly status = signal<Status>('loading');
   protected readonly cursor = signal<string | null>(null);
@@ -417,6 +436,17 @@ export class TransactionsPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((categories) => this.categories.set(categories));
+  }
+
+  protected closeSheet(): void {
+    void this.router.navigate(['/transaktioner'], { queryParamsHandling: 'preserve' });
+  }
+
+  /** The new transaction belongs in the list, so the list is fetched again. */
+  protected onAdded(): void {
+    this.toast.show('Transaktionen sparades');
+    this.closeSheet();
+    this.load(this.filters()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
   }
 
   protected closePanel(): void {

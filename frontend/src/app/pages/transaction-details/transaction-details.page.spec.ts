@@ -19,7 +19,7 @@ describe('TransactionDetailsPage', () => {
         provideRouter([{ path: '**', children: [] }]),
         {
           provide: ActivatedRoute,
-          useValue: { paramMap: of(convertToParamMap({ id: '5' })) },
+          useValue: { paramMap: of(convertToParamMap({ id: '5' })), url: of([]) },
         },
       ],
     });
