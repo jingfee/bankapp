@@ -66,7 +66,7 @@ function today(): string {
       aria-modal="true"
       [attr.aria-label]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
       data-sheet
-      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[90dvh] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
+      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
       (keydown)="trapFocus($event)"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
@@ -294,13 +294,14 @@ export class ManualTransactionSheet implements OnInit {
     return (id === null ? undefined : this.subcategoryShares().get(id)) ?? 'me';
   });
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly opener = document.activeElement;
 
   constructor() {
-    // The sheet is positioned against the window, so it must not sit inside the routed page,
-    // which is animated and scrolls with the list.
-    const host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
-    document.body.append(host);
+    // Locks the page behind the sheet, so only the sheet scrolls.
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    inject(DestroyRef).onDestroy(() => (document.body.style.overflow = overflow));
     inject(DestroyRef).onDestroy(() => {
       if (this.opener instanceof HTMLElement && this.opener.isConnected) this.opener.focus();
     });
@@ -313,6 +314,9 @@ export class ManualTransactionSheet implements OnInit {
 
   /** Inputs are set once the component exists, so what to load is decided here. */
   ngOnInit(): void {
+    // The sheet is positioned against the window, so it must not sit inside the routed page:
+    // that page is animated, and a fixed element inside it moves with the page's scroll.
+    document.body.append(this.host);
     this.shares
       .subcategoryShares()
       .pipe(catchError(() => of([])))

@@ -66,7 +66,7 @@ describe('ManualTransactionSheet', () => {
     return {
       fixture,
       host: fixture.componentInstance,
-      page: fixture.nativeElement as HTMLElement,
+      page: document.body,
       http,
       opener,
     };
@@ -198,6 +198,7 @@ describe('ManualTransactionSheet', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(first.host.closed).toBe(1);
     TestBed.resetTestingModule();
+    document.body.replaceChildren();
 
     const second = await render();
     click(second.page, '[data-backdrop]');
