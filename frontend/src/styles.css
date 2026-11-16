@@ -639,6 +639,7 @@ router-outlet + * {
   router-outlet + *,
   .stagger > *,
   .sheet,
+  .modal-sheet,
   .sheet-backdrop,
   .toast {
     animation: none;
@@ -661,6 +662,21 @@ router-outlet + * {
   }
   .sheet-backdrop {
     animation: fade-in 0.2s ease;
+  }
+  /* Manual transaction form: up from the bottom on mobile, a pop on desktop */
+  .modal-sheet {
+    animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes modal-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(8px);
+    }
+  }
+  @media (min-width: 40rem) {
+    .modal-sheet {
+      animation-name: modal-pop;
+    }
   }
   @keyframes sheet-up {
     from {

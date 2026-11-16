@@ -2,9 +2,9 @@ import { similarUpdatedNote } from '../../similar-updated-note';
 import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { Subscription } from 'rxjs';
+import { type Subscription, map } from 'rxjs';
 import type {
   AccountType,
   Category,
@@ -16,6 +16,7 @@ import type {
 } from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
+import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
@@ -78,7 +79,17 @@ function formatOriginal({ amount, currency }: Money): string {
 
 @Component({
   selector: 'app-transaction-details-page',
-  imports: [RouterLink, MoneyPipe, DateHeadingPipe, TransactionCategoryBadge, CategoryTiles],
+  imports: [
+    RouterLink,
+    MoneyPipe,
+    DateHeadingPipe,
+    TransactionCategoryBadge,
+    CategoryTiles,
+    ManualTransactionSheet,
+  ],
+  // The routed page is its own stacking context, so while the form is open it must rise above
+  // the side menu and bottom tabs (z-20).
+  host: { class: 'relative', '[class.z-30]': 'editing()' },
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:py-10">
       @switch (state().status) {
@@ -531,6 +542,14 @@ function formatOriginal({ amount, currency }: Money): string {
         }
       }
     </main>
+
+    @if (editing()) {
+      <app-manual-transaction-sheet
+        [transactionId]="id()"
+        (saved)="onEdited()"
+        (closed)="closeEditor()"
+      />
+    }
   `,
 })
 export class TransactionDetailsPage {
@@ -540,6 +559,16 @@ export class TransactionDetailsPage {
   private readonly categoryList = inject(CategoriesService);
   private readonly sharesService = inject(SharesService);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+
+  /** The id in the URL; `/transaktioner/:id/redigera` opens the edit form over the page. */
+  protected readonly id = toSignal(this.route.paramMap.pipe(map((params) => params.get('id'))), {
+    initialValue: null,
+  });
+  protected readonly editing = toSignal(
+    this.route.url.pipe(map((segments) => segments.at(-1)?.path === 'redigera')),
+    { initialValue: false },
+  );
 
   protected readonly confirmingDelete = signal(false);
   protected readonly deleteError = signal(false);
@@ -644,9 +673,20 @@ export class TransactionDetailsPage {
 
   constructor() {
     // Following a link to the linked purchase or refund keeps this page and changes the id.
-    inject(ActivatedRoute)
-      .paramMap.pipe(takeUntilDestroyed())
+    this.route.paramMap
+      .pipe(takeUntilDestroyed())
       .subscribe((params) => this.load(params.get('id') ?? ''));
+  }
+
+  protected closeEditor(): void {
+    void this.router.navigate(['/transaktioner', this.id()]);
+  }
+
+  /** The edit changed what the page shows, so it is fetched again. */
+  protected onEdited(): void {
+    this.toast.show('Transaktionen sparades');
+    this.closeEditor();
+    this.load(this.id() ?? '');
   }
 
   private load(id: string): void {

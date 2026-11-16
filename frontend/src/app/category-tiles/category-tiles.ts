@@ -37,6 +37,7 @@ import { CategoryIconComponent } from '../category-icon/category-icon';
               type="button"
               class="chip"
               [attr.data-subcategory]="subcategory.id"
+              [attr.aria-pressed]="current() === subcategory.id"
               (click)="picked.emit(subcategory.id)"
             >
               {{ subcategory.name }}
