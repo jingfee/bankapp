@@ -280,6 +280,7 @@ describe('DelatPage', () => {
 
       type(slider, '50');
       await fixture.whenStable();
+      expect(text(page.querySelector('[data-ratio-heading]'))).toBe('50/50');
       expect(text(page.querySelector('[data-slider-note]'))).toBe(
         `Gäller från ${today}. Tidigare månader ändras inte.`,
       );
