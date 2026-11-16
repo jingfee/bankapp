@@ -9,6 +9,7 @@ import type {
 } from '@bankapp/shared';
 import { and, eq, exists, inArray, isNull, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { ownerPart } from './shares';
 import type { AppDatabase } from '../db/database';
 import { accounts, categories, subcategories, transactions } from '../db/schema';
 
@@ -104,6 +105,7 @@ export function toTransaction(
     account: toAccount(row.accountId, accountName, bank, accountType),
     category: toCategory(category),
     share,
+    ownerPart: ownerPart(row.amount, share.percent),
     paidBy: row.paidBy,
   };
 }

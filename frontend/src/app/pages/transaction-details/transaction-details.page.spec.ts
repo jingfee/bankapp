@@ -35,6 +35,7 @@ describe('TransactionDetailsPage', () => {
     account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
     category: null,
     share: { option: 'me', percent: 100, source: 'default' },
+    ownerPart: -12.5,
     paidBy: 'owner',
     transactionDate: null,
     bookingDate: null,
@@ -132,6 +133,7 @@ describe('TransactionDetailsPage', () => {
         details({
           amount: { amount: -250, currency: 'SEK' },
           share: { option: 'half', percent: 50, source: 'account' },
+          ownerPart: -125,
         }),
       );
 

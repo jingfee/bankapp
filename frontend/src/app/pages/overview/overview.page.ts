@@ -14,6 +14,7 @@ import {
 } from '@bankapp/shared';
 import { type Subscription, catchError, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { dayOf, monthOf, shiftMonth } from '../../dates';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
@@ -123,16 +124,6 @@ function storedView(): OverviewView {
     // Storage can be blocked; the default then applies.
   }
   return 'mine';
-}
-
-/** `YYYY-MM` of a date in the owner's own time. */
-function monthOf(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function shiftMonth(month: string, by: number): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  return monthOf(new Date(year, number - 1 + by, 1));
 }
 
 function bars<T extends { id: number; name: string; total: number }>(
@@ -795,11 +786,9 @@ export class OverviewPage {
   /** Transaktioner pre-filtered to the month shown, and whatever else `extra` adds. */
   protected monthParams(extra: Record<string, string>): Record<string, string> {
     const [year, number] = this.month().split('-').map(Number) as [number, number];
-    const day = (date: Date) =>
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     return {
-      from: day(new Date(year, number - 1, 1)),
-      to: day(new Date(year, number, 0)),
+      from: dayOf(new Date(year, number - 1, 1)),
+      to: dayOf(new Date(year, number, 0)),
       ...extra,
     };
   }

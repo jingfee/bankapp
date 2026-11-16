@@ -22,6 +22,16 @@ export function householdPercent(entries: HouseholdRatioEntry[], date: string): 
   return inForce?.percent ?? 100;
 }
 
+/**
+ * The owner's part of `amount` at `percent`: rounded half away from zero to whole öre, so a
+ * purchase and its full refund always add up to 0 kr (see Owner's part in CONTEXT.md).
+ */
+export function ownerPart(amount: number, percent: number): number {
+  const ore = Math.round(Math.abs(amount) * 100);
+  const part = Math.round((ore * percent) / 100) / 100;
+  return amount < 0 ? -part || 0 : part;
+}
+
 export interface ShareSources {
   transaction: ShareOption | null;
   account: ShareOption | null;

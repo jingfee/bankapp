@@ -1,21 +1,10 @@
 import { Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import {
-  CATEGORY_PALETTE,
-  type CategoryColour,
-  type ShareOption,
-  type Transaction,
-} from '@bankapp/shared';
+import { CATEGORY_PALETTE, type CategoryColour, type Transaction } from '@bankapp/shared';
 import { TransactionCategoryBadge } from '../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../formatting/date-heading.pipe';
 import { MoneyPipe } from '../formatting/money.pipe';
-
-/** The badge of a shared transaction; Jag is the default and has none. */
-const SHARE_BADGES: Record<Exclude<ShareOption, 'me'>, string> = {
-  half: '50/50',
-  household: 'Hushåll',
-  partner: 'Partner',
-};
+import { SHARE_LABELS, accountLabel } from '../share-display';
 
 const money = new MoneyPipe();
 
@@ -129,25 +118,18 @@ export class TransactionList {
 
   protected badge(transaction: Transaction): string | null {
     const option = transaction.share.option;
-    return option === 'me' ? null : SHARE_BADGES[option];
+    return option === 'me' ? null : SHARE_LABELS[option];
   }
 
   protected tint(colour: CategoryColour): string {
     return CATEGORY_PALETTE[colour].tint;
   }
 
-  /** The account's name; a manual transaction has none, and says who paid it if not the owner. */
-  protected accountLabel(transaction: Transaction): string {
-    if (transaction.account) return transaction.account.name;
-    return transaction.paidBy === 'partner' ? 'Manuell · partner betalade' : 'Manuell';
-  }
+  protected readonly accountLabel = accountLabel;
 
   /** The owner's part of the real amount, to the öre. */
   protected ownShare(transaction: Transaction): string {
-    const { amount, currency } = transaction.amount;
-    const part =
-      Math.sign(amount) * (Math.round(Math.abs(amount) * transaction.share.percent) / 100);
-    return money.transform(part, currency);
+    return money.transform(transaction.ownerPart, transaction.amount.currency);
   }
 
   /** The transactions, already newest first, split into one group per day. */

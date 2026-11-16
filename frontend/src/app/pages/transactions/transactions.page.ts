@@ -18,6 +18,7 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
 import { ToastService } from '../../toast/toast.service';
+import { MANUAL_LABEL } from '../../share-display';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { TransactionsService } from '../../transactions.service';
 import { FilterPanel, type PanelAccount } from './filter-panel';
@@ -326,7 +327,7 @@ export class TransactionsPage {
     for (const key of f.accounts) {
       const label =
         key === 'manual'
-          ? 'Manuell'
+          ? MANUAL_LABEL
           : (this.accounts().find((a) => String(a.id) === key)?.label ?? 'Konto');
       chips.push({
         key: `account-${key}`,

@@ -13,6 +13,7 @@ import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { accountLabel } from '../../share-display';
 import { TransactionsService } from '../../transactions.service';
 import { similarUpdatedNote } from '../../similar-updated-note';
 
@@ -137,8 +138,7 @@ const COLLAPSE_MS = 450;
                                 t.description
                               }}</span>
                               <span data-meta class="truncate text-sm text-muted"
-                                >{{ t.date | dateHeading }} ·
-                                {{ t.account?.name ?? 'Manuell' }}</span
+                                >{{ t.date | dateHeading }} · {{ accountLabel(t) }}</span
                               >
                             </span>
                             <span data-amount class="amount shrink-0">{{
@@ -215,8 +215,7 @@ const COLLAPSE_MS = 450;
                                 t.description
                               }}</span>
                               <span data-meta class="text-sm text-muted"
-                                >{{ t.date | dateHeading }} ·
-                                {{ t.account?.name ?? 'Manuell' }}</span
+                                >{{ t.date | dateHeading }} · {{ accountLabel(t) }}</span
                               >
                               @if (t.category; as c) {
                                 <span
@@ -310,6 +309,7 @@ export class ReviewPage {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
 
+  protected readonly accountLabel = accountLabel;
   protected readonly status = signal<Status>('loading');
   protected readonly transactions = signal<Transaction[]>([]);
   protected readonly replacements = signal<ReplacementSuggestion[]>([]);

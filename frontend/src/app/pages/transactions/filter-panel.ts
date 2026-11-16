@@ -1,3 +1,4 @@
+import { MANUAL_LABEL } from '../../share-display';
 import {
   Component,
   type ElementRef,
@@ -262,7 +263,7 @@ export class FilterPanel {
 
   protected readonly accountOptions = computed(() => [
     ...this.accounts().map((a) => ({ key: String(a.id), label: a.label })),
-    { key: 'manual', label: 'Manuell' },
+    { key: 'manual', label: MANUAL_LABEL },
   ]);
 
   protected change(change: Partial<TransactionFilters>): void {

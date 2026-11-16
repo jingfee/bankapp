@@ -16,6 +16,8 @@ import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
+import { today } from '../../dates';
+import { SHARE_LABELS, SHARE_OPTION_ORDER, householdRatioOn } from '../../share-display';
 import { SharesService } from '../../shares.service';
 import { ToastService } from '../../toast/toast.service';
 
@@ -33,23 +35,9 @@ interface SharedRow {
 }
 
 /** The shares a subcategory can be set to from here; Jag is the × button. */
-const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = [
-  { option: 'half', label: '50/50' },
-  { option: 'household', label: 'Hushåll' },
-  { option: 'partner', label: 'Partner' },
-];
-
-const SHARE_ORDER: Record<ShareOption, string> = {
-  me: 'Jag',
-  half: '50/50',
-  household: 'Hushåll',
-  partner: 'Partner',
-};
-
-/** Today as `YYYY-MM-DD` in the owner's own time zone. */
-function today(): string {
-  return new Date().toLocaleDateString('sv-SE');
-}
+const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_OPTION_ORDER.filter(
+  (option) => option !== 'me',
+).map((option) => ({ option, label: SHARE_LABELS[option] }));
 
 /**
  * Everything shared with the partner on one page: the settlement balance and its periods, the
@@ -217,7 +205,7 @@ function today(): string {
                       <dd data-carried-in class="text-right tabular-nums">
                         {{ period.carriedIn | money }}
                       </dd>
-                      <dt class="text-muted">Partnerns del</dt>
+                      <dt class="text-muted">Partnerns andel</dt>
                       <dd data-period-part class="text-right tabular-nums">
                         {{ partnerPartSum(period) | money }}
                       </dd>
@@ -501,9 +489,7 @@ export class DelatPage {
 
   /** The ratio in force today: the latest entry from today or before, else the first. */
   protected readonly current = computed(() => {
-    const entries = this.ratio();
-    const now = today();
-    return entries.filter((e) => e.from <= now).at(-1) ?? entries[0];
+    return householdRatioOn(this.ratio(), today());
   });
   /** The history with the entry in force first, then the rest newest first. */
   protected readonly history = computed(() => {
@@ -538,7 +524,7 @@ export class DelatPage {
   });
 
   protected shareName(option: ShareOption): string {
-    return SHARE_ORDER[option];
+    return SHARE_LABELS[option];
   }
 
   protected partnerPartSum(period: { items: { partnerPart: number }[] }): number {

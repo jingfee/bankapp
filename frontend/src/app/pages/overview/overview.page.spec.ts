@@ -107,6 +107,7 @@ describe('OverviewPage', () => {
     account: { id: 7, name: 'Lönekonto', bank: 'Swedbank', type: 'payment' },
     category: null,
     share: { option: 'me', percent: 100, source: 'default' },
+    ownerPart: -10,
     paidBy: 'owner',
     ...overrides,
   });
@@ -443,6 +444,7 @@ describe('OverviewPage', () => {
             transaction(1, {
               amount: { amount: -200, currency: 'SEK' },
               share: { option: 'half', percent: 50, source: 'account' },
+              ownerPart: -100,
             }),
             transaction(2),
           ],
