@@ -272,6 +272,67 @@ describe('OverviewPage', () => {
       expect(page.querySelector('[data-line="current"]')?.getAttribute('points')).toMatch(/\d/);
     });
 
+    describe('axes and hovering', () => {
+      const plain = (value: string | undefined) => value?.replace(/\u00a0/g, ' ');
+      const ticks = (page: HTMLElement, axis: 'x' | 'y') =>
+        Array.from(page.querySelectorAll(`[data-${axis}-tick]`)).map((t) => plain(text(t)));
+      const data = () =>
+        overview({
+          totals: totals(0, 1500),
+          previous: totals(0, 3100),
+          spendingByDay: { current: ramp(30, 100), previous: ramp(31, 100) },
+        });
+      const hover = async (
+        fixture: { whenStable(): Promise<unknown> },
+        page: HTMLElement,
+        day: number,
+      ) => {
+        page
+          .querySelector(`[data-chart-day="${day}"]`)
+          ?.dispatchEvent(new Event('pointerenter', { bubbles: false }));
+        await fixture.whenStable();
+      };
+      const tooltip = (page: HTMLElement) => page.querySelector('[data-chart-tooltip]');
+
+      it('labels the amounts on the y axis and the days on the x axis', async () => {
+        const { page } = await render(data());
+
+        expect(ticks(page, 'y')).toEqual(['0 kr', '1 550 kr', '3 100 kr']);
+        expect(ticks(page, 'x')).toEqual(['1', '8', '15', '22', '31']);
+      });
+
+      it('shows both months amounts and dates for the hovered day', async () => {
+        const { fixture, page } = await render(data());
+        expect(tooltip(page)).toBeNull();
+
+        await hover(fixture, page, 10);
+
+        const said = plain(text(tooltip(page)));
+        expect(said).toContain('10 november 1 000,00 kr');
+        expect(said).toContain('10 oktober 1 000,00 kr');
+      });
+
+      it('shows only last month for a day that has not come yet', async () => {
+        const { fixture, page } = await render(data());
+
+        await hover(fixture, page, 20);
+
+        expect(plain(text(tooltip(page)))).toBe('20 oktober 2 000,00 kr');
+      });
+
+      it('hides the tooltip when the pointer leaves the chart', async () => {
+        const { fixture, page } = await render(data());
+        await hover(fixture, page, 10);
+
+        page
+          .querySelector('[data-chart-plot]')
+          ?.dispatchEvent(new Event('pointerleave', { bubbles: false }));
+        await fixture.whenStable();
+
+        expect(tooltip(page)).toBeNull();
+      });
+    });
+
     it('is left out when neither month has any spending', async () => {
       const { page } = await render();
 
