@@ -130,7 +130,7 @@ The owner's home loan, followed by its remaining debt, interest rate and amortis
 _Avoid_: Loan (for now there is only the mortgage), debt account, mortgage account
 
 **Loan part** (sv: _Lånedel_):
-One part of a mortgage with its own remaining debt, interest rate and amortisation, and, if its rate is fixed, the day the fixed period ends. A mortgage has one or more loan parts; its debt is their sum.
+One part of a mortgage, named by the owner, with its own remaining debt, interest rate and amortisation. A mortgage has one or more loan parts; its debt is their sum. Parts are added and ended as the mortgage is renegotiated: an ended part, paid off or merged into a new one, keeps its history and counts as 0 from the day it ended.
 _Avoid_: Tranche, sub-loan, loan (for a part)
 
 **Mortgage entry** (sv: _Bolånenotering_):
