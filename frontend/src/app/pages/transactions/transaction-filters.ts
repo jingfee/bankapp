@@ -13,6 +13,8 @@ export interface TransactionFilters {
   accounts: string[];
   /** Category ids, or `none` for uncategorised. */
   categories: string[];
+  /** Subcategory ids; set by links from the overview. */
+  subcategories: string[];
   kind: '' | 'out' | 'in';
   /** Bounds of the absolute amount in kronor, or an empty string for none. */
   min: string;
@@ -25,6 +27,7 @@ export const EMPTY_FILTERS: TransactionFilters = {
   to: '',
   accounts: [],
   categories: [],
+  subcategories: [],
   kind: '',
   min: '',
   max: '',
@@ -60,6 +63,7 @@ export function filtersFromParams(params: ParamMap): TransactionFilters {
     to: day(params.get('to')),
     accounts: list(params.get('accounts'), 'manual'),
     categories: list(params.get('categories'), 'none'),
+    subcategories: list(params.get('subcategories'), 'none').filter((part) => part !== 'none'),
     kind: kind === 'out' || kind === 'in' ? kind : '',
     min: amount(params.get('min')),
     max: amount(params.get('max')),
@@ -74,6 +78,7 @@ export function filtersToParams(filters: TransactionFilters): Record<string, str
   if (filters.to !== '') params['to'] = filters.to;
   if (filters.accounts.length > 0) params['accounts'] = filters.accounts.join(',');
   if (filters.categories.length > 0) params['categories'] = filters.categories.join(',');
+  if (filters.subcategories.length > 0) params['subcategories'] = filters.subcategories.join(',');
   if (filters.kind !== '') params['kind'] = filters.kind;
   if (filters.min !== '') params['min'] = filters.min;
   if (filters.max !== '') params['max'] = filters.max;
@@ -87,7 +92,7 @@ export function activeFilterCount(filters: TransactionFilters): number {
     filters.kind !== '',
     filters.min !== '' || filters.max !== '',
     filters.accounts.length > 0,
-    filters.categories.length > 0,
+    filters.categories.length > 0 || filters.subcategories.length > 0,
   ].filter(Boolean).length;
 }
 

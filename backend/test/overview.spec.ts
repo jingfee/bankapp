@@ -89,6 +89,70 @@ describe('overview of a month', () => {
       categories: [],
       uncategorised: 0,
       spendingByDay: { current: Array(30).fill(0), previous: Array(31).fill(0) },
+      savings: { subcategoryId: ids.get('Sparande & investeringar'), current: 0, previous: 0 },
+    });
+  });
+
+  describe('savings (Sparande)', () => {
+    const savings = async (month: string, view?: string) =>
+      (
+        await api(app)
+          .get('/api/overview')
+          .query(view === undefined ? { month } : { month, view })
+          .expect(200)
+      ).body as OverviewResponse;
+
+    it('counts money moved into savings as a positive deposit', async () => {
+      store(-3000, '2026-11-02', 'Sparande & investeringar');
+      store(-500, '2026-11-20', 'Sparande & investeringar');
+      expect((await savings('2026-11')).savings.current).toBe(3500);
+    });
+
+    it('lowers the figure by money taken back out, and goes negative when more came out', async () => {
+      store(-3000, '2026-11-02', 'Sparande & investeringar');
+      store(1000, '2026-11-10', 'Sparande & investeringar');
+      expect((await savings('2026-11')).savings.current).toBe(2000);
+      store(5000, '2026-11-12', 'Sparande & investeringar');
+      expect((await savings('2026-11')).savings.current).toBe(-3000);
+    });
+
+    it('reports the previous month too, and ignores other subcategories', async () => {
+      store(-700, '2026-10-30', 'Sparande & investeringar');
+      store(-900, '2026-11-02', 'Mellan egna konton');
+      store(-100, '2026-11-03', 'Livsmedel');
+      const body = await savings('2026-11');
+      expect(body.savings.current).toBe(0);
+      expect(body.savings.previous).toBe(700);
+    });
+
+    it('leaves out a hidden account', async () => {
+      db.insert(accounts)
+        .values({
+          connectionId: 1,
+          identificationHash: 'h2',
+          uid: 'u2',
+          name: 'Gömt',
+          type: 'payment',
+          currency: 'SEK',
+          hidden: true,
+        })
+        .run();
+      const id = store(-4000, '2026-11-02', 'Sparande & investeringar');
+      db.update(transactions).set({ accountId: 2 }).where(eq(transactions.id, id)).run();
+      store(-100, '2026-11-03', 'Sparande & investeringar');
+      expect((await savings('2026-11')).savings.current).toBe(100);
+    });
+
+    it('includes a pending transaction', async () => {
+      store(-250, '2026-11-06', 'Sparande & investeringar', 'pending');
+      expect((await savings('2026-11')).savings.current).toBe(250);
+    });
+
+    it('shows the full amount in Min andel and stays out of the other totals', async () => {
+      store(-1000, '2026-11-06', 'Sparande & investeringar');
+      const body = await savings('2026-11', 'mine');
+      expect(body.savings.current).toBe(1000);
+      expect(body.totals).toEqual({ income: 0, spending: 0, net: 0 });
     });
   });
 

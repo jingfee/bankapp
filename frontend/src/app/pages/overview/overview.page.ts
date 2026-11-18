@@ -93,7 +93,7 @@ const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
 const DAY_LONG = new Intl.DateTimeFormat(APP_LOCALE, { day: 'numeric', month: 'long' });
 
 interface Tile {
-  kind: TotalKind | 'settlement';
+  kind: TotalKind | 'savings' | 'settlement';
   label: string;
   amount: string;
   line: string;
@@ -240,7 +240,7 @@ function bars<T extends { id: number; name: string; total: number }>(
         }
         @default {
           @if (overview(); as o) {
-            <div data-tiles class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-4">
+            <div data-tiles class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-5">
               @for (tile of tiles(); track tile.kind) {
                 @if (tile.link; as link) {
                   <a
@@ -793,7 +793,7 @@ export class OverviewPage {
     };
   }
 
-  /** Netto, Inkomster, Utgifter and, with a balance setting, Avräkning. */
+  /** Netto, Inkomster, Utgifter, Sparande and, with a balance setting, Avräkning. */
   protected readonly tiles = computed<Tile[]>(() => {
     const o = this.overview();
     if (o === null) return [];
@@ -811,6 +811,20 @@ export class OverviewPage {
               params: this.monthParams({ kind: kind === 'income' ? 'in' : 'out' }),
             },
     }));
+    tiles.push({
+      kind: 'savings',
+      label: 'Sparande',
+      amount: money.transform(o.savings.current),
+      line: this.changeText(o.savings.current - o.savings.previous),
+      positive: false,
+      link:
+        o.savings.subcategoryId === null
+          ? undefined
+          : {
+              path: '/transaktioner',
+              params: this.monthParams({ subcategories: '' + o.savings.subcategoryId }),
+            },
+    });
     const balance = this.settlement()?.balance;
     if (balance !== undefined && balance !== null) {
       tiles.push({
