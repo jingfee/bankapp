@@ -41,7 +41,7 @@ A single bank account or card account at a bank, with a balance and transactions
 _Avoid_: Bank account (when a card is meant), login, connection
 
 **Closed account** (sv: _Avslutat konto_):
-An account that a renewal no longer returns. It keeps its history and is never deleted, but is no longer synced.
+An account that a renewal no longer returns, or a manual savings account the owner closed (e.g. a sold-off ISK). It keeps its history and is never deleted, but is no longer synced or asked for balance entries; on the savings view it counts as 0 from the day it closed.
 _Avoid_: Deleted, removed, inactive
 
 **Hidden account** (sv: _Dolt konto_):
