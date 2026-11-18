@@ -133,7 +133,7 @@ _Avoid_: Loan (for now there is only the mortgage), debt account, mortgage accou
 One part of a mortgage, named by the owner, with its own remaining debt, interest rate and amortisation. A mortgage has one or more loan parts; its debt is their sum. Parts are added and ended as the mortgage is renegotiated: an ended part, paid off or merged into a new one, keeps its history and counts as 0 from the day it ended.
 
 **Remaining debt** (sv: _Kvarvarande skuld_):
-What is left to pay on a loan part: the debt in its latest mortgage entry, less its amortisation once for every month after that day in which the mortgage was paid, that is, a month with a transaction in Bolån ränta & amortering. The owner corrects it with a new mortgage entry, e.g. after paying extra.
+What is left to pay on a loan part: the debt in its latest mortgage entry, less its amortisation once for every month after that day in which the mortgage was paid, that is, a month with a booked transaction in Bolån ränta & amortering. Pending payments do not count until they book. The owner corrects it with a new mortgage entry, e.g. after paying extra.
 _Avoid_: Balance, loan amount, principal
 
 **Interest rate change** (sv: _Ränteändring_):
