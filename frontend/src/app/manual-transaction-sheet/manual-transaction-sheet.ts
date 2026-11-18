@@ -23,6 +23,7 @@ import { catchError, of } from 'rxjs';
 import { CategoriesService } from '../categories.service';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { today } from '../dates';
+import { lockPageScroll } from '../scroll-lock';
 import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
 import { SharesService } from '../shares.service';
 import { TransactionsService } from '../transactions.service';
@@ -95,7 +96,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
             class="flex min-h-0 flex-1 flex-col"
             (submit)="$event.preventDefault(); save()"
           >
-            <div class="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-3">
+            <div
+              class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-3"
+            >
               <div class="segmented self-start" role="group" aria-label="Typ">
                 <button
                   type="button"
@@ -293,10 +296,7 @@ export class ManualTransactionSheet implements OnInit {
   private readonly opener = document.activeElement;
 
   constructor() {
-    // Locks the page behind the sheet, so only the sheet scrolls.
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    inject(DestroyRef).onDestroy(() => (document.body.style.overflow = overflow));
+    lockPageScroll();
     inject(DestroyRef).onDestroy(() => {
       if (this.opener instanceof HTMLElement && this.opener.isConnected) this.opener.focus();
     });

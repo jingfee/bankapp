@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import type { Category } from '@bankapp/shared';
+import { lockPageScroll } from '../../scroll-lock';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { MANUAL_LABEL } from '../../share-display';
 import {
@@ -41,7 +42,7 @@ export interface PanelAccount {
       aria-modal="true"
       aria-label="Filter"
       data-filter-panel
-      class="sheet bg-surface-1 fixed right-0 bottom-0 left-0 z-50 flex h-[90dvh] flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:h-auto sm:w-[420px] sm:rounded-3xl"
+      class="sheet bg-surface-1 fixed inset-x-0 top-[10dvh] bottom-0 z-50 flex flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:w-[420px] sm:rounded-3xl"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
         <h2 class="text-lg font-semibold">Filter</h2>
@@ -57,7 +58,7 @@ export interface PanelAccount {
         </button>
       </header>
 
-      <div class="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-3">
+      <div class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-5 py-3">
         <section data-section="datum" class="flex flex-col gap-2">
           <h3 class="text-sm font-medium text-muted">Datum</h3>
           <div class="flex flex-wrap gap-2">
@@ -243,6 +244,7 @@ export class FilterPanel {
   private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('close');
 
   constructor() {
+    lockPageScroll();
     effect(() => this.closeButton()?.nativeElement.focus());
   }
 
