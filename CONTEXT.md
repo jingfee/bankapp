@@ -132,6 +132,10 @@ _Avoid_: Loan (for now there is only the mortgage), debt account, mortgage accou
 **Loan part** (sv: _Lånedel_):
 One part of a mortgage, named by the owner, with its own remaining debt, interest rate and amortisation. A mortgage has one or more loan parts; its debt is their sum. Parts are added and ended as the mortgage is renegotiated: an ended part, paid off or merged into a new one, keeps its history and counts as 0 from the day it ended.
 
+**Remaining debt** (sv: _Kvarvarande skuld_):
+What is left to pay on a loan part: the debt in its latest mortgage entry, less its amortisation once for every month after that day in which the mortgage was paid, that is, a month with a transaction in Bolån ränta & amortering. The owner corrects it with a new mortgage entry, e.g. after paying extra.
+_Avoid_: Balance, loan amount, principal
+
 **Interest rate change** (sv: _Ränteändring_):
 The owner stating a loan part's new interest rate, in force from a given day until the next change. The rate is kept until it is changed; the bank's rate cannot be fetched, so the owner enters it.
 _Avoid_: Rate update, new rate (as a thing)
@@ -150,7 +154,7 @@ _Avoid_: Renewal (that is for connections), rate adjustment day
 _Avoid_: Tranche, sub-loan, loan (for a part)
 
 **Mortgage entry** (sv: _Bolånenotering_):
-The owner stating, for a given day (today by default), each loan part's remaining debt as the bank shows it. Entries are kept as history. The interest rate and amortisation are not part of it; they are kept until the owner changes them.
+The owner stating, for a given day (today by default), each loan part's remaining debt as the bank shows it, to start following the mortgage or to correct the remaining debt the app worked out. Entries are kept as history. The interest rate and amortisation are not part of it; they are kept until the owner changes them.
 _Avoid_: Balance entry (that is for savings accounts), statement, snapshot
 
 **Estimated monthly payment** (sv: _Beräknad månadsbetalning_):
