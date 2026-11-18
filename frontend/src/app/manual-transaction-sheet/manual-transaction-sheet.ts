@@ -53,7 +53,8 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
       data-backdrop
       tabindex="-1"
       aria-hidden="true"
-      class="sheet-backdrop fixed inset-0 z-50 cursor-default bg-black/70"
+      [class.sheet-backdrop]="!entered()"
+      class="fixed inset-0 z-50 cursor-default bg-black/70"
       (click)="dismiss()"
     ></button>
     <div
@@ -62,7 +63,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
       aria-modal="true"
       [attr.aria-label]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
       data-sheet
-      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
+      [class.modal-sheet]="!entered()"
+      (animationend)="$event.target === $event.currentTarget && entered.set(true)"
+      class="bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
       (keydown)="trapFocus($event)"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
@@ -263,6 +266,7 @@ export class ManualTransactionSheet implements OnInit {
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 
   protected readonly shareChoices = SHARE_CHOICES;
+  protected readonly entered = signal(false);
   protected readonly status = signal<Status>('loading');
   private readonly categories = signal<Category[]>([]);
   /** The share each subcategory with a share other than Jag has. */

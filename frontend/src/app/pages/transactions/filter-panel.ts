@@ -5,6 +5,7 @@ import {
   effect,
   input,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
 import type { Category } from '@bankapp/shared';
@@ -34,7 +35,8 @@ export interface PanelAccount {
       data-backdrop
       tabindex="-1"
       aria-hidden="true"
-      class="sheet-backdrop fixed inset-0 z-50 bg-black/70 cursor-default"
+      [class.sheet-backdrop]="!entered()"
+      class="fixed inset-0 z-50 bg-black/70 cursor-default"
       (click)="closed.emit()"
     ></button>
     <section
@@ -42,7 +44,9 @@ export interface PanelAccount {
       aria-modal="true"
       aria-label="Filter"
       data-filter-panel
-      class="sheet bg-surface-1 fixed right-0 bottom-0 left-0 z-50 flex h-[90dvh] flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:h-auto sm:w-[420px] sm:rounded-3xl"
+      [class.sheet]="!entered()"
+      (animationend)="$event.target === $event.currentTarget && entered.set(true)"
+      class="bg-surface-1 fixed right-0 bottom-0 left-0 z-50 flex h-[90dvh] flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:h-auto sm:w-[420px] sm:rounded-3xl"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
         <h2 class="text-lg font-semibold">Filter</h2>
@@ -233,6 +237,8 @@ export class FilterPanel {
   readonly cleared = output<void>();
   readonly closed = output<void>();
 
+  /** The slide-in plays once; a restart while a date picker is open would strand the panel. */
+  protected readonly entered = signal(false);
   protected readonly String = String;
   protected readonly amountPresets = AMOUNT_PRESETS;
   protected readonly kinds = [
