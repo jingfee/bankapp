@@ -1,5 +1,6 @@
 import type { ParamMap } from '@angular/router';
 import { dayOf } from '../../dates';
+import { parseAmount } from '../../formatting/amount';
 
 /** What the owner searches and filters the transactions by; it lives in the URL's query string. */
 export interface TransactionFilters {
@@ -30,15 +31,14 @@ export const EMPTY_FILTERS: TransactionFilters = {
 };
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const AMOUNT = /^\d+(\.\d+)?$/;
 
 function day(value: string | null): string {
   return value !== null && DAY.test(value) && !Number.isNaN(Date.parse(value)) ? value : '';
 }
 
 function amount(value: string | null): string {
-  const normalised = (value ?? '').replace(',', '.');
-  return AMOUNT.test(normalised) ? normalised : '';
+  const parsed = parseAmount(value ?? '');
+  return parsed !== null && parsed >= 0 ? String(parsed) : '';
 }
 
 function list(value: string | null, keyword: string): string[] {

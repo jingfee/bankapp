@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import type { Category } from '@bankapp/shared';
+import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import { lockPageScroll } from '../../scroll-lock';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { MANUAL_LABEL } from '../../share-display';
@@ -143,7 +144,7 @@ export interface PanelAccount {
                 inputmode="decimal"
                 placeholder="Från"
                 aria-label="Lägsta belopp"
-                [value]="filters().min"
+                [value]="amountText('min')"
                 (change)="setAmount('min', $any($event.target))"
               />
               <span class="field-suffix">kr</span>
@@ -155,7 +156,7 @@ export interface PanelAccount {
                 inputmode="decimal"
                 placeholder="Till"
                 aria-label="Högsta belopp"
-                [value]="filters().max"
+                [value]="amountText('max')"
                 (change)="setAmount('max', $any($event.target))"
               />
               <span class="field-suffix">kr</span>
@@ -289,17 +290,24 @@ export class FilterPanel {
     this.change({ [field]: value });
   }
 
+  /** The applied bound as the owner reads it: decimal comma. */
+  protected amountText(field: 'min' | 'max'): string {
+    const parsed = parseAmount(this.filters()[field]);
+    return parsed === null ? '' : formatAmountInput(parsed);
+  }
+
   protected toggleAmountPreset(preset: { min: string; max: string }): void {
     const on = this.filters().min === preset.min && this.filters().max === preset.max;
     this.change(on ? { min: '', max: '' } : { min: preset.min, max: preset.max });
   }
 
   protected setAmount(field: 'min' | 'max', input: HTMLInputElement): void {
-    const value = input.value.trim().replace(',', '.');
-    const valid = /^\d+(\.\d+)?$/.test(value);
+    const text = input.value.trim();
+    const parsed = parseAmount(text);
+    const valid = parsed !== null && parsed >= 0;
     // A value that is not an amount is dropped, and the field shows what is applied.
-    if (!valid) input.value = this.filters()[field];
-    this.change({ [field]: valid ? value : value === '' ? '' : this.filters()[field] });
+    if (!valid) input.value = this.amountText(field);
+    this.change({ [field]: valid ? String(parsed) : text === '' ? '' : this.filters()[field] });
   }
 
   protected toggle(field: 'accounts' | 'categories', key: string): void {
