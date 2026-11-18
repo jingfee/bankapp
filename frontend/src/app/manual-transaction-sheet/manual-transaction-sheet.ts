@@ -280,10 +280,10 @@ export class ManualTransactionSheet implements OnInit {
   protected readonly description = signal('');
   protected readonly direction = signal<'out' | 'in'>('out');
   protected readonly amount = signal('');
-  /** An empty amount is allowed until the owner saves; text that is not an amount is not. */
+  /** An empty amount is allowed until the owner saves; text that is not a number is not (zero is caught on save). */
   protected readonly amountValid = computed(() => {
     const text = this.amount().trim();
-    return text === '' || (parseAmount(text) ?? 0) > 0;
+    return text === '' || parseAmount(text) !== null;
   });
   protected readonly date = signal(today());
   protected readonly subcategoryId = signal<number | null>(null);

@@ -18,6 +18,7 @@ import {
   type Period,
   type TransactionFilters,
   samePeriod,
+  amountBound,
 } from './transaction-filters';
 
 export interface PanelAccount {
@@ -303,11 +304,14 @@ export class FilterPanel {
 
   protected setAmount(field: 'min' | 'max', input: HTMLInputElement): void {
     const text = input.value.trim();
-    const parsed = parseAmount(text);
-    const valid = parsed !== null && parsed >= 0;
+    const bound = amountBound(text);
+    const valid = bound !== null;
     // A value that is not an amount is dropped, and the field shows what is applied.
-    if (!valid) input.value = this.amountText(field);
-    this.change({ [field]: valid ? String(parsed) : text === '' ? '' : this.filters()[field] });
+    const next = valid ? bound : text === '' ? '' : this.filters()[field];
+    this.change({ [field]: next });
+    // The field shows the applied value in Swedish form, whatever spelling was typed.
+    const applied = parseAmount(next);
+    input.value = applied === null ? '' : formatAmountInput(applied);
   }
 
   protected toggle(field: 'accounts' | 'categories', key: string): void {

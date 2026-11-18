@@ -36,9 +36,15 @@ function day(value: string | null): string {
   return value !== null && DAY.test(value) && !Number.isNaN(Date.parse(value)) ? value : '';
 }
 
+/** An amount bound as kept in the URL: dot decimals, at most two, or null if not a usable amount. */
+export function amountBound(text: string): string | null {
+  const parsed = parseAmount(text);
+  if (parsed === null || parsed < 0 || parsed > 1e12) return null;
+  return String(Math.round(parsed * 100) / 100);
+}
+
 function amount(value: string | null): string {
-  const parsed = parseAmount(value ?? '');
-  return parsed !== null && parsed >= 0 ? String(parsed) : '';
+  return amountBound(value ?? '') ?? '';
 }
 
 function list(value: string | null, keyword: string): string[] {
