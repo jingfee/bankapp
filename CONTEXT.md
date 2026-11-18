@@ -35,7 +35,7 @@ A connection whose permission has run out; its accounts keep their history but a
 _Avoid_: Disconnected, invalid
 
 **Removed bank** (sv: _Borttagen bank_):
-A bank the owner removed from Banker because they no longer use it. Its connection is no longer synced and is revoked, and its accounts become closed accounts: their transactions keep counting as history, in lists, past months and settlements, and a hidden account stays hidden. Connecting the same bank again brings it back, and its accounts continue where they left off.
+A bank the owner removed from Banker because they no longer use it. Its connection is no longer synced and is revoked, and its accounts become closed accounts: their transactions keep counting as history, in lists, past months and settlements, and a hidden account stays hidden. Connecting the same bank again brings it back, and its accounts continue where they left off. A savings account of a removed bank either closes or, if the owner chooses, continues as a manual savings account from its last synced balance. A removed bank can later be deleted for good, which erases it and everything it brought in (ADR 0013).
 _Avoid_: Deleted bank, disconnected, ended connection
 
 ### Money
