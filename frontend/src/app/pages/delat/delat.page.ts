@@ -14,6 +14,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
+import { DateField } from '../../date-field/date-field';
 import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
@@ -46,7 +47,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
  */
 @Component({
   selector: 'app-delat-page',
-  imports: [RouterLink, MoneyPipe, CategoryIconComponent, CategoryTiles],
+  imports: [RouterLink, MoneyPipe, CategoryIconComponent, CategoryTiles, DateField],
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
       <header>
@@ -108,13 +109,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                   </label>
                   <label class="flex flex-col gap-1 text-sm text-muted">
                     Per
-                    <input
-                      type="date"
-                      data-as-of
-                      class="input"
-                      [value]="asOf()"
-                      (input)="asOf.set(value($event))"
-                    />
+                    <app-date-field data-as-of [value]="asOf()" (valueChange)="asOf.set($event)" />
                   </label>
                   <button
                     type="submit"
@@ -269,13 +264,11 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                   >
                     @if (editing() === entry.from) {
                       <span class="flex flex-wrap items-center gap-2">
-                        <input
-                          type="date"
+                        <app-date-field
                           data-edit-from
-                          aria-label="Från datum"
-                          class="input"
+                          label="Från datum"
                           [value]="editFrom()"
-                          (input)="editFrom.set(value($event))"
+                          (valueChange)="editFrom.set($event)"
                         />
                         <input
                           type="number"

@@ -161,7 +161,7 @@ describe('DelatPage', () => {
 
       page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
       await fixture.whenStable();
-      expect(page.querySelector<HTMLInputElement>('[data-as-of]')!.value).toBe(today);
+      expect(page.querySelector('[data-as-of] [data-date-text]')!.textContent!.trim()).toBe(today);
       expect(text(page.querySelector('.field-suffix'))).toBe('kr');
       type(page.querySelector<HTMLInputElement>('[data-amount]')!, '1 200,50'.replace(' ', ''));
       await fixture.whenStable();

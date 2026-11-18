@@ -651,7 +651,7 @@ describe('TransactionsPage', () => {
 
       (panel.querySelector('[data-period="custom"]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      const from = panel.querySelector('[data-from]') as HTMLInputElement;
+      const from = panel.querySelector('[data-from] input') as HTMLInputElement;
       from.value = '2026-11-01';
       from.dispatchEvent(new Event('change'));
       await fixture.whenStable();
