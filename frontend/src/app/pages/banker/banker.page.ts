@@ -56,7 +56,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
       @let result = loaded();
-      <header class="flex flex-wrap items-start justify-between gap-4">
+      <header class="flex flex-col items-start gap-4 sm:flex-row sm:justify-between">
         <div>
           <h1 class="font-display text-3xl font-semibold tracking-tight">Banker</h1>
           @if (result && !('failed' in result)) {
