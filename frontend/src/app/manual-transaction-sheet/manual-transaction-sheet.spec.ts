@@ -93,7 +93,7 @@ describe('ManualTransactionSheet', () => {
 
   it('adds an expense as a negative amount, dated today and inheriting the subcategory share', async () => {
     const { fixture, host, page, http } = await render();
-    expect((page.querySelector('[data-date]') as HTMLInputElement).value).toMatch(
+    expect(page.querySelector('[data-date] [data-date-text]')!.textContent!.trim()).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
 
@@ -171,7 +171,9 @@ describe('ManualTransactionSheet', () => {
 
     expect((page.querySelector('[data-description]') as HTMLInputElement).value).toBe('ICA Maxi');
     expect((page.querySelector('[data-amount]') as HTMLInputElement).value).toBe('300,5');
-    expect((page.querySelector('[data-date]') as HTMLInputElement).value).toBe('2026-11-10');
+    expect(page.querySelector('[data-date] [data-date-text]')!.textContent!.trim()).toBe(
+      '2026-11-10',
+    );
     fill(page, '[data-amount]', '350');
     click(page, '[data-save]');
 

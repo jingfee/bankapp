@@ -23,6 +23,7 @@ import { catchError, of } from 'rxjs';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
 import { CategoryTiles } from '../category-tiles/category-tiles';
+import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
 import { lockPageScroll } from '../scroll-lock';
 import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
@@ -46,7 +47,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
  */
 @Component({
   selector: 'app-manual-transaction-sheet',
-  imports: [CategoryTiles],
+  imports: [CategoryTiles, DateField],
   host: { '(document:keydown.escape)': 'dismiss()' },
   template: `
     <button
@@ -173,12 +174,12 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
                       <rect x="3" y="5" width="18" height="16" rx="2" />
                       <path d="M3 10h18M8 3v4M16 3v4" />
                     </svg>
-                    <input
+                    <app-date-field
                       data-date
-                      type="date"
-                      class="field-control"
+                      class="min-w-0 flex-1"
+                      fieldClass="field-control text-left"
                       [value]="date()"
-                      (input)="date.set(value($event))"
+                      (valueChange)="date.set($event)"
                     />
                   </span>
                 </label>

@@ -530,17 +530,8 @@ export class TransactionsPage {
   private periodLabel(f: TransactionFilters): string {
     if (samePeriod(this.presets.last7, f)) return 'Senaste 7 dagarna';
     if (samePeriod(this.presets.month, f)) return this.monthLabel;
-    if (f.from !== '' && f.to !== '') return `${this.shortDate(f.from)} – ${this.shortDate(f.to)}`;
-    return f.from !== '' ? `Från ${this.shortDate(f.from)}` : `Till ${this.shortDate(f.to)}`;
-  }
-
-  private shortDate(day: string): string {
-    const [year, month, date] = day.split('-').map(Number) as [number, number, number];
-    return new Intl.DateTimeFormat(APP_LOCALE, {
-      day: 'numeric',
-      month: 'short',
-      ...(year === this.today.getFullYear() ? {} : { year: 'numeric' }),
-    }).format(new Date(year, month - 1, date));
+    if (f.from !== '' && f.to !== '') return `${f.from} – ${f.to}`;
+    return f.from !== '' ? `Från ${f.from}` : `Till ${f.to}`;
   }
 
   private amountLabel(f: TransactionFilters): string {

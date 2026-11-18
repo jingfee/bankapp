@@ -11,6 +11,7 @@ import {
 import type { Category } from '@bankapp/shared';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import { lockPageScroll } from '../../scroll-lock';
+import { DateField } from '../../date-field/date-field';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { MANUAL_LABEL } from '../../share-display';
 import {
@@ -29,7 +30,7 @@ export interface PanelAccount {
 /** The sections of the filter panel; every change is reported at once and the page applies it. */
 @Component({
   selector: 'app-filter-panel',
-  imports: [CategoryIconComponent],
+  imports: [CategoryIconComponent, DateField],
   host: { '(document:keydown.escape)': 'closed.emit()' },
   template: `
     <button
@@ -84,22 +85,18 @@ export interface PanelAccount {
             <div class="grid grid-cols-2 gap-2">
               <label class="flex flex-col gap-1 text-xs text-muted">
                 Från
-                <input
-                  type="date"
+                <app-date-field
                   data-from
-                  class="input"
                   [value]="filters().from"
-                  (change)="setDate('from', $any($event.target).value)"
+                  (valueChange)="setDate('from', $event)"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs text-muted">
                 Till
-                <input
-                  type="date"
+                <app-date-field
                   data-to
-                  class="input"
                   [value]="filters().to"
-                  (change)="setDate('to', $any($event.target).value)"
+                  (valueChange)="setDate('to', $event)"
                 />
               </label>
             </div>
