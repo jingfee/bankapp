@@ -30,6 +30,9 @@ function shiftMonth(month: string, by: number): string {
 /** Money sums are floats; rounding to öre keeps the noise out of the API. */
 const round = (value: number) => Math.round(value * 100) / 100 + 0;
 
+/** The transfer subcategory whose net deposits the overview shows as Sparande. */
+const SAVINGS_SUBCATEGORY = 'Sparande & investeringar';
+
 @Injectable()
 export class OverviewService {
   constructor(
@@ -56,9 +59,25 @@ export class OverviewService {
       totals: current.totals,
       previous: previous.totals,
       spendingByDay: { current: current.spendingByDay, previous: previous.spendingByDay },
+      savings: {
+        subcategoryId: this.savingsSubcategoryId(),
+        current: current.savings,
+        previous: previous.savings,
+      },
       categories: current.categories,
       uncategorised: current.uncategorised,
     };
+  }
+
+  private savingsSubcategoryId(): number | null {
+    return (
+      this.db
+        .select({ id: subcategories.id })
+        .from(subcategories)
+        .innerJoin(categories, eq(subcategories.categoryId, categories.id))
+        .where(and(eq(categories.kind, 'transfer'), eq(subcategories.name, SAVINGS_SUBCATEGORY)))
+        .get()?.id ?? null
+    );
   }
 
   /** The transactions of one subcategory in `month`, newest first. */
@@ -82,6 +101,7 @@ export class OverviewService {
     view: OverviewView,
   ): Pick<OverviewResponse, 'totals' | 'categories' | 'uncategorised'> & {
     spendingByDay: number[];
+    savings: number;
   } {
     const rows = this.db
       .select({
@@ -115,13 +135,18 @@ export class OverviewService {
     const [year, number] = month.split('-').map(Number) as [number, number];
     const daily: number[] = Array(new Date(Date.UTC(year, number, 0)).getUTCDate()).fill(0);
     let uncategorised = 0;
+    let deposited = 0;
     const byCategory = new Map<number, OverviewCategory>();
     for (const row of rows) {
       if (row.subcategoryId === null || row.categoryId === null || row.kind === null) {
         uncategorised += 1;
         continue;
       }
-      if (row.kind === 'transfer') continue;
+      if (row.kind === 'transfer') {
+        // Savings accounts aren't connected, so only the outgoing leg shows: out is a deposit.
+        if (row.subcategoryName === SAVINGS_SUBCATEGORY) deposited -= row.transaction.amount;
+        continue;
+      }
       // Spending is money out, so expenses are negated; income is counted as it is.
       const amount = shares
         ? ownerPart(row.transaction.amount, shares.get(row.transaction.id)!.percent)
@@ -178,6 +203,6 @@ export class OverviewService {
     totals.net = round(totals.income - totals.spending);
     let running = 0;
     const spendingByDay = daily.map((value) => round((running += value)));
-    return { totals, categories: list, uncategorised, spendingByDay };
+    return { totals, categories: list, uncategorised, spendingByDay, savings: round(deposited) };
   }
 }

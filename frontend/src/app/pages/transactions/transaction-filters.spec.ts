@@ -30,6 +30,7 @@ describe('transaction filters', () => {
       to: '',
       accounts: ['3', 'manual'],
       categories: ['4', 'none'],
+      subcategories: [],
       kind: 'out',
       min: '100',
       max: '5.5',

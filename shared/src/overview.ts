@@ -11,6 +11,19 @@ export interface OverviewTotals {
   net: number;
 }
 
+/**
+ * What went into savings (Överföring › Sparande & investeringar) net: money leaving the owner's
+ * accounts counts as a deposit, money coming back lowers it. Always the full amount, whatever the
+ * view. It is a transfer, so it is in none of the totals.
+ */
+export interface OverviewSavings {
+  /** The Sparande & investeringar subcategory, to link to its transactions. */
+  subcategoryId: number | null;
+  current: number;
+  /** The same for the month before. */
+  previous: number;
+}
+
 export interface OverviewSubcategory {
   id: number;
   name: string;
@@ -55,6 +68,7 @@ export interface OverviewResponse {
   /** The same totals for the month before. */
   previous: OverviewTotals;
   spendingByDay: OverviewSpendingByDay;
+  savings: OverviewSavings;
   /** Categories with transactions that month, largest first; income and expense together. */
   categories: OverviewCategory[];
   /** Transactions of the month without a subcategory; they are in no total. */

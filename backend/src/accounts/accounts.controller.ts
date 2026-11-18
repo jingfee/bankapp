@@ -32,8 +32,18 @@ export class TransactionsController {
     @Query('before') before?: string,
     @Query() query: Record<string, unknown> = {},
   ): TransactionsResponse {
-    const { q, from, to, accounts, categories, kind, min, max } = query;
-    const filter = parseFilter({ q, from, to, accounts, categories, kind, min, max });
+    const { q, from, to, accounts, categories, subcategories, kind, min, max } = query;
+    const filter = parseFilter({
+      q,
+      from,
+      to,
+      accounts,
+      categories,
+      subcategories,
+      kind,
+      min,
+      max,
+    });
     if ('error' in filter) throw new InvalidInput(filter.error);
     return this.accounts.listTransactions(before, filter);
   }

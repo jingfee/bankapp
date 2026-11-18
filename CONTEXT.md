@@ -205,6 +205,10 @@ _Avoid_: Deposits, credits, money in
 A transaction assigned a subcategory of the Överföring category, such as paying the card bill or moving money between the owner's own accounts. Transfers count as neither spending nor income.
 _Avoid_: Internal transaction, excluded transaction, transfer flag
 
+**Savings** (sv: _Sparande_):
+What the owner put into savings in a month, net: transactions in Överföring › Sparande & investeringar dated in the month, where money leaving the owner's accounts counts as a deposit and money coming back lowers it. Shown as its own tile on the overview, always at the full amount (savings are not shared), and still in none of Netto, Inkomster or Utgifter. Hidden accounts do not count. Savings accounts are not connected, so each transfer appears once, as its outgoing leg; connecting one would need a second look.
+_Avoid_: Net deposits (that is a savings account's lifetime figure)
+
 **Uncategorised transaction** (sv: _Okategoriserad_):
 A transaction that has no subcategory assigned, neither guessed nor confirmed.
 _Avoid_: Unknown, other, Övrigt

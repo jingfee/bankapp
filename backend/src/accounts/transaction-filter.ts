@@ -13,6 +13,8 @@ export interface TransactionFilter {
   /** Whether manual transactions, which have no account, are included in `accountIds`. */
   manual?: boolean;
   categoryIds?: number[];
+  /** Subcategory ids; combines with `categoryIds` by AND. */
+  subcategoryIds?: number[];
   /** Whether uncategorised transactions are included in `categoryIds`. */
   uncategorised?: boolean;
   kind?: 'out' | 'in';
@@ -23,7 +25,10 @@ export interface TransactionFilter {
 
 /** The raw query parameters of `GET /api/transactions` that filter. */
 export type FilterQuery = Partial<
-  Record<'q' | 'from' | 'to' | 'accounts' | 'categories' | 'kind' | 'min' | 'max', unknown>
+  Record<
+    'q' | 'from' | 'to' | 'accounts' | 'categories' | 'subcategories' | 'kind' | 'min' | 'max',
+    unknown
+  >
 >;
 
 /** Reads the query parameters; a message says what is wrong with one that is not valid. */
@@ -40,6 +45,7 @@ export function parseFilter(query: FilterQuery): TransactionFilter | { error: st
     to,
     accounts,
     categories: cats,
+    subcategories: subs,
     kind,
     min,
     max,
@@ -73,6 +79,13 @@ export function parseFilter(query: FilterQuery): TransactionFilter | { error: st
       else return { error: 'categories must be category ids or none, separated by commas' };
     }
     filter.categoryIds = ids;
+  }
+
+  if (subs !== undefined) {
+    const parts = subs.split(',');
+    if (!parts.every(isId))
+      return { error: 'subcategories must be subcategory ids, separated by commas' };
+    filter.subcategoryIds = parts.map(Number);
   }
 
   if (kind !== undefined) {
@@ -117,6 +130,9 @@ export function filterCondition(filter: TransactionFilter): SQL | undefined {
         filter.uncategorised ? isNull(transactions.subcategoryId) : undefined,
       ),
     );
+  }
+  if (filter.subcategoryIds !== undefined) {
+    conditions.push(inArray(transactions.subcategoryId, filter.subcategoryIds));
   }
   if (filter.kind === 'out') conditions.push(sql`${transactions.amount} < 0`);
   if (filter.kind === 'in') conditions.push(sql`${transactions.amount} > 0`);

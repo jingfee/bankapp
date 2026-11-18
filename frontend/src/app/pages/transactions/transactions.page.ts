@@ -344,6 +344,16 @@ export class TransactionsPage {
         remove: { categories: f.categories.filter((k) => k !== key) },
       });
     }
+    for (const key of f.subcategories) {
+      const name = this.categories()
+        .flatMap((c) => c.subcategories)
+        .find((s) => String(s.id) === key)?.name;
+      chips.push({
+        key: `subcategory-${key}`,
+        label: name ?? 'Underkategori',
+        remove: { subcategories: f.subcategories.filter((k) => k !== key) },
+      });
+    }
     return chips;
   });
 
@@ -368,7 +378,12 @@ export class TransactionsPage {
           this.moreRequest?.unsubscribe();
           this.loadingMore.set(false);
           if (filters.q !== this.searchText().trim()) this.searchText.set(filters.q);
-          if (filters.accounts.length > 0 || filters.categories.length > 0) this.loadLookups();
+          if (
+            filters.accounts.length > 0 ||
+            filters.categories.length > 0 ||
+            filters.subcategories.length > 0
+          )
+            this.loadLookups();
           return this.load(filters);
         }),
         takeUntilDestroyed(this.destroyRef),

@@ -228,6 +228,16 @@ describe('GET /api/transactions', () => {
       ]);
     });
 
+    it('filters on subcategories, and rejects ones that are not ids', async () => {
+      const food = category('Mat & Dryck');
+      const home = category('Boende & Hushåll');
+      add({ date: '2026-11-01', description: 'food', subcategoryId: food.subcategoryId });
+      add({ date: '2026-11-02', description: 'home', subcategoryId: home.subcategoryId });
+
+      expect(await descriptions(`?subcategories=${home.subcategoryId}`)).toEqual(['home']);
+      await api(app).get('/api/transactions?subcategories=abc').expect(400);
+    });
+
     it('filters on money out or in', async () => {
       add({ date: '2026-11-01', description: 'out', amount: -50 });
       add({ date: '2026-11-02', description: 'in', amount: 50 });

@@ -64,6 +64,7 @@ describe('OverviewPage', () => {
     totals: totals(0, 0),
     previous: totals(0, 0),
     spendingByDay: { current: Array(30).fill(0), previous: Array(31).fill(0) },
+    savings: { subcategoryId: 7, current: 0, previous: 0 },
     categories: [],
     uncategorised: 0,
     ...overrides,
@@ -356,12 +357,28 @@ describe('OverviewPage', () => {
       expect(text(total('net')?.querySelector('[data-change]'))).toContain('+5 000,00 kr');
     });
 
-    it('shows four tiles: netto, inkomster, utgifter and avräkning', async () => {
+    it('shows five tiles: netto, inkomster, utgifter, sparande and avräkning', async () => {
       const { page } = await render(overview(), accountsOf([]), 10);
 
       expect(
         Array.from(page.querySelectorAll('[data-total]')).map((t) => t.getAttribute('data-total')),
-      ).toEqual(['net', 'income', 'spending', 'settlement']);
+      ).toEqual(['net', 'income', 'spending', 'savings', 'settlement']);
+    });
+
+    it('shows the month’s savings with the change from last month, linking to its transactions', async () => {
+      const { page } = await render(
+        overview({ savings: { subcategoryId: 7, current: 3500, previous: 3000 } }),
+      );
+
+      const tile = page.querySelector('[data-total="savings"]');
+      expect(text(tile?.querySelector('.uppercase'))).toBe('Sparande');
+      expect(text(tile?.querySelector('[data-amount]'))?.replace(/\s/g, ' ')).toBe('3 500,00 kr');
+      expect(text(tile?.querySelector('[data-change]'))?.replace(/\s/g, ' ')).toContain(
+        '+500,00 kr',
+      );
+      expect(tile?.getAttribute('href')).toBe(
+        '/transaktioner?from=2026-11-01&to=2026-11-30&subcategories=7',
+      );
     });
 
     it('does not link the netto tile', async () => {
@@ -541,6 +558,7 @@ describe('OverviewPage', () => {
       expect(links).toEqual([
         '/transaktioner?from=2026-11-01&to=2026-11-30&kind=in',
         '/transaktioner?from=2026-11-01&to=2026-11-30&kind=out',
+        '/transaktioner?from=2026-11-01&to=2026-11-30&subcategories=7',
       ]);
 
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
