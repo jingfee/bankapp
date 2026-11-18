@@ -20,6 +20,7 @@ import type {
   Transaction,
 } from '@bankapp/shared';
 import { catchError, of } from 'rxjs';
+import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { today } from '../dates';
@@ -130,10 +131,8 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
                   <input
                     #amountInput
                     data-amount
-                    type="number"
+                    type="text"
                     inputmode="decimal"
-                    step="0.01"
-                    min="0"
                     placeholder="0"
                     class="field-control amount !flex-none text-center text-[44px] text-ink"
                     style="width: 9ch; field-sizing: content; min-width: 2ch"
@@ -241,7 +240,12 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
               <button type="button" data-cancel class="btn btn-ghost" (click)="dismiss()">
                 Avbryt
               </button>
-              <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="saving()">
+              <button
+                type="submit"
+                data-save
+                class="btn btn-primary flex-1"
+                [disabled]="saving() || !amountValid()"
+              >
                 Spara transaktion
               </button>
             </footer>
@@ -276,6 +280,11 @@ export class ManualTransactionSheet implements OnInit {
   protected readonly description = signal('');
   protected readonly direction = signal<'out' | 'in'>('out');
   protected readonly amount = signal('');
+  /** An empty amount is allowed until the owner saves; text that is not a number is not (zero is caught on save). */
+  protected readonly amountValid = computed(() => {
+    const text = this.amount().trim();
+    return text === '' || parseAmount(text) !== null;
+  });
   protected readonly date = signal(today());
   protected readonly subcategoryId = signal<number | null>(null);
   /** The share the owner chose; null leaves it to the subcategory. */
@@ -340,7 +349,7 @@ export class ManualTransactionSheet implements OnInit {
         this.editingId = t.id;
         this.description.set(t.description);
         this.direction.set(t.amount.amount < 0 ? 'out' : 'in');
-        this.amount.set(String(Math.abs(t.amount.amount)));
+        this.amount.set(formatAmountInput(Math.abs(t.amount.amount)));
         this.date.set(t.transactionDate ?? today());
         this.subcategoryId.set(t.category === null ? null : t.category.subcategory.id);
         this.share.set(t.share.source === 'transaction' ? t.share.option : null);
@@ -390,7 +399,8 @@ export class ManualTransactionSheet implements OnInit {
 
   protected save(): void {
     if (this.saving()) return;
-    const size = Math.round(Number(this.amount()) * 100) / 100;
+    const parsed = parseAmount(this.amount());
+    const size = parsed === null ? 0 : Math.round(parsed * 100) / 100;
     const subcategoryId = this.subcategoryId();
     if (!(size > 0) || this.description().trim() === '' || subcategoryId === null) {
       this.error.set(INCOMPLETE);

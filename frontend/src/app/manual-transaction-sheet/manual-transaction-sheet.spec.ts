@@ -98,7 +98,7 @@ describe('ManualTransactionSheet', () => {
     );
 
     fill(page, '[data-description]', 'ICA Maxi');
-    fill(page, '[data-amount]', '300');
+    fill(page, '[data-amount]', '300,50');
     click(page, '[data-category-tile="1"]');
     await fixture.whenStable();
     click(page, '[data-subcategory="11"]');
@@ -111,7 +111,7 @@ describe('ManualTransactionSheet', () => {
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toMatchObject({
       description: 'ICA Maxi',
-      amount: -300,
+      amount: -300.5,
       subcategoryId: 11,
       share: null,
       paidBy: 'owner',
@@ -160,7 +160,7 @@ describe('ManualTransactionSheet', () => {
     http.expectOne('/api/transactions/5').flush({
       id: 5,
       description: 'ICA Maxi',
-      amount: { amount: -300, currency: 'SEK' },
+      amount: { amount: -300.5, currency: 'SEK' },
       account: null,
       transactionDate: '2026-11-10',
       category: { subcategory: { id: 11 }, category: { id: 1 }, confirmed: true },
@@ -170,7 +170,7 @@ describe('ManualTransactionSheet', () => {
     await fixture.whenStable();
 
     expect((page.querySelector('[data-description]') as HTMLInputElement).value).toBe('ICA Maxi');
-    expect((page.querySelector('[data-amount]') as HTMLInputElement).value).toBe('300');
+    expect((page.querySelector('[data-amount]') as HTMLInputElement).value).toBe('300,5');
     expect((page.querySelector('[data-date]') as HTMLInputElement).value).toBe('2026-11-10');
     fill(page, '[data-amount]', '350');
     click(page, '[data-save]');
@@ -185,6 +185,17 @@ describe('ManualTransactionSheet', () => {
     });
     request.flush({ id: 5 });
     expect(host.saved.length).toBe(1);
+  });
+
+  it('keeps save disabled while the amount is not a number', async () => {
+    const { fixture, page } = await render();
+    const save = page.querySelector('[data-save]') as HTMLButtonElement;
+    fill(page, '[data-amount]', '12,3,4');
+    await fixture.whenStable();
+    expect(save.disabled).toBe(true);
+    fill(page, '[data-amount]', '12.5');
+    await fixture.whenStable();
+    expect(save.disabled).toBe(false);
   });
 
   it('does not edit a bank transaction', async () => {

@@ -14,6 +14,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
+import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
 import { today } from '../../dates';
@@ -119,7 +120,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                     type="submit"
                     data-save-balance
                     class="btn btn-primary"
-                    [disabled]="saving() || amount().trim() === '' || asOf() === ''"
+                    [disabled]="saving() || !amountValid() || asOf() === ''"
                   >
                     Spara saldo
                   </button>
@@ -436,6 +437,7 @@ export class DelatPage {
   });
   protected readonly settingOpen = signal(false);
   protected readonly amount = signal('');
+  protected readonly amountValid = computed(() => parseAmount(this.amount()) !== null);
   protected readonly asOf = signal(today());
   protected readonly showClosed = signal(false);
 
@@ -537,8 +539,8 @@ export class DelatPage {
   }
 
   protected saveBalance(): void {
-    const amount = Number(this.amount().replace(',', '.'));
-    if (!Number.isFinite(amount)) {
+    const amount = parseAmount(this.amount());
+    if (amount === null) {
       this.error.set('Ange saldot som ett tal.');
       return;
     }
