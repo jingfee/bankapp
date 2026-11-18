@@ -23,6 +23,7 @@ import { catchError, of } from 'rxjs';
 import { CategoriesService } from '../categories.service';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { today } from '../dates';
+import { lockPageScroll } from '../scroll-lock';
 import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
 import { SharesService } from '../shares.service';
 import { TransactionsService } from '../transactions.service';
@@ -52,7 +53,8 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
       data-backdrop
       tabindex="-1"
       aria-hidden="true"
-      class="sheet-backdrop fixed inset-0 z-50 cursor-default bg-black/55 backdrop-blur-sm"
+      [class.sheet-backdrop]="!entered()"
+      class="fixed inset-0 z-50 cursor-default bg-black/70"
       (click)="dismiss()"
     ></button>
     <div
@@ -61,7 +63,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
       aria-modal="true"
       [attr.aria-label]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
       data-sheet
-      class="modal-sheet bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
+      [class.modal-sheet]="!entered()"
+      (animationend)="$event.target === $event.currentTarget && entered.set(true)"
+      class="bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
       (keydown)="trapFocus($event)"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
@@ -95,7 +99,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
             class="flex min-h-0 flex-1 flex-col"
             (submit)="$event.preventDefault(); save()"
           >
-            <div class="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-3">
+            <div
+              class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-3"
+            >
               <div class="segmented self-start" role="group" aria-label="Typ">
                 <button
                   type="button"
@@ -260,6 +266,7 @@ export class ManualTransactionSheet implements OnInit {
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 
   protected readonly shareChoices = SHARE_CHOICES;
+  protected readonly entered = signal(false);
   protected readonly status = signal<Status>('loading');
   private readonly categories = signal<Category[]>([]);
   /** The share each subcategory with a share other than Jag has. */
@@ -293,10 +300,7 @@ export class ManualTransactionSheet implements OnInit {
   private readonly opener = document.activeElement;
 
   constructor() {
-    // Locks the page behind the sheet, so only the sheet scrolls.
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    inject(DestroyRef).onDestroy(() => (document.body.style.overflow = overflow));
+    lockPageScroll();
     inject(DestroyRef).onDestroy(() => {
       if (this.opener instanceof HTMLElement && this.opener.isConnected) this.opener.focus();
     });
