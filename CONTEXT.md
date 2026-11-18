@@ -49,7 +49,7 @@ An account the owner chose to hide on Banker. It is left off the start page and 
 _Avoid_: Deleted, archived, closed account (that is a different thing)
 
 **Account type** (sv: _Kontotyp_):
-Whether an account is a payment, savings or card account.
+Whether an account is a payment, savings or card account, as the bank reports it. It is a fact about the account, not the owner's choice; whether the owner tracks an account as a savings account is a separate thing.
 _Avoid_: Product, category
 
 **Card account** (sv: _Kortkonto_):
@@ -96,6 +96,20 @@ _Avoid_: Purchase date, date (unqualified)
 **Booking date** (sv: _Bokföringsdatum_):
 The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
 _Avoid_: Value date, posting date
+
+### Savings
+
+**Savings account** (sv: _Sparkonto_):
+An account the owner chose to follow by its balance only, such as a savings account or an ISK. It is shown on the savings view with its balance over time, but none of its transactions are shown anywhere (lists, review, overview, settlement balance). It is either a connected account the owner marked as one, which keeps syncing in the background, or a manual savings account. Whatever its account type, an account is a savings account only if the owner says so.
+_Avoid_: Savings-type account (that is the account type), hidden account (that is not shown at all), investment account
+
+**Manual savings account** (sv: _Manuellt sparkonto_):
+A savings account the app cannot reach through Enable Banking, such as an ISK, that the owner keeps up to date with balance entries. It belongs to no connection.
+_Avoid_: Manual account, offline account, external account
+
+**Balance entry** (sv: _Saldonotering_):
+The owner stating that a manual savings account held a given amount on a given day (today by default). Entries are kept as history, at most one per account per day, and can be corrected or deleted. Connected savings accounts get their balance history from syncing instead.
+_Avoid_: Balance setting (that is for the settlement balance), snapshot, valuation
 
 ### Syncing
 
