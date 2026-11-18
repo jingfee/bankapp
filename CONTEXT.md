@@ -34,6 +34,10 @@ _Avoid_: Reconnect, reauthorize, new connection
 A connection whose permission has run out; its accounts keep their history but are no longer synced until it is renewed.
 _Avoid_: Disconnected, invalid
 
+**Removed bank** (sv: _Borttagen bank_):
+A bank the owner removed from Banker because they no longer use it. Its connection is no longer synced and is revoked, and its accounts become closed accounts: their transactions keep counting as history, in lists, past months and settlements, and a hidden account stays hidden. Connecting the same bank again brings it back, and its accounts continue where they left off. A savings account of a removed bank either closes or, if the owner chooses, continues as a manual savings account from its last synced balance. A removed bank can later be deleted for good, which erases it and everything it brought in (ADR 0013).
+_Avoid_: Deleted bank, disconnected, ended connection
+
 ### Money
 
 **Account** (sv: _Konto_):
@@ -41,7 +45,7 @@ A single bank account or card account at a bank, with a balance and transactions
 _Avoid_: Bank account (when a card is meant), login, connection
 
 **Closed account** (sv: _Avslutat konto_):
-An account that a renewal no longer returns. It keeps its history and is never deleted, but is no longer synced.
+An account that a renewal no longer returns, or a manual savings account the owner closed (e.g. a sold-off ISK). It keeps its history and is never deleted, but is no longer synced or asked for balance entries; on the savings view it counts as 0 from the day it closed.
 _Avoid_: Deleted, removed, inactive
 
 **Hidden account** (sv: _Dolt konto_):
@@ -49,7 +53,7 @@ An account the owner chose to hide on Banker. It is left off the start page and 
 _Avoid_: Deleted, archived, closed account (that is a different thing)
 
 **Account type** (sv: _Kontotyp_):
-Whether an account is a payment, savings or card account.
+Whether an account is a payment, savings or card account, as the bank reports it. It is a fact about the account, not the owner's choice; whether the owner tracks an account as a savings account is a separate thing.
 _Avoid_: Product, category
 
 **Card account** (sv: _Kortkonto_):
@@ -96,6 +100,28 @@ _Avoid_: Purchase date, date (unqualified)
 **Booking date** (sv: _Bokföringsdatum_):
 The day the bank booked the transaction, often a few days after the transaction date. A pending transaction has none.
 _Avoid_: Value date, posting date
+
+### Savings
+
+**Savings account** (sv: _Sparkonto_):
+An account the owner chose to follow by its balance only, such as a savings account or an ISK. It is shown on the savings view with its balance over time, but none of its transactions are shown anywhere (lists, review, overview, settlement balance). It is either a connected account the owner marked as one, which keeps syncing in the background, or a manual savings account. Whatever its account type, an account is a savings account only if the owner says so. A savings account cannot also be hidden; when the owner stops tracking an account as a savings account, its transactions show everywhere again, as when an account is shown again.
+_Avoid_: Savings-type account (that is the account type), hidden account (that is not shown at all), investment account
+
+**Manual savings account** (sv: _Manuellt sparkonto_):
+A savings account the app cannot reach through Enable Banking, such as an ISK, that the owner keeps up to date with balance entries. It belongs to no connection.
+_Avoid_: Manual account, offline account, external account
+
+**Balance entry** (sv: _Saldonotering_):
+The owner stating that a manual savings account held a given amount, and its net deposits, on a given day (today by default). Entries are kept as history, at most one per account per day, and can be corrected or deleted. Connected savings accounts get their balance history from syncing instead.
+_Avoid_: Balance setting (that is for the settlement balance), snapshot, valuation
+
+**Net deposits** (sv: _Insatt_):
+What the owner has put into a savings account in total, minus what was taken out, since the account was opened. For a manual savings account each balance entry states it as the broker shows it; what was deposited in a stretch of time is the difference between two entries.
+_Avoid_: Deposits (for a single transfer), invested capital, contributions
+
+**Growth** (sv: _Utveckling_):
+How much a savings account's balance changed by itself rather than by deposits: interest, dividends and price changes. Over a stretch of time it is the change in balance minus the change in net deposits; since the start it is the balance minus net deposits. It can be negative.
+_Avoid_: Return, yield, profit, avkastning
 
 ### Syncing
 
