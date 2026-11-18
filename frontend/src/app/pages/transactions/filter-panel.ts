@@ -34,7 +34,7 @@ export interface PanelAccount {
       data-backdrop
       tabindex="-1"
       aria-hidden="true"
-      class="sheet-backdrop fixed inset-0 z-50 bg-black/55 backdrop-blur-sm cursor-default"
+      class="sheet-backdrop fixed inset-0 z-50 bg-black/70 cursor-default"
       (click)="closed.emit()"
     ></button>
     <section

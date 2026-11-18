@@ -53,7 +53,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
       data-backdrop
       tabindex="-1"
       aria-hidden="true"
-      class="sheet-backdrop fixed inset-0 z-50 cursor-default bg-black/55 backdrop-blur-sm"
+      class="sheet-backdrop fixed inset-0 z-50 cursor-default bg-black/70"
       (click)="dismiss()"
     ></button>
     <div
