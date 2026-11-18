@@ -123,6 +123,24 @@ _Avoid_: Deposits (for a single transfer), invested capital, contributions
 How much a savings account's balance changed by itself rather than by deposits: interest, dividends and price changes. Over a stretch of time it is the change in balance minus the change in net deposits; since the start it is the balance minus net deposits. It can be negative.
 _Avoid_: Return, yield, profit, avkastning
 
+### Mortgage
+
+**Mortgage** (sv: _Bolån_):
+The owner's home loan, followed by its remaining debt, interest rate and amortisation, which the owner updates by hand. It is not an account and has no transactions of its own; the payments for it are ordinary transactions in Bolån ränta & amortering. The app shows the whole loan as the bank does, not the owner's part.
+_Avoid_: Loan (for now there is only the mortgage), debt account, mortgage account
+
+**Loan part** (sv: _Lånedel_):
+One part of a mortgage with its own remaining debt, interest rate and amortisation, and, if its rate is fixed, the day the fixed period ends. A mortgage has one or more loan parts; its debt is their sum.
+_Avoid_: Tranche, sub-loan, loan (for a part)
+
+**Mortgage entry** (sv: _Bolånenotering_):
+The owner stating, for a given day (today by default), each loan part's remaining debt, interest rate and monthly amortisation, as the bank shows them. Entries are kept as history, so the rate and amortisation that applied at each point remain visible.
+_Avoid_: Balance entry (that is for savings accounts), statement, snapshot
+
+**Estimated monthly payment** (sv: _Beräknad månadsbetalning_):
+What the mortgage should cost per month according to the latest mortgage entry: for each loan part, its debt times its interest rate divided by twelve, plus its amortisation. It is an estimate because the bank charges interest by the day; what was actually paid is the month's transactions in Bolån ränta & amortering.
+_Avoid_: Monthly cost, instalment, avgift
+
 ### Syncing
 
 **Sync** (sv: _Uppdatering_):
