@@ -124,6 +124,12 @@ export interface TransactionCategoryResponse {
    * re-guessed to match a newly chosen category; 0 when it was removed.
    */
   updatedSimilar: number;
+  /**
+   * The other transactions whose category changed with it: the re-guessed similar ones and the
+   * offset refunds that follow it, with the category each has now. Lets a listed page update
+   * those rows in place.
+   */
+  others: { id: number; category: TransactionCategory | null }[];
 }
 
 /**

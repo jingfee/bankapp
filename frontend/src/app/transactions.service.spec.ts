@@ -44,7 +44,7 @@ describe('TransactionsService mutations', () => {
       'PUT',
       '/api/transactions/1/category',
       (s) => s.setCategory(1, 2),
-      { category: null, updatedSimilar: 0 },
+      { category: null, updatedSimilar: 0, others: [] },
     ],
     ['setOffset', 'PUT', '/api/transactions/1/offset', (s) => s.setOffset(1, 2), {}],
     ['setShare', 'PUT', '/api/transactions/1/share', (s) => s.setShare(1, 'half'), {}],
@@ -60,4 +60,38 @@ describe('TransactionsService mutations', () => {
       if (name !== 'setCategory') expect(service.listed).toBeNull();
     });
   }
+
+  it('keeps the listed transactions after a category change, updating the rows it touched', () => {
+    const row = (id: number) => ({ id, category: null }) as never;
+    const category = (name: string) => ({ subcategory: { name } }) as never;
+    const listed = {
+      key: 'q',
+      transactions: [row(1), row(2), row(3), row(4)],
+      cursor: 'c',
+      count: 9,
+      sum: null,
+    };
+    service.listed = listed;
+
+    service.setCategory(1, 2).subscribe();
+    http.expectOne('/api/transactions/1/category').flush({
+      category: category('Mat'),
+      updatedSimilar: 1,
+      others: [
+        { id: 2, category: category('Mat') },
+        { id: 4, category: null },
+      ],
+    });
+    http.expectOne('/api/transactions/review/count').flush({ count: 0 });
+
+    expect(service.listed?.key).toBe('q');
+    expect(service.listed?.cursor).toBe('c');
+    expect(service.listed?.count).toBe(9);
+    expect(service.listed?.transactions.map((t) => t.category)).toEqual([
+      category('Mat'),
+      category('Mat'),
+      null,
+      null,
+    ]);
+  });
 });

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { TransactionCategory } from '@bankapp/shared';
+import type { TransactionCategoryResponse } from '@bankapp/shared';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { CLOCK, type Clock } from '../../clock';
 import type { AppDatabase } from '../../db/database';
@@ -44,10 +44,7 @@ export class Categorising {
    * when a category was chosen, how many other transactions with the same normalised description
    * were guessed anew to match (ADR 0004). Confirmed transactions are never touched.
    */
-  set(
-    id: number,
-    subcategoryId: number | null,
-  ): { category: TransactionCategory | null; updatedSimilar: number } {
+  set(id: number, subcategoryId: number | null): TransactionCategoryResponse {
     if (subcategoryId !== null && !this.subcategoryExists(this.db, subcategoryId)) {
       throw new UnknownSubcategory();
     }
@@ -60,10 +57,29 @@ export class Categorising {
       if (current === undefined) throw new NoSuchTransaction();
       // A kvittad refund follows its purchase; the owner changes the purchase instead.
       if (current.offsets !== null) throw new FollowsPurchase();
+      const before = this.categoryState(tx);
       this.confirm(tx, id, subcategoryId);
       const updatedSimilar = subcategoryId === null ? 0 : this.spread(tx, id, subcategoryId);
-      return { category: categoryOf(tx, id), updatedSimilar };
+      const others = [...this.categoryState(tx)]
+        .filter(([other, state]) => other !== id && before.get(other) !== state)
+        .map(([other]) => ({ id: other, category: categoryOf(tx, other) }));
+      return { category: categoryOf(tx, id), updatedSimilar, others };
     });
+  }
+
+  /** What each transaction's category is made of, to tell which ones a change touched. */
+  private categoryState(db: Pick<AppDatabase, 'select'>): Map<number, string> {
+    return new Map(
+      db
+        .select({
+          id: transactions.id,
+          subcategoryId: transactions.subcategoryId,
+          confirmed: transactions.categoryConfirmed,
+        })
+        .from(transactions)
+        .all()
+        .map((row) => [row.id, `${row.subcategoryId}/${row.confirmed}`]),
+    );
   }
 
   /** Confirms the subcategory (or none) of a transaction as the owner's decision. */

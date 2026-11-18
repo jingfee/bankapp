@@ -330,7 +330,7 @@ describe('TransactionDetailsPage', () => {
       );
       expect(request.request.method).toBe('PUT');
       expect(request.request.body).toEqual({ subcategoryId: 12 });
-      request.flush({ category: livsmedel, updatedSimilar: 0 });
+      request.flush({ category: livsmedel, updatedSimilar: 0, others: [] });
       await rendered.fixture.whenStable();
 
       expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
@@ -348,7 +348,7 @@ describe('TransactionDetailsPage', () => {
       (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
       TestBed.inject(HttpTestingController)
         .expectOne('/api/transactions/5/category')
-        .flush({ category: livsmedel, updatedSimilar: 1 });
+        .flush({ category: livsmedel, updatedSimilar: 1, others: [] });
       await rendered.fixture.whenStable();
       rendered.fixture.detectChanges();
 
@@ -454,7 +454,7 @@ describe('TransactionDetailsPage', () => {
       );
       expect(request.request.method).toBe('PUT');
       expect(request.request.body).toEqual({ subcategoryId: 13 });
-      request.flush({ category: restaurang, updatedSimilar: 0 });
+      request.flush({ category: restaurang, updatedSimilar: 0, others: [] });
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Mat & Dryck / Restaurang');
@@ -471,7 +471,7 @@ describe('TransactionDetailsPage', () => {
         '/api/transactions/5/category',
       );
       expect(request.request.body).toEqual({ subcategoryId: null });
-      request.flush({ category: null, updatedSimilar: 0 });
+      request.flush({ category: null, updatedSimilar: 0, others: [] });
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Okategoriserad');
