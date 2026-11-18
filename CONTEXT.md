@@ -123,6 +123,44 @@ _Avoid_: Deposits (for a single transfer), invested capital, contributions
 How much a savings account's balance changed by itself rather than by deposits: interest, dividends and price changes. Over a stretch of time it is the change in balance minus the change in net deposits; since the start it is the balance minus net deposits. It can be negative.
 _Avoid_: Return, yield, profit, avkastning
 
+### Mortgage
+
+**Mortgage** (sv: _Bolån_):
+The owner's home loan, followed by its remaining debt, interest rate and amortisation, which the owner updates by hand. It is not an account and has no transactions of its own; the payments for it are ordinary transactions in Bolån ränta & amortering. The app shows the whole loan as the bank does, not the owner's part.
+_Avoid_: Loan (for now there is only the mortgage), debt account, mortgage account
+
+**Loan part** (sv: _Lånedel_):
+One part of a mortgage, named by the owner, with its own remaining debt, interest rate and amortisation. A mortgage has one or more loan parts; its debt is their sum. Parts are added and ended as the mortgage is renegotiated: an ended part, paid off or merged into a new one, keeps its history and counts as 0 from the day it ended.
+
+**Remaining debt** (sv: _Kvarvarande skuld_):
+What is left to pay on a loan part: the debt in its latest mortgage entry, less its amortisation once for every month after that day in which the mortgage was paid, that is, a month with a booked transaction in Bolån ränta & amortering. Pending payments do not count until they book. The owner corrects it with a new mortgage entry, e.g. after paying extra.
+_Avoid_: Balance, loan amount, principal
+
+**Interest rate change** (sv: _Ränteändring_):
+The owner stating a loan part's new interest rate, in force from a given day until the next change. The rate is kept until it is changed; the bank's rate cannot be fetched, so the owner enters it.
+_Avoid_: Rate update, new rate (as a thing)
+
+**Amortisation** (sv: _Amortering_):
+What the owner pays off a loan part each month, in kronor. Like the interest rate, it is kept from a given day until the owner changes it.
+_Avoid_: Repayment, instalment, principal
+
+**Rate adjustment day** (sv: _Räntejusteringsdag_):
+The day a loan part's interest rate is next reset by the bank, recurring at the part's rate adjustment interval (e.g. every 3 months). On that day the owner is reminded to enter the new rate.
+_Avoid_: Bindningstid (that is the interval), rate change day, ränteändringsdag
+
+**Terms change day** (sv: _Villkorsändringsdag_):
+The day a loan part's terms can next be renegotiated, recurring at its terms change interval (e.g. every year).
+_Avoid_: Renewal (that is for connections), rate adjustment day
+_Avoid_: Tranche, sub-loan, loan (for a part)
+
+**Mortgage entry** (sv: _Bolånenotering_):
+The owner stating, for a given day (today by default), each loan part's remaining debt as the bank shows it, to start following the mortgage or to correct the remaining debt the app worked out. Entries are kept as history. The interest rate and amortisation are not part of it; they are kept until the owner changes them.
+_Avoid_: Balance entry (that is for savings accounts), statement, snapshot
+
+**Estimated monthly payment** (sv: _Beräknad månadsbetalning_):
+What the mortgage should cost per month: for each loan part, its remaining debt times the interest rate in force divided by twelve, plus its amortisation. It is an estimate because the bank charges interest by the day; what was actually paid is the month's transactions in Bolån ränta & amortering.
+_Avoid_: Monthly cost, instalment, avgift
+
 ### Syncing
 
 **Sync** (sv: _Uppdatering_):
