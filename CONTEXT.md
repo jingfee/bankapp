@@ -108,8 +108,16 @@ A savings account the app cannot reach through Enable Banking, such as an ISK, t
 _Avoid_: Manual account, offline account, external account
 
 **Balance entry** (sv: _Saldonotering_):
-The owner stating that a manual savings account held a given amount on a given day (today by default). Entries are kept as history, at most one per account per day, and can be corrected or deleted. Connected savings accounts get their balance history from syncing instead.
+The owner stating that a manual savings account held a given amount, and its net deposits, on a given day (today by default). Entries are kept as history, at most one per account per day, and can be corrected or deleted. Connected savings accounts get their balance history from syncing instead.
 _Avoid_: Balance setting (that is for the settlement balance), snapshot, valuation
+
+**Net deposits** (sv: _Insatt_):
+What the owner has put into a savings account in total, minus what was taken out, since the account was opened. For a manual savings account each balance entry states it as the broker shows it; what was deposited in a stretch of time is the difference between two entries.
+_Avoid_: Deposits (for a single transfer), invested capital, contributions
+
+**Growth** (sv: _Utveckling_):
+How much a savings account's balance changed by itself rather than by deposits: interest, dividends and price changes. Over a stretch of time it is the change in balance minus the change in net deposits; since the start it is the balance minus net deposits. It can be negative.
+_Avoid_: Return, yield, profit, avkastning
 
 ### Syncing
 
