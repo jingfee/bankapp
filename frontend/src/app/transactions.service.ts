@@ -134,23 +134,28 @@ export class TransactionsService {
 
   /**
    * Sets the owner's chosen subcategory as confirmed, or removes it with null. The list kept for
-   * the way back is updated too, so it does not show the old category; when other transactions
-   * were re-guessed with it, that list is dropped so it is fetched again.
+   * the way back is updated in place, so it keeps its pages and does not show the old category:
+   * the row itself, the similar rows that were re-guessed and the refunds that follow it. A row
+   * that no longer matches an active category filter stays until the list is next loaded afresh.
    */
   setCategory(id: number, subcategoryId: number | null): Observable<TransactionCategoryResponse> {
     const body: SetTransactionCategoryRequest = { subcategoryId };
     return this.http
       .put<TransactionCategoryResponse>(`/api/transactions/${id}/category`, body)
       .pipe(
-        tap(({ category, updatedSimilar }) => {
-          if (this.listed === null || updatedSimilar > 0) {
+        tap(({ category, others }) => {
+          if (this.listed === null) {
             this.changed();
             return;
           }
+          const categories = new Map(others.map((o) => [o.id, o.category]));
+          categories.set(id, category);
+          // Only the rows' categories change here. With a category filter active, `count` and
+          // `sum` and the rows' membership stay as loaded until the next fresh load.
           this.changed({
             ...this.listed,
             transactions: this.listed.transactions.map((t) =>
-              t.id === id ? { ...t, category } : t,
+              categories.has(t.id) ? { ...t, category: categories.get(t.id)! } : t,
             ),
           });
         }),

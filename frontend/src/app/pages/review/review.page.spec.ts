@@ -142,7 +142,7 @@ describe('ReviewPage', () => {
     (page.querySelector('li[data-id="4"] [data-confirm]') as HTMLButtonElement).click();
     http
       .expectOne('/api/transactions/4/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
     await fixture.whenStable();
 
     expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe('3 kvar att bekräfta');
@@ -165,7 +165,7 @@ describe('ReviewPage', () => {
       (page.querySelector('li[data-id="13"] [data-subcategory="13"]') as HTMLButtonElement).click();
       http
         .expectOne('/api/transactions/13/category')
-        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
       await fixture.whenStable();
 
       expect(ids(page)).toEqual(['12', '11', '10', '9', '8']);
@@ -193,7 +193,7 @@ describe('ReviewPage', () => {
       (page.querySelector('[data-confirm]') as HTMLButtonElement).click();
       http
         .expectOne('/api/transactions/1/category')
-        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
       expect(page.querySelector('li[data-id="1"]')?.hasAttribute('data-leaving')).toBe(true);
@@ -228,7 +228,7 @@ describe('ReviewPage', () => {
     const request = http.expectOne('/api/transactions/2/category');
     expect(request.request.method).toBe('PUT');
     expect(request.request.body).toEqual({ subcategoryId: 12 });
-    request.flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+    request.flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
     await fixture.whenStable();
 
     expect(ids(page)).toEqual(['1']);
@@ -248,7 +248,7 @@ describe('ReviewPage', () => {
     (page.querySelector('li[data-id="3"] [data-confirm]') as HTMLButtonElement).click();
     http
       .expectOne('/api/transactions/3/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 2 });
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 2, others: [] });
     http.expectOne('/api/transactions/review').flush({
       count: 2,
       transactions: [transaction(2, { category: guess }), transaction(1, { category: guess })],
@@ -291,7 +291,7 @@ describe('ReviewPage', () => {
     (page.querySelector('li[data-id="2"] [data-subcategory="13"]') as HTMLButtonElement).click();
     http
       .expectOne('/api/transactions/2/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0 });
+      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
     await fixture.whenStable();
     expect(ids(page)).toEqual([]);
   });

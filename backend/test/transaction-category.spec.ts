@@ -88,7 +88,7 @@ describe('categorising a transaction by hand', () => {
       subcategory: { id: livsmedel, name: 'Livsmedel', icon: 'shopping-basket' },
       confirmed: true,
     };
-    expect(response.body).toEqual({ category: expected, updatedSimilar: 0 });
+    expect(response.body).toEqual({ category: expected, updatedSimilar: 0, others: [] });
     expect((await detail()).category).toEqual(expected);
     expect((await listed()).category).toEqual(expected);
   });
@@ -106,7 +106,7 @@ describe('categorising a transaction by hand', () => {
 
     const response = await put({ subcategoryId: null }).expect(200);
 
-    expect(response.body).toEqual({ category: null, updatedSimilar: 0 });
+    expect(response.body).toEqual({ category: null, updatedSimilar: 0, others: [] });
     expect((await detail()).category).toBeNull();
   });
 
@@ -164,6 +164,34 @@ describe('categorising a transaction by hand', () => {
       expect(stored(5).subcategoryId).toBeNull();
     });
 
+    it('reports the other transactions it changed, with their category now', async () => {
+      const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
+      add(2, 'ICA Nara Hornstull');
+      add(3, 'Spotify');
+      add(4, 'Refund', { offsetsTransactionId: 1 });
+
+      const response = await put({ subcategoryId: livsmedel }).expect(200);
+
+      const others = response.body.others as { id: number; category: unknown }[];
+      expect(others.map((o) => o.id).sort()).toEqual([2, 4]);
+      for (const other of others) {
+        expect(other.category).toMatchObject({ subcategory: { id: livsmedel } });
+      }
+      expect(others.find((o) => o.id === 4)?.category).toMatchObject({ confirmed: true });
+      expect(others.find((o) => o.id === 2)?.category).toMatchObject({ confirmed: false });
+    });
+
+    it('reports refunds that become unconfirmed when the purchase loses its category', async () => {
+      const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
+      await put({ subcategoryId: livsmedel }).expect(200);
+      add(4, 'Refund', { offsetsTransactionId: 1 });
+      await put({ subcategoryId: livsmedel }).expect(200);
+
+      const response = await put({ subcategoryId: null }).expect(200);
+
+      expect(response.body.others).toEqual([{ id: 2, category: null }]);
+    });
+
     it('leaves confirmed neighbours alone, also those without a category', async () => {
       const livsmedel = await subcategoryId('Livsmedel', 'Mat & Dryck');
       const alkohol = await subcategoryId('Alkohol', 'Mat & Dryck');
@@ -183,7 +211,7 @@ describe('categorising a transaction by hand', () => {
 
       const response = await put({ subcategoryId: null }).expect(200);
 
-      expect(response.body).toEqual({ category: null, updatedSimilar: 0 });
+      expect(response.body).toEqual({ category: null, updatedSimilar: 0, others: [] });
       expect(stored(2).subcategoryId).toBe(alkohol);
     });
   });
