@@ -34,6 +34,10 @@ _Avoid_: Reconnect, reauthorize, new connection
 A connection whose permission has run out; its accounts keep their history but are no longer synced until it is renewed.
 _Avoid_: Disconnected, invalid
 
+**Removed bank** (sv: _Borttagen bank_):
+A bank the owner removed from Banker because they no longer use it. Its connection is no longer synced and is revoked, and its accounts become closed accounts: their transactions keep counting as history, in lists, past months and settlements, and a hidden account stays hidden. Connecting the same bank again brings it back, and its accounts continue where they left off.
+_Avoid_: Deleted bank, disconnected, ended connection
+
 ### Money
 
 **Account** (sv: _Konto_):
@@ -100,7 +104,7 @@ _Avoid_: Value date, posting date
 ### Savings
 
 **Savings account** (sv: _Sparkonto_):
-An account the owner chose to follow by its balance only, such as a savings account or an ISK. It is shown on the savings view with its balance over time, but none of its transactions are shown anywhere (lists, review, overview, settlement balance). It is either a connected account the owner marked as one, which keeps syncing in the background, or a manual savings account. Whatever its account type, an account is a savings account only if the owner says so.
+An account the owner chose to follow by its balance only, such as a savings account or an ISK. It is shown on the savings view with its balance over time, but none of its transactions are shown anywhere (lists, review, overview, settlement balance). It is either a connected account the owner marked as one, which keeps syncing in the background, or a manual savings account. Whatever its account type, an account is a savings account only if the owner says so. A savings account cannot also be hidden; when the owner stops tracking an account as a savings account, its transactions show everywhere again, as when an account is shown again.
 _Avoid_: Savings-type account (that is the account type), hidden account (that is not shown at all), investment account
 
 **Manual savings account** (sv: _Manuellt sparkonto_):
