@@ -42,7 +42,7 @@ export interface PanelAccount {
       aria-modal="true"
       aria-label="Filter"
       data-filter-panel
-      class="sheet bg-surface-1 fixed inset-x-0 top-[10dvh] bottom-0 z-50 flex flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:w-[420px] sm:rounded-3xl"
+      class="sheet bg-surface-1 fixed right-0 bottom-0 left-0 z-50 flex h-[90dvh] flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:h-auto sm:w-[420px] sm:rounded-3xl"
     >
       <header class="flex items-center justify-between px-5 pt-4 pb-2">
         <h2 class="text-lg font-semibold">Filter</h2>
