@@ -131,14 +131,30 @@ _Avoid_: Loan (for now there is only the mortgage), debt account, mortgage accou
 
 **Loan part** (sv: _Lånedel_):
 One part of a mortgage, named by the owner, with its own remaining debt, interest rate and amortisation. A mortgage has one or more loan parts; its debt is their sum. Parts are added and ended as the mortgage is renegotiated: an ended part, paid off or merged into a new one, keeps its history and counts as 0 from the day it ended.
+
+**Interest rate change** (sv: _Ränteändring_):
+The owner stating a loan part's new interest rate, in force from a given day until the next change. The rate is kept until it is changed; the bank's rate cannot be fetched, so the owner enters it.
+_Avoid_: Rate update, new rate (as a thing)
+
+**Amortisation** (sv: _Amortering_):
+What the owner pays off a loan part each month, in kronor. Like the interest rate, it is kept from a given day until the owner changes it.
+_Avoid_: Repayment, instalment, principal
+
+**Rate adjustment day** (sv: _Räntejusteringsdag_):
+The day a loan part's interest rate is next reset by the bank, recurring at the part's rate adjustment interval (e.g. every 3 months). On that day the owner is reminded to enter the new rate.
+_Avoid_: Bindningstid (that is the interval), rate change day, ränteändringsdag
+
+**Terms change day** (sv: _Villkorsändringsdag_):
+The day a loan part's terms can next be renegotiated, recurring at its terms change interval (e.g. every year).
+_Avoid_: Renewal (that is for connections), rate adjustment day
 _Avoid_: Tranche, sub-loan, loan (for a part)
 
 **Mortgage entry** (sv: _Bolånenotering_):
-The owner stating, for a given day (today by default), each loan part's remaining debt, interest rate and monthly amortisation, as the bank shows them. Entries are kept as history, so the rate and amortisation that applied at each point remain visible.
+The owner stating, for a given day (today by default), each loan part's remaining debt as the bank shows it. Entries are kept as history. The interest rate and amortisation are not part of it; they are kept until the owner changes them.
 _Avoid_: Balance entry (that is for savings accounts), statement, snapshot
 
 **Estimated monthly payment** (sv: _Beräknad månadsbetalning_):
-What the mortgage should cost per month according to the latest mortgage entry: for each loan part, its debt times its interest rate divided by twelve, plus its amortisation. It is an estimate because the bank charges interest by the day; what was actually paid is the month's transactions in Bolån ränta & amortering.
+What the mortgage should cost per month: for each loan part, its remaining debt times the interest rate in force divided by twelve, plus its amortisation. It is an estimate because the bank charges interest by the day; what was actually paid is the month's transactions in Bolån ränta & amortering.
 _Avoid_: Monthly cost, instalment, avgift
 
 ### Syncing
