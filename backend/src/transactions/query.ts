@@ -29,7 +29,8 @@ export function isReplaced(db: Pick<AppDatabase, 'select'>) {
 }
 
 /**
- * Only transactions of accounts the owner has not hidden are shown anywhere; a manual
+ * Only transactions of accounts the owner has neither hidden nor marked as a savings account
+ * (followed by balance only) are shown anywhere; a manual
  * transaction has no account and is never hidden, unless a bank transaction replaces it
  * (ADR 0009).
  */
@@ -39,7 +40,10 @@ export function onVisibleAccount(db: Pick<AppDatabase, 'select'>) {
       isNull(transactions.accountId),
       inArray(
         transactions.accountId,
-        db.select({ id: accounts.id }).from(accounts).where(eq(accounts.hidden, false)),
+        db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.hidden, false), eq(accounts.savings, false))),
       ),
     ),
     not(isReplaced(db)),

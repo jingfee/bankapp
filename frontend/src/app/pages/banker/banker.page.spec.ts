@@ -53,6 +53,7 @@ describe('BankerPage', () => {
     type,
     balance: null,
     hidden: false,
+    savings: false,
     share: 'me',
     lastSyncedAt: null,
   });
@@ -508,13 +509,17 @@ describe('BankerPage', () => {
     });
 
     it('shows closed accounts apart from the others', async () => {
-      const page = await render(swedbank({ closedAccounts: [account('Sparkonto', 'savings', 9)] }));
+      const page = await render(
+        swedbank({ closedAccounts: [account('Gammalt konto', 'savings', 9)] }),
+      );
 
       const closed = page.querySelector('[data-closed-accounts]');
       expect(closed?.querySelector('h3')?.textContent?.trim()).toBe('Avslutade konton');
-      expect(closed?.textContent).toContain('Sparkonto');
+      expect(closed?.textContent).toContain('Gammalt konto');
       expect(closed?.textContent).toContain('Avslutat');
-      expect(page.querySelector('section[data-bank] > ul')?.textContent).not.toContain('Sparkonto');
+      expect(page.querySelector('section[data-bank] > ul')?.textContent).not.toContain(
+        'Gammalt konto',
+      );
     });
   });
 
@@ -547,6 +552,35 @@ describe('BankerPage', () => {
       expect(after?.textContent?.trim()).toBe('Dolt');
       expect(after?.getAttribute('aria-label')).toBe('Visa kontot igen');
       expect(after?.classList).toContain('border-dashed');
+    });
+  });
+
+  describe('marking an account as a savings account', () => {
+    it('marks it with the hint and sends the choice', async () => {
+      const response = (savings: boolean): AccountsResponse => ({
+        banks: [group('Swedbank', [{ ...account('Sparkonto', 'payment', 7), savings }])],
+        syncing: null,
+        lastSync: null,
+      });
+      const page = await render((request) => request.flush(response(false)));
+      const box = page.querySelector<HTMLButtonElement>('[data-toggle-savings]');
+      expect(box?.textContent?.trim()).toBe('Vanligt konto');
+      expect(box?.getAttribute('title')).toContain('följ bara saldot');
+
+      box?.click();
+      const http = TestBed.inject(HttpTestingController);
+      const put = http.expectOne('/api/accounts/7/savings');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ savings: true });
+      put.flush(null);
+      await new Promise((resolve) => setTimeout(resolve));
+      http.expectOne('/api/accounts').flush(response(true));
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[data-toggle-savings]')?.textContent?.trim()).toBe('Sparkonto');
+      expect(page.querySelector('[data-account-name]')?.parentElement?.textContent).toContain(
+        'Sparkonto',
+      );
     });
   });
 

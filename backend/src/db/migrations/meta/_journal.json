@@ -169,6 +169,13 @@
       "when": 1795105046811,
       "tag": "0023_settlement_months",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1795106636920,
+      "tag": "0024_account_savings",
+      "breakpoints": true
     }
   ]
 }

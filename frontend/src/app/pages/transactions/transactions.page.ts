@@ -437,7 +437,7 @@ export class TransactionsPage {
         map((response) =>
           response.banks.flatMap((bank) =>
             [...bank.accounts, ...bank.closedAccounts]
-              .filter((account) => !account.hidden)
+              .filter((account) => !account.hidden && !account.savings)
               .map((account) => ({ id: account.id, label: account.name })),
           ),
         ),

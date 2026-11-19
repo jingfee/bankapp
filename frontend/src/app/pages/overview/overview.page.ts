@@ -889,7 +889,7 @@ export class OverviewPage {
   }
 
   protected accountType(account: ConnectedAccount): string {
-    return ACCOUNT_TYPES[account.type];
+    return account.savings ? ACCOUNT_TYPES.savings : ACCOUNT_TYPES[account.type];
   }
 
   constructor() {

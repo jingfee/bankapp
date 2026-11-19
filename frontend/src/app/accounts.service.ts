@@ -12,6 +12,11 @@ export class AccountsService {
     return this.http.get<AccountsResponse>('/api/accounts');
   }
 
+  /** Marks an account as a savings account (followed by balance only), or clears it. */
+  setSavings(id: number, savings: boolean): Observable<void> {
+    return this.http.put<void>(`/api/accounts/${id}/savings`, { savings });
+  }
+
   /** Hides an account from the overview and its transactions, or shows it again. */
   setHidden(id: number, hidden: boolean): Observable<void> {
     return this.http.put<void>(`/api/accounts/${id}/hidden`, { hidden });

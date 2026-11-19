@@ -217,7 +217,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           account.name
                         }}</span>
                         <span class="text-sm text-muted">
-                          {{ typeLabel(account.type) }} ·
+                          {{ account.savings ? 'Sparkonto' : typeLabel(account.type) }} ·
                           <span class="amount" data-balance>{{
                             account.balance
                               ? (account.balance.amount | money: account.balance.currency)
@@ -253,47 +253,88 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           }
                         </select>
                       </label>
-                      <button
-                        type="button"
-                        data-toggle-hidden
-                        class="btn btn-sm btn-secondary"
-                        [class.border-dashed]="account.hidden"
-                        [attr.aria-label]="
-                          account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
-                        "
-                        [attr.title]="account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'"
-                        [disabled]="togglingHidden()"
-                        (click)="setHidden(account.id, !account.hidden)"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="button"
+                          data-toggle-savings
+                          class="btn btn-sm btn-secondary"
+                          [class.border-dashed]="!account.savings"
+                          [attr.aria-label]="
+                            account.savings ? 'Sluta följa som sparkonto' : 'Följ som sparkonto'
+                          "
+                          [attr.title]="
+                            account.savings
+                              ? 'Sluta följa som sparkonto'
+                              : 'Följ som sparkonto: följ bara saldot, transaktionerna visas inte'
+                          "
+                          [disabled]="togglingHidden()"
+                          (click)="setSavings(account.id, !account.savings)"
                         >
-                          @if (account.hidden) {
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
                             <path
-                              d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+                              d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"
                             />
-                            <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
-                            <path
-                              d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
-                            />
-                            <path d="m2 2 20 20" />
-                          } @else {
-                            <path
-                              d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
-                            />
-                            <circle cx="12" cy="12" r="3" />
-                          }
-                        </svg>
-                        <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
-                      </button>
+                            <path d="M2 9v1c0 1.1.9 2 2 2h1" />
+                            <path d="M16 11h.01" />
+                          </svg>
+                          <span data-savings-state>{{
+                            account.savings ? 'Sparkonto' : 'Vanligt konto'
+                          }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          data-toggle-hidden
+                          class="btn btn-sm btn-secondary"
+                          [class.border-dashed]="account.hidden"
+                          [attr.aria-label]="
+                            account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
+                          "
+                          [attr.title]="
+                            account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
+                          "
+                          [disabled]="togglingHidden()"
+                          (click)="setHidden(account.id, !account.hidden)"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            @if (account.hidden) {
+                              <path
+                                d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+                              />
+                              <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                              <path
+                                d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+                              />
+                              <path d="m2 2 20 20" />
+                            } @else {
+                              <path
+                                d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+                              />
+                              <circle cx="12" cy="12" r="3" />
+                            }
+                          </svg>
+                          <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
+                        </button>
+                      </div>
                     </div>
                   </li>
                 }
@@ -393,6 +434,22 @@ export class BankerPage {
     this.togglingHidden.set(true);
     this.hideFailed.set(false);
     this.accounts.setHidden(id, hidden).subscribe({
+      next: () => {
+        this.togglingHidden.set(false);
+        this.refresh.next();
+      },
+      error: () => {
+        this.togglingHidden.set(false);
+        this.hideFailed.set(true);
+      },
+    });
+  }
+
+  /** Marks or unmarks an account as a savings account; its transactions follow. */
+  protected setSavings(id: number, savings: boolean): void {
+    this.togglingHidden.set(true);
+    this.hideFailed.set(false);
+    this.accounts.setSavings(id, savings).subscribe({
       next: () => {
         this.togglingHidden.set(false);
         this.refresh.next();
