@@ -14,7 +14,6 @@ import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer 
 import { AccountsService } from '../../accounts.service';
 import { ConnectionsService } from '../../connections.service';
 import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
-import { ManualSavingsSection } from '../../manual-savings/manual-savings-section';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { SHARE_LABELS } from '../../share-display';
@@ -53,7 +52,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 @Component({
   selector: 'app-banker-page',
-  imports: [RouterLink, DateTimePipe, MoneyPipe, ManualSavingsSection],
+  imports: [RouterLink, DateTimePipe, MoneyPipe],
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
       @let result = loaded();
@@ -411,7 +410,6 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           </div>
         </details>
       }
-      <app-manual-savings-section />
     </main>
   `,
 })

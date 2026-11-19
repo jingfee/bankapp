@@ -80,3 +80,11 @@ export type {
   ManualSavingsAccountRequest,
   ManualSavingsResponse,
 } from './manual-savings';
+export type {
+  SavingsAccount,
+  SavingsMonth,
+  SavingsMonthAccount,
+  SavingsReminder,
+  SavingsResponse,
+  SavingsTotals,
+} from './savings';

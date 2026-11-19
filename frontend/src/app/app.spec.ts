@@ -45,13 +45,16 @@ describe('App', () => {
     await fixture.whenStable();
   }
 
-  it('has the five destinations in the sidebar and the bottom tabs, on every page', async () => {
+  it('has the six destinations in the sidebar and the bottom tabs, on every page', async () => {
     const fixture = TestBed.createComponent(App);
     for (const url of ['/', '/banker', '/anslut-bank']) {
       await navigate(fixture, url);
       for (const [nav, labels] of [
-        [sidebar(fixture), ['Översikt', 'Transaktioner', 'Att granska', 'Delat', 'Banker']],
-        [tabs(fixture), ['Översikt', 'Transaktioner', 'Granska', 'Delat', 'Banker']],
+        [
+          sidebar(fixture),
+          ['Översikt', 'Transaktioner', 'Att granska', 'Delat', 'Sparande', 'Banker'],
+        ],
+        [tabs(fixture), ['Översikt', 'Transaktioner', 'Granska', 'Delat', 'Sparande', 'Banker']],
       ] as const) {
         const links = [...nav.querySelectorAll('a')];
         expect(links.map((a) => a.textContent?.replace(/\d+/, '').trim())).toEqual([...labels]);
@@ -60,6 +63,7 @@ describe('App', () => {
           '/transaktioner',
           '/granska',
           '/delat',
+          '/sparande',
           '/banker',
         ]);
       }

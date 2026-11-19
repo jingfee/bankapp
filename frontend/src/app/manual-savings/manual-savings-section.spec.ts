@@ -46,10 +46,10 @@ describe('ManualSavingsSection', () => {
     return { fixture, http, root, click, type };
   }
 
-  it('lists accounts with balance, growth and their entries newest first', async () => {
+  it('lists accounts with their entries newest first, leaving the figures to the Sparande page', async () => {
     const { root } = await render();
     expect(root.querySelector('[data-manual-name]')?.textContent).toContain('Avanza ISK');
-    expect(root.querySelector('[data-growth]')?.textContent).toContain('ca');
+    expect(root.querySelector('[data-growth]')).toBeNull();
     const days = Array.from(root.querySelectorAll('[data-entry-day]')).map((d) => d.textContent);
     expect(days).toEqual(['2025-11-27', '2025-10-28']);
   });

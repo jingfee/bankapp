@@ -51,6 +51,13 @@ const NAV_ITEMS: readonly NavItem[] = [
     icon: ['M8 3 4 7l4 4', 'M4 7h16', 'm16 21 4-4-4-4', 'M20 17H4'],
   },
   {
+    path: '/sparande',
+    label: 'Sparande',
+    tabLabel: 'Sparande',
+    exact: false,
+    icon: ['M4 19h16', 'M6 16v-5M10 16V8M14 16v-3M18 16V6'],
+  },
+  {
     path: '/banker',
     label: 'Banker',
     tabLabel: 'Banker',

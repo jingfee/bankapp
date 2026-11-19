@@ -7,6 +7,7 @@ import { DelatPage } from './pages/delat/delat.page';
 import { BankerPage } from './pages/banker/banker.page';
 import { ReviewPage } from './pages/review/review.page';
 import { TransactionDetailsPage } from './pages/transaction-details/transaction-details.page';
+import { SparandePage } from './pages/sparande/sparande.page';
 import { OverviewPage } from './pages/overview/overview.page';
 import { TransactionsPage } from './pages/transactions/transactions.page';
 
@@ -40,6 +41,7 @@ export const routes: Routes = [
       { matcher: listMatcher, component: TransactionsPage, title: 'Transaktioner – Bankapp' },
       { path: 'banker', component: BankerPage, title: 'Banker – Bankapp' },
       { path: 'delat', component: DelatPage, title: 'Delat – Bankapp' },
+      { path: 'sparande', component: SparandePage, title: 'Sparande – Bankapp' },
       { path: 'andelar', redirectTo: 'delat' },
       { path: 'avrakning', redirectTo: 'delat' },
       { path: 'granska', component: ReviewPage, title: 'Att granska – Bankapp' },
