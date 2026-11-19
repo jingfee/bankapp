@@ -72,3 +72,11 @@ export type {
   SettlementPeriod,
   SettlementResponse,
 } from './settlement';
+export type {
+  BalanceEntry,
+  BalanceEntryRequest,
+  CloseManualSavingsAccountRequest,
+  ManualSavingsAccount,
+  ManualSavingsAccountRequest,
+  ManualSavingsResponse,
+} from './manual-savings';

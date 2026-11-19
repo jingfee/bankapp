@@ -183,6 +183,13 @@
       "when": 1795109226122,
       "tag": "0025_connection_removed",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1795109896821,
+      "tag": "0026_manual_savings",
+      "breakpoints": true
     }
   ]
 }
