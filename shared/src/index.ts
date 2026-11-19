@@ -13,6 +13,7 @@ export type {
   AccountType,
   AccountsResponse,
   BankAccounts,
+  RemovedBank,
   ConnectedAccount,
   ConnectionStatus,
   ManualTransactionRequest,

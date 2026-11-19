@@ -1,4 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import type { StartConnectionResponse } from '@bankapp/shared';
 import { Public } from '../auth/public.decorator';
@@ -13,6 +24,13 @@ export class ConnectionsController {
     const { bank, renew } = (body ?? {}) as { bank?: unknown; renew?: unknown };
     if (typeof bank !== 'string' || bank === '') throw new BadRequestException('bank is required');
     return this.connections.start(bank, renew === true);
+  }
+
+  /** Removes a bank the owner no longer uses; its history stays (_Ta bort bank_). */
+  @Delete(':bank')
+  @HttpCode(204)
+  remove(@Param('bank') bank: string): Promise<void> {
+    return this.connections.remove(bank);
   }
 
   /**

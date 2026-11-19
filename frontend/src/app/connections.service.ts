@@ -17,4 +17,9 @@ export class ConnectionsService {
       .post<StartConnectionResponse>('/api/connections', body)
       .pipe(map((response) => response.url));
   }
+
+  /** Removes a bank the owner no longer uses; its history stays. */
+  remove(bank: string): Observable<void> {
+    return this.http.delete<void>(`/api/connections/${encodeURIComponent(bank)}`);
+  }
 }

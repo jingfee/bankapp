@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, lt, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, lt, notInArray } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
@@ -8,6 +8,7 @@ import { CLOCK, type Clock } from '../clock';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import { accounts, authorisations, banks, connections } from '../db/schema';
+import { NoSuchConnection } from '../domain-errors';
 import {
   EnableBankingClient,
   type EnableBankingSession,
@@ -149,7 +150,8 @@ export class ConnectionsService {
     session: EnableBankingSession,
   ): number {
     tx.update(connections)
-      .set({ sessionId: session.sessionId, validUntil: session.validUntil })
+      // A removed bank that is connected again comes back (Removed bank).
+      .set({ sessionId: session.sessionId, validUntil: session.validUntil, removedAt: null })
       .where(eq(connections.id, connectionId))
       .run();
     const known = new Set(
@@ -200,15 +202,50 @@ export class ConnectionsService {
   }
 
   /**
-   * A bank can be connected if it has no connection yet, or its connection is due for renewal.
+   * Removes a bank the owner no longer uses (_Ta bort bank_). It is no longer synced and its
+   * accounts become closed accounts, keeping their history and any hidden state. The session is
+   * revoked at Enable Banking, but a failure there does not stop the removal: it is logged and
+   * the permission expires on its own.
+   */
+  async remove(bankName: string): Promise<void> {
+    const connection = this.db
+      .select()
+      .from(connections)
+      .where(and(eq(connections.bankName, bankName), isNull(connections.removedAt)))
+      .get();
+    if (!connection) throw new NoSuchConnection();
+    try {
+      await this.enableBanking.deleteSession(connection.sessionId);
+    } catch (cause) {
+      this.logger.error(`Could not revoke the connection to ${bankName}: ${String(cause)}`);
+    }
+    this.db.transaction((tx) => {
+      tx.update(connections)
+        .set({ removedAt: this.clock.now() })
+        .where(eq(connections.id, connection.id))
+        .run();
+      tx.update(accounts)
+        .set({ closed: true })
+        .where(eq(accounts.connectionId, connection.id))
+        .run();
+    });
+  }
+
+  /**
+   * A bank can be connected if it has no connection yet, it was removed, or its connection is due
+   * for renewal.
    * An owner-requested renewal of an active connection skips this check at its call sites.
    */
   private canConnect(bankName: string): boolean {
     const existing = this.db
-      .select({ validUntil: connections.validUntil })
+      .select({ validUntil: connections.validUntil, removedAt: connections.removedAt })
       .from(connections)
       .where(eq(connections.bankName, bankName))
       .get();
-    return !existing || connectionStatus(existing.validUntil, this.clock.now()) !== 'active';
+    return (
+      !existing ||
+      existing.removedAt !== null ||
+      connectionStatus(existing.validUntil, this.clock.now()) !== 'active'
+    );
   }
 }

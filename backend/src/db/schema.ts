@@ -26,6 +26,11 @@ export const connections = sqliteTable('connections', {
   bankName: text('bank_name').notNull().unique(),
   sessionId: text('session_id').notNull(),
   validUntil: integer('valid_until', { mode: 'timestamp_ms' }).notNull(),
+  /**
+   * When the owner removed the bank; null while it is in use. A removed bank is not synced and
+   * shows no banners, and its accounts are closed; connecting it again clears this.
+   */
+  removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
 });
 
 export const accounts = sqliteTable('accounts', {

@@ -145,6 +145,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         @if (shareFailed(); as message) {
           <p role="alert" class="text-sm text-danger">{{ message }}</p>
         }
+        @if (removeFailed()) {
+          <p role="alert" class="text-sm text-danger">
+            Banken kunde inte tas bort. Försök igen senare.
+          </p>
+        }
         @if (startFailed()) {
           <p role="alert" class="text-sm text-danger">
             Uppdateringen kunde inte startas. Försök igen senare.
@@ -175,6 +180,15 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   (click)="renew(group.bank, group.status === 'active')"
                 >
                   Förnya
+                </button>
+                <button
+                  type="button"
+                  data-remove-bank
+                  class="btn btn-sm btn-secondary"
+                  [disabled]="removing()"
+                  (click)="removeBank(group)"
+                >
+                  Ta bort bank
                 </button>
               </div>
 
@@ -359,6 +373,43 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           }
         </div>
       }
+      @if (result && !('failed' in result) && result.removedBanks.length > 0) {
+        <details data-removed-banks class="card p-5">
+          <summary class="cursor-pointer font-display text-lg font-semibold">
+            Borttagna banker
+          </summary>
+          <div class="mt-4 flex flex-col gap-5">
+            @for (removed of result.removedBanks; track removed.bank) {
+              <section [attr.data-removed-bank]="removed.bank" class="flex flex-col gap-2">
+                <h3 class="font-medium">{{ removed.bank }}</h3>
+                <ul class="flex flex-col divide-y divide-line">
+                  @for (account of removed.accounts; track account.id) {
+                    <li
+                      class="flex items-center justify-between gap-3 py-2"
+                      [attr.data-hidden-row]="account.hidden ? '' : null"
+                    >
+                      <span class="flex min-w-0 flex-col" [class.opacity-55]="account.hidden">
+                        <span data-account-name class="truncate">{{ account.name }}</span>
+                        <span class="text-sm text-muted">{{ typeLabel(account.type) }}</span>
+                      </span>
+                      <button
+                        type="button"
+                        data-toggle-hidden
+                        class="btn btn-sm btn-secondary"
+                        [class.border-dashed]="account.hidden"
+                        [disabled]="togglingHidden()"
+                        (click)="setHidden(account.id, !account.hidden)"
+                      >
+                        <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+          </div>
+        </details>
+      }
     </main>
   `,
 })
@@ -369,6 +420,8 @@ export class BankerPage {
   private readonly redirector = inject(Redirector);
   protected readonly renewing = signal(false);
   protected readonly renewFailed = signal(false);
+  protected readonly removing = signal(false);
+  protected readonly removeFailed = signal(false);
   protected readonly togglingHidden = signal(false);
   protected readonly hideFailed = signal(false);
   protected readonly savingShare = signal(false);
@@ -497,6 +550,31 @@ export class BankerPage {
       error: () => {
         this.renewing.set(false);
         this.renewFailed.set(true);
+      },
+    });
+  }
+
+  /**
+   * Removes a bank after the owner confirms: it stops syncing, its history stays and it can be
+   * connected again (_Ta bort bank_).
+   */
+  protected removeBank(group: BankAccounts): void {
+    const savings = group.accounts.some((account) => account.savings);
+    const message =
+      `Ta bort ${group.bank}? Kontona uppdateras inte längre, men historiken finns kvar ` +
+      `och du kan ansluta banken igen.` +
+      (savings ? ' Sparkonton avslutas.' : '');
+    if (!confirm(message)) return;
+    this.removing.set(true);
+    this.removeFailed.set(false);
+    this.connections.remove(group.bank).subscribe({
+      next: () => {
+        this.removing.set(false);
+        this.refresh.next();
+      },
+      error: () => {
+        this.removing.set(false);
+        this.removeFailed.set(true);
       },
     });
   }

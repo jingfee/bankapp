@@ -163,6 +163,10 @@ export class HttpEnableBankingClient implements EnableBankingClient {
     };
   }
 
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.send('DELETE', `/sessions/${encodeURIComponent(sessionId)}`);
+  }
+
   async getAccountDetails(
     accountUid: string,
     options: RequestOptions = {},
@@ -236,7 +240,7 @@ export class HttpEnableBankingClient implements EnableBankingClient {
   }
 
   private async send(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: unknown,
     psu?: PsuContext,
@@ -260,7 +264,8 @@ export class HttpEnableBankingClient implements EnableBankingClient {
       }
       throw new Error(message);
     }
-    return response.json();
+    // Revoking a session answers with no body.
+    return response.status === 204 ? undefined : response.json();
   }
 
   private async createToken(): Promise<string> {

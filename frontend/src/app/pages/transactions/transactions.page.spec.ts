@@ -413,6 +413,7 @@ describe('TransactionsPage', () => {
             closedAccounts: [],
           },
         ],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       });
