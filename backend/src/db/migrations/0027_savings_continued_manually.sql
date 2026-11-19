@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `continued_as` integer REFERENCES manual_savings_accounts(id);

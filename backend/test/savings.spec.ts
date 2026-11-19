@@ -213,13 +213,13 @@ describe('the savings view', () => {
     expect(view.totals.balance).toBe(0);
   });
 
-  it('counts a connected account of a removed bank as closed', async () => {
+  it('counts a connected account of a removed bank as 0 from the day it was removed', async () => {
     connected([['2026-10-30', 500]], [], {});
     db.update(connections)
       .set({ removedAt: new Date('2026-11-02T00:00:00Z') })
       .run();
     const view = await get();
-    expect(view.accounts[0]).toMatchObject({ closedOn: '2026-10-30', balance: 0 });
+    expect(view.accounts[0]).toMatchObject({ closedOn: '2026-11-02', balance: 0 });
     expect(view.months.at(-1)).toMatchObject({ month: '2026-12', balance: 0 });
     expect(view.totals.balance).toBe(0);
   });

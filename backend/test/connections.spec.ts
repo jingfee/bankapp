@@ -161,6 +161,7 @@ describe('connecting a bank', () => {
         closed: false,
         hidden: false,
         savings: false,
+        continuedAs: null,
         share: null,
         connectedOn: '2026-11-10',
       });

@@ -53,6 +53,12 @@ export const accounts = sqliteTable('accounts', {
    */
   savings: integer('savings', { mode: 'boolean' }).notNull().default(false),
   /**
+   * Set when the owner continued this savings account manually after removing its bank: its
+   * history now lives in that manual account, so the Sparande page leaves this one out. It stays
+   * set if the bank is connected again.
+   */
+  continuedAs: integer('continued_as').references((): AnySQLiteColumn => manualSavingsAccounts.id),
+  /**
    * The share the owner bears of the account's transactions (ADR 0007); null when not set, which
    * shows as Jag but lets the subcategory's share apply. Choosing Jag on Banker clears it.
    */

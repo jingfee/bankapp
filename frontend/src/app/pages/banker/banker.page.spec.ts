@@ -703,16 +703,27 @@ describe('BankerPage', () => {
       TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank');
     });
 
-    it('says what happens to a savings account in the confirmation', async () => {
-      const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
-      const savings = { ...account('Sparkonto', 'savings'), savings: true };
+    it('asks per savings account whether to keep following its balance', async () => {
+      const confirmation = vi
+        .spyOn(window, 'confirm')
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
+      const first = { ...account('Sparkonto', 'savings'), id: 7, savings: true };
+      const second = { ...account('ISK', 'savings'), id: 8, savings: true };
       const page = await render((request) =>
-        request.flush(response({ banks: [group('Swedbank', [savings])] })),
+        request.flush(response({ banks: [group('Swedbank', [first, second])] })),
       );
 
       removeButton(page)!.click();
 
-      expect(confirmation.mock.calls[0]![0]).toContain('Sparkonton avslutas');
+      expect(confirmation.mock.calls[1]![0]).toContain('Fortsätt följa saldot manuellt?');
+      expect(confirmation.mock.calls[1]![0]).toContain('Sparkonto');
+      expect(confirmation.mock.calls[2]![0]).toContain('ISK');
+      TestBed.inject(HttpTestingController).expectOne({
+        method: 'DELETE',
+        url: '/api/connections/Swedbank?continueManually=7',
+      });
     });
 
     it('says so when the bank could not be removed', async () => {

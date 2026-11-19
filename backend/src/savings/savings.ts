@@ -6,14 +6,20 @@ import type {
   SavingsResponse,
   SavingsTotals,
 } from '@bankapp/shared';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { savingsFigures } from '../accounts/savings-figures';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { CLOCK, clock, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
-import { accounts, balances, connections } from '../db/schema';
+import {
+  accounts,
+  balanceEntries,
+  balances,
+  connections,
+  manualSavingsAccounts,
+} from '../db/schema';
 import { ManualSavings } from '../manual-savings/manual-savings';
 import { change, stateOn, type Entry } from '../manual-savings/figures';
 
@@ -33,6 +39,8 @@ interface Source {
   /** Growth is a rough figure because an entry left net deposits blank. */
   approximate: boolean;
 }
+
+const maxDay = (a: string, b: string) => (a > b ? a : b);
 
 const monthOf = (day: string) => day.slice(0, 7);
 
@@ -87,30 +95,23 @@ export class Savings {
       })
       .from(accounts)
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
-      .where(eq(accounts.savings, true))
+      // One continued manually has its history in a manual account (Removed bank).
+      .where(and(eq(accounts.savings, true), isNull(accounts.continuedAs)))
       .orderBy(asc(accounts.id))
       .all();
     return rows.flatMap((row) => {
-      const points = this.balancePoints(row.id);
-      const first = points[0];
-      const last = points.at(-1);
-      if (first === undefined || last === undefined) return [];
+      const entries = this.connectedEntries(row.id);
+      const last = entries.at(-1);
+      if (last === undefined) return [];
       // The bank does not say when an account closed; the last balance it gave is the last day it
-      // was known to exist, and from then it counts as 0, as a sold-off account would.
-      const isClosed = row.closed || row.removedAt !== null;
-      // The bank's history before the app began following the account is unknown, so the balance
-      // at the first sync is taken as what had been put in by then; later deposits and withdrawals
-      // are added to it. Growth is thereby measured from when the app began following the account.
-      const atFirst = savingsFigures(this.db, row.id, first.day, first.amount).netDeposits;
-      const entries: Entry[] = points.map((point) => ({
-        date: point.day,
-        balance: point.amount,
-        netDeposits: round(
-          first.amount +
-            savingsFigures(this.db, row.id, point.day, point.amount).netDeposits -
-            atFirst,
-        ),
-      }));
+      // was known to exist, and from then it counts as 0, as a sold-off account would. A removed
+      // bank's account counts as 0 from the day it was removed instead.
+      const closedOn =
+        row.removedAt !== null
+          ? maxDay(last.date, this.dayOf(row.removedAt))
+          : row.closed
+            ? last.date
+            : null;
       return [
         {
           account: {
@@ -119,14 +120,68 @@ export class Savings {
             institution: row.bank,
             kind: 'connected' as const,
             manualId: null,
-            closedOn: isClosed ? last.day : null,
+            closedOn,
           },
           entries,
-          lastUpdated: last.day,
+          lastUpdated: last.date,
           approximate: false,
         },
       ];
     });
+  }
+
+  /**
+   * A connected savings account's history as entries, oldest first, one per point of the series.
+   * The bank's history before the app began following the account is unknown, so the balance
+   * at the first sync is taken as what had been put in by then; later deposits and withdrawals
+   * are added to it. Growth is thereby measured from when the app began following the account.
+   */
+  private connectedEntries(accountId: number): Entry[] {
+    const points = this.balancePoints(accountId);
+    const first = points[0];
+    if (first === undefined) return [];
+    const atFirst = savingsFigures(this.db, accountId, first.day, first.amount).netDeposits;
+    return points.map((point) => ({
+      date: point.day,
+      balance: point.amount,
+      netDeposits: round(
+        first.amount +
+          savingsFigures(this.db, accountId, point.day, point.amount).netDeposits -
+          atFirst,
+      ),
+    }));
+  }
+
+  /**
+   * Continues a savings account of a bank being removed as a manual savings account: its history
+   * so far becomes the manual account's entries, the last of which is the starting point for new
+   * ones, and the Sparande page follows the manual account from then on. Call it inside the
+   * removal's transaction.
+   */
+  continueManually(accountId: number): void {
+    const row = this.db
+      .select({ name: accounts.name, bank: connections.bankName })
+      .from(accounts)
+      .innerJoin(connections, eq(accounts.connectionId, connections.id))
+      .where(eq(accounts.id, accountId))
+      .get();
+    if (row === undefined) return;
+    const manualId = this.db
+      .insert(manualSavingsAccounts)
+      .values({ name: row.name, institution: row.bank })
+      .returning({ id: manualSavingsAccounts.id })
+      .get().id;
+    for (const entry of this.connectedEntries(accountId)) {
+      this.db
+        .insert(balanceEntries)
+        .values({ accountId: manualId, ...entry })
+        .run();
+    }
+    this.db.update(accounts).set({ continuedAs: manualId }).where(eq(accounts.id, accountId)).run();
+  }
+
+  private dayOf(at: Date): string {
+    return clock(() => at, this.config.timezone).today();
   }
 
   /**
@@ -149,7 +204,7 @@ export class Savings {
       const index = BALANCE_PREFERENCE.indexOf(type);
       return index === -1 ? BALANCE_PREFERENCE.length : index;
     };
-    const dayOf = (at: Date) => clock(() => at, this.config.timezone).today();
+    const dayOf = (at: Date) => this.dayOf(at);
     // The best balance of each fetch; a later fetch of the same day replaces an earlier one.
     const byFetch = new Map<number, { type: string; amount: number }>();
     for (const row of rows) {

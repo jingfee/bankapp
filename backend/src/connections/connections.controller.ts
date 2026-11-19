@@ -15,6 +15,16 @@ import type { StartConnectionResponse } from '@bankapp/shared';
 import { Public } from '../auth/public.decorator';
 import { ConnectionsService } from './connections.service';
 
+/** The account ids of `?continueManually=1,2`; anything else is not a request. */
+function accountIds(value: unknown): number[] {
+  if (value === undefined || value === '') return [];
+  const ids = typeof value === 'string' ? value.split(',').map(Number) : [];
+  if (ids.length === 0 || !ids.every((id) => Number.isInteger(id) && id > 0)) {
+    throw new BadRequestException('continueManually must be a comma-separated list of account ids');
+  }
+  return ids;
+}
+
 @Controller('connections')
 export class ConnectionsController {
   constructor(private readonly connections: ConnectionsService) {}
@@ -26,11 +36,15 @@ export class ConnectionsController {
     return this.connections.start(bank, renew === true);
   }
 
-  /** Removes a bank the owner no longer uses; its history stays (_Ta bort bank_). */
+  /** Removes a bank the owner no longer uses; its history stays (_Ta bort bank_). `continueManually`
+   * lists its savings accounts to carry on as manual savings accounts. */
   @Delete(':bank')
   @HttpCode(204)
-  remove(@Param('bank') bank: string): Promise<void> {
-    return this.connections.remove(bank);
+  remove(
+    @Param('bank') bank: string,
+    @Query('continueManually') continueManually: unknown,
+  ): Promise<void> {
+    return this.connections.remove(bank, accountIds(continueManually));
   }
 
   /**
