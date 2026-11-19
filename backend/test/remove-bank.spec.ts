@@ -1,9 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
-import type { AccountsResponse } from '@bankapp/shared';
+import type { AccountsResponse, SavingsResponse } from '@bankapp/shared';
 import { eq } from 'drizzle-orm';
 import { DATABASE } from '../src/db/database.module';
 import type { AppDatabase } from '../src/db/database';
-import { accounts, transactions } from '../src/db/schema';
+import { accounts, balances, transactions } from '../src/db/schema';
 import type { EnableBankingAccount } from '../src/enable-banking/enable-banking-client';
 import { createApp } from '../src/app';
 import { bank, FakeEnableBankingClient, testConfig, api } from './support';
@@ -62,7 +62,10 @@ describe('removing a bank', () => {
     await settle();
   }
 
-  const remove = (name: string) => api(app).delete(`/api/connections/${encodeURIComponent(name)}`);
+  const remove = (name: string, continueManually?: string) =>
+    api(app)
+      .delete(`/api/connections/${encodeURIComponent(name)}`)
+      .query(continueManually === undefined ? {} : { continueManually });
 
   function addTransaction(accountId: number, description: string) {
     db()
@@ -177,5 +180,78 @@ describe('removing a bank', () => {
         .map((row) => row.id),
     ).toEqual([1, 2]);
     expect(db().select().from(transactions).all()).toHaveLength(1);
+  });
+
+  describe('savings accounts', () => {
+    const savings = async () =>
+      (await api(app).get('/api/savings').expect(200)).body as SavingsResponse;
+
+    async function connectWithSavings() {
+      await connect('Swedbank', 'session-1', [account(1, 'Lönekonto'), account(2, 'Sparkonto')]);
+      await api(app).put('/api/accounts/2/savings').send({ savings: true }).expect(200);
+      for (const [day, amount] of [
+        ['2026-09-30', 1000],
+        ['2026-10-31', 1500],
+      ] as const) {
+        db()
+          .insert(balances)
+          .values({
+            accountId: 2,
+            type: 'CLBD',
+            amount,
+            currency: 'SEK',
+            fetchedAt: new Date(`${day}T10:00:00Z`),
+          })
+          .run();
+      }
+    }
+
+    it('continues as one manual account with its history when the owner says so', async () => {
+      await connectWithSavings();
+
+      await remove('Swedbank', '2').expect(204);
+
+      const view = await savings();
+      expect(view.accounts).toHaveLength(1);
+      const [only] = view.accounts;
+      expect(only).toMatchObject({ kind: 'manual', name: 'Sparkonto', closedOn: null });
+      expect(only!.balance).toBe(1500);
+      expect(view.months.map((m) => [m.month, m.balance])).toEqual([
+        ['2026-09', 1000],
+        ['2026-10', 1500],
+        ['2026-11', 1500],
+      ]);
+      await api(app)
+        .post(`/api/manual-savings-accounts/${only!.manualId}/entries`)
+        .send({ date: '2026-11-10', balance: 1600 })
+        .expect(201);
+      expect((await savings()).accounts[0]!.balance).toBe(1600);
+    });
+
+    it('closes it from the removal date when the owner declines', async () => {
+      await connectWithSavings();
+
+      await remove('Swedbank').expect(204);
+
+      const [only] = (await savings()).accounts;
+      expect(only).toMatchObject({ kind: 'connected', closedOn: '2026-11-10', balance: 0 });
+    });
+
+    it('stays manual when the bank is connected again', async () => {
+      await connectWithSavings();
+      await remove('Swedbank', '2').expect(204);
+
+      await connect('Swedbank', 'session-2', [account(1, 'Lönekonto'), account(2, 'Sparkonto')]);
+
+      expect((await savings()).accounts.map((a) => a.kind)).toEqual(['manual']);
+    });
+
+    it('refuses an account that is not a savings account of the bank', async () => {
+      await connectWithSavings();
+
+      await remove('Swedbank', '1').expect(400);
+
+      expect((await list()).banks.map((group) => group.bank)).toEqual(['Swedbank']);
+    });
   });
 });

@@ -18,8 +18,13 @@ export class ConnectionsService {
       .pipe(map((response) => response.url));
   }
 
-  /** Removes a bank the owner no longer uses; its history stays. */
-  remove(bank: string): Observable<void> {
-    return this.http.delete<void>(`/api/connections/${encodeURIComponent(bank)}`);
+  /**
+   * Removes a bank the owner no longer uses; its history stays. The savings accounts in
+   * `continueManually` carry on as manual savings accounts; the others close.
+   */
+  remove(bank: string, continueManually: number[] = []): Observable<void> {
+    const params: Record<string, string> =
+      continueManually.length > 0 ? { continueManually: continueManually.join(',') } : {};
+    return this.http.delete<void>(`/api/connections/${encodeURIComponent(bank)}`, { params });
   }
 }

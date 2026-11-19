@@ -559,15 +559,18 @@ export class BankerPage {
    * connected again (_Ta bort bank_).
    */
   protected removeBank(group: BankAccounts): void {
-    const savings = group.accounts.some((account) => account.savings);
+    const savings = group.accounts.filter((account) => account.savings);
     const message =
       `Ta bort ${group.bank}? Kontona uppdateras inte längre, men historiken finns kvar ` +
-      `och du kan ansluta banken igen.` +
-      (savings ? ' Sparkonton avslutas.' : '');
+      `och du kan ansluta banken igen.`;
     if (!confirm(message)) return;
+    // Each savings account either carries on by hand or closes from today.
+    const continueManually = savings
+      .filter((account) => confirm(`Fortsätt följa saldot manuellt?\n${account.name}`))
+      .map((account) => account.id);
     this.removing.set(true);
     this.removeFailed.set(false);
-    this.connections.remove(group.bank).subscribe({
+    this.connections.remove(group.bank, continueManually).subscribe({
       next: () => {
         this.removing.set(false);
         this.refresh.next();

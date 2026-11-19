@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, isNull, lt, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
@@ -8,7 +8,8 @@ import { CLOCK, type Clock } from '../clock';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
 import { accounts, authorisations, banks, connections } from '../db/schema';
-import { NoSuchConnection } from '../domain-errors';
+import { InvalidInput, NoSuchConnection } from '../domain-errors';
+import { Savings } from '../savings/savings';
 import {
   EnableBankingClient,
   type EnableBankingSession,
@@ -31,6 +32,7 @@ export class ConnectionsService {
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly enableBanking: EnableBankingClient,
     private readonly sync: SyncService,
+    private readonly savings: Savings,
   ) {}
 
   /** Starts a BankID login for the bank and returns the URL to send the owner to. */
@@ -205,15 +207,32 @@ export class ConnectionsService {
    * Removes a bank the owner no longer uses (_Ta bort bank_). It is no longer synced and its
    * accounts become closed accounts, keeping their history and any hidden state. The session is
    * revoked at Enable Banking, but a failure there does not stop the removal: it is logged and
-   * the permission expires on its own.
+   * the permission expires on its own. Of its savings accounts, those in `continueManually` carry
+   * on as manual savings accounts; the others close and count as 0 from today.
    */
-  async remove(bankName: string): Promise<void> {
+  async remove(bankName: string, continueManually: number[] = []): Promise<void> {
     const connection = this.db
       .select()
       .from(connections)
       .where(and(eq(connections.bankName, bankName), isNull(connections.removedAt)))
       .get();
     if (!connection) throw new NoSuchConnection();
+    if (continueManually.length > 0) {
+      const savingsIds = this.db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.connectionId, connection.id),
+            eq(accounts.savings, true),
+            inArray(accounts.id, continueManually),
+          ),
+        )
+        .all();
+      if (savingsIds.length !== new Set(continueManually).size) {
+        throw new InvalidInput('continueManually must be savings accounts of the bank');
+      }
+    }
     try {
       await this.enableBanking.deleteSession(connection.sessionId);
     } catch (cause) {
@@ -228,6 +247,7 @@ export class ConnectionsService {
         .set({ closed: true })
         .where(eq(accounts.connectionId, connection.id))
         .run();
+      for (const accountId of new Set(continueManually)) this.savings.continueManually(accountId);
     });
   }
 

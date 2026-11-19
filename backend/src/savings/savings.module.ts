@@ -7,5 +7,6 @@ import { SavingsController } from './savings.controller';
   imports: [ManualSavingsModule],
   controllers: [SavingsController],
   providers: [Savings],
+  exports: [Savings],
 })
 export class SavingsModule {}
