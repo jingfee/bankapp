@@ -260,7 +260,7 @@ A transfer from the partner paying down the settlement balance, categorised Öve
 _Avoid_: Repayment, refund, income, offset
 
 **Settlement balance** (sv: _Avräkningssaldo_):
-What the partner owes the owner right now, negative when the owner owes the partner. It starts from the latest balance setting and is worked out live from every transaction since: up by the partner's part, 100% − share, of each transaction paid by the owner (a purchase raises it, a refund or income lowers it); down by the owner's part of each one paid by the partner; and down by each settlement. Transfers, hidden accounts and transactions dated before their account was first connected do not count; pending transactions do, so the balance follows them as they change, book or disappear, and any difference is simply settled next time. It has no months and no cutoff (ADR 0008).
+What the partner owes the owner right now, negative when the owner owes the partner. It starts from the latest balance setting and is worked out live from every transaction since: up by the partner's part, 100% − share, of each transaction paid by the owner (a purchase raises it, a refund or income lowers it); down by the owner's part of each one paid by the partner; and down by each settlement. Transfers, hidden accounts and transactions dated before their account was first connected do not count; pending transactions do, so the balance follows them as they change, book or disappear, and any difference is simply settled next time. It has no months and no cutoff; settlement periods only group its history (ADRs 0008 and 0014).
 _Avoid_: Debt, owed amount, settlement total, avräkning (for the balance)
 
 **Balance setting** (sv: _Inställt saldo_):
@@ -268,5 +268,13 @@ The owner stating that the settlement balance was a given amount as of a given d
 _Avoid_: Reset, opening balance, adjustment, manual entry
 
 **Settlement period** (sv: _Avräkningsperiod_):
-The stretch between two settlements, as shown on the Avräkning page: the balance carried in, the partner's part of each transaction dated in it, what the settlement paid and the balance carried out. A transaction that books late can still change an old period; what was paid never does.
-_Avoid_: Month, statement, invoice
+A named month (e.g. _Oktober 2026_) that the owner closes by hand, as shown on the Delat page: the balance carried in, the partner's part of each transaction dated in it, each settlement paid in it and the balance carried out. Months strictly increase from one period to the next; the open period keeps its month until it is closed, however late. Settlements do not end periods. A transaction that books late can still change a closed period; what was paid never does (ADR 0014).
+_Avoid_: Statement, invoice
+
+**Month close** (sv: _Månadsavslut_, the action _Avsluta månad_):
+The owner closing the open settlement period once the partner's money has arrived, and opening the next one for a later month. It only groups history: the settlement balance does not change. Only the latest close can be undone (_Ångra avslut_).
+_Avoid_: Settle up, reset, archive
+
+**Closing date** (sv: _Avslutsdatum_):
+The last day belonging to a closed period: transactions dated on or before it are in that period, later ones in the next, even if they happened before the owner pressed the button. It defaults to the date of the latest settlement in the period, else today, and is never before the previous closing date or after today.
+_Avoid_: Cutoff, end date

@@ -62,9 +62,12 @@ export {
 } from './shares';
 export type {
   BalanceSetting,
+  CloseMonthRequest,
   SetBalanceSettingRequest,
+  SetOpenMonthRequest,
   SettlementBalanceResponse,
   SettlementItem,
+  SettlementPayment,
   SettlementPeriod,
   SettlementResponse,
 } from './settlement';

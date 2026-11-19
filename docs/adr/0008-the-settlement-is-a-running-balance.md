@@ -16,7 +16,7 @@ Rules:
 - Settlements: every transaction in Överföring › Avräkning delade utgifter, guessed or confirmed, booked or pending. Guessing recognises the partner's transfers.
 - Start: a balance setting gives an amount as of a day; transactions dated before it are taken as included. There is no balance until the first setting, and the owner can set it again whenever they like.
 - An account counts only transactions dated on or after the day it was first connected, so the history an initial sync brings in does not flood the balance. Those transactions still count in the overview.
-- The Avräkning page lists settlement periods, each closed by a settlement, for browsing past settlements.
+- The Delat page lists settlement periods for browsing past settlements. (Originally each was closed by a settlement; ADR 0014 replaced that with months the owner closes.)
 
 ## Considered Options
 

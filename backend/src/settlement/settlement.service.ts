@@ -1,19 +1,27 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gte, isNotNull, isNull, or } from 'drizzle-orm';
 import type {
   BalanceSetting,
   CategoryColour,
   CategoryIcon,
+  CloseMonthRequest,
   SettlementItem,
   SettlementPeriod,
   SettlementResponse,
 } from '@bankapp/shared';
 import { effectiveShares, ownerPart, roundOre } from '../transactions/shares';
 import { onVisibleAccount } from '../transactions/query';
-import { CLOCK, type Clock } from '../clock';
+import { CLOCK, type Clock, isDay } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
-import { accounts, balanceSettings, categories, subcategories, transactions } from '../db/schema';
+import {
+  accounts,
+  balanceSettings,
+  categories,
+  settlementMonths,
+  subcategories,
+  transactions,
+} from '../db/schema';
 
 /** The subcategory the partner's transfers are categorised as (Överföring › Avräkning delade utgifter). */
 export const SETTLEMENT_SUBCATEGORY = 'Avräkning delade utgifter';
@@ -65,10 +73,26 @@ export class SettlementService {
     if (settings.length > 0) events.push(...this.transactionEvents(settings[0]!.asOf));
     events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.id - b.id);
 
+    const rows = this.periodRows();
+    const today = this.clock.today();
     let running: number | null = null;
-    let period = emptyPeriod(0);
-    const closed: SettlementPeriod[] = [];
+    let index = 0;
+    let period = emptyPeriod(rows[0]!, 0, today);
+    const built: SettlementPeriod[] = [];
+    /** Ends the current period and starts the next one, which carries the balance on. */
+    const closeCurrent = () => {
+      built.push({ ...period, carriedOut: running ?? 0 });
+      index += 1;
+      period = emptyPeriod(rows[index]!, running ?? 0, today);
+    };
+    /** Moves on past every closed period that ended before `date`. */
+    const advanceTo = (date: string) => {
+      while (rows[index]!.closedThrough !== null && date > rows[index]!.closedThrough!) {
+        closeCurrent();
+      }
+    };
     for (const event of events) {
+      advanceTo(event.date);
       if (event.setting) {
         running = event.setting.amount;
         period.balanceSettings.push(event.setting);
@@ -81,15 +105,99 @@ export class SettlementService {
         period.items.push(item);
         continue;
       }
-      closed.push({ ...period, closedOn: event.date, paid: event.paid, carriedOut: running });
-      period = emptyPeriod(running);
+      period.payments.push({
+        transactionId: item.transactionId,
+        date: item.date,
+        amount: event.paid,
+      });
+      period.paid = round(period.paid + event.paid);
     }
     if (running === null) return { balance: null, periods: [], balanceSettings: [] };
+    while (index < rows.length - 1) closeCurrent();
+    built.push({ ...period, carriedOut: running });
     return {
       balance: running,
-      periods: [{ ...period, carriedOut: running }, ...closed.reverse()],
+      periods: built.reverse(),
       balanceSettings: made.map(({ amount, asOf }) => ({ amount, asOf })).reverse(),
     };
+  }
+
+  /** Closes the open period through `closedThrough` and opens `nextMonth` (_Avsluta månad_). */
+  closeMonth(request: Partial<CloseMonthRequest> | undefined): SettlementResponse {
+    const { closedThrough, nextMonth } = request ?? {};
+    if (typeof closedThrough !== 'string' || !isDay(closedThrough)) {
+      throw new BadRequestException('closedThrough must be a day as YYYY-MM-DD');
+    }
+    if (typeof nextMonth !== 'string' || !isMonth(nextMonth)) {
+      throw new BadRequestException('nextMonth must be a month as YYYY-MM');
+    }
+    if (closedThrough > this.clock.today()) {
+      throw new BadRequestException('closedThrough cannot be in the future');
+    }
+    const rows = this.periodRows();
+    const open = rows.at(-1)!;
+    const previous = rows.at(-2)?.closedThrough;
+    if (previous && closedThrough < previous) {
+      throw new BadRequestException(
+        `closedThrough cannot be before the previous close, ${previous}`,
+      );
+    }
+    if (nextMonth <= open.month) {
+      throw new BadRequestException(`nextMonth must be later than ${open.month}`);
+    }
+    this.db.transaction((tx) => {
+      tx.update(settlementMonths)
+        .set({ closedThrough })
+        .where(eq(settlementMonths.id, open.id))
+        .run();
+      tx.insert(settlementMonths).values({ month: nextMonth, closedThrough: null }).run();
+    });
+    return this.get();
+  }
+
+  /** Undoes the latest close: the period it opened is removed and the one it closed reopens. */
+  undoClose(): SettlementResponse {
+    const rows = this.periodRows();
+    if (rows.length < 2) throw new BadRequestException('there is no close to undo');
+    const open = rows.at(-1)!;
+    const latest = rows.at(-2)!;
+    this.db.transaction((tx) => {
+      tx.delete(settlementMonths).where(eq(settlementMonths.id, open.id)).run();
+      tx.update(settlementMonths)
+        .set({ closedThrough: null })
+        .where(eq(settlementMonths.id, latest.id))
+        .run();
+    });
+    return this.get();
+  }
+
+  /** Renames the open period, keeping months in strictly increasing order. */
+  setOpenMonth(month: unknown): SettlementResponse {
+    if (typeof month !== 'string' || !isMonth(month)) {
+      throw new BadRequestException('month must be a month as YYYY-MM');
+    }
+    const rows = this.periodRows();
+    const previous = rows.at(-2);
+    if (previous && month <= previous.month) {
+      throw new BadRequestException(`month must be later than ${previous.month}`);
+    }
+    this.db
+      .update(settlementMonths)
+      .set({ month })
+      .where(eq(settlementMonths.id, rows.at(-1)!.id))
+      .run();
+    return this.get();
+  }
+
+  /** The periods oldest first; the last is the open one, created for the current month when missing. */
+  private periodRows(): (typeof settlementMonths.$inferSelect)[] {
+    const rows = this.db.select().from(settlementMonths).orderBy(asc(settlementMonths.month)).all();
+    if (rows.length > 0) return rows;
+    return this.db
+      .insert(settlementMonths)
+      .values({ month: this.clock.today().slice(0, 7), closedThrough: null })
+      .returning()
+      .all();
   }
 
   /** Today as `YYYY-MM-DD`. */
@@ -195,13 +303,31 @@ function movesBalance(kind: string | null, subcategoryName: string | null): bool
   return kind !== 'transfer' || subcategoryName === SETTLEMENT_SUBCATEGORY;
 }
 
-function emptyPeriod(carriedIn: number): SettlementPeriod {
+function emptyPeriod(
+  row: typeof settlementMonths.$inferSelect,
+  carriedIn: number,
+  today: string,
+): SettlementPeriod {
   return {
+    month: row.month,
+    closedThrough: row.closedThrough,
     carriedIn,
-    closedOn: null,
     balanceSettings: [],
     items: [],
+    payments: [],
     paid: 0,
     carriedOut: carriedIn,
+    overdue: row.closedThrough === null && endedDaysAgo(row.month, today) >= 7,
   };
+}
+
+function isMonth(value: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
+/** Whole days from the last day of `month` to `today` (negative while the month is running). */
+function endedDaysAgo(month: string, today: string): number {
+  const [year, number] = month.split('-').map(Number) as [number, number];
+  const lastDay = Date.UTC(year, number, 0);
+  return Math.round((Date.parse(`${today}T00:00:00Z`) - lastDay) / 86_400_000);
 }

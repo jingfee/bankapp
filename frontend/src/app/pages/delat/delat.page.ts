@@ -1,27 +1,35 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   type Category,
   type CategoryColour,
   type CategoryIcon,
   type HouseholdRatioEntry,
+  type SettlementPeriod,
   type SettlementResponse,
   type ShareOption,
   type Subcategory,
 } from '@bankapp/shared';
-import { catchError, forkJoin, map, of } from 'rxjs';
+import { type Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { DateField } from '../../date-field/date-field';
+import { MonthField } from '../../month-field/month-field';
 import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
-import { today } from '../../dates';
+import { today, shiftMonth } from '../../dates';
+import { APP_LOCALE } from '../../formatting/locale';
 import { SHARE_LABELS, SHARE_OPTION_ORDER, householdRatioOn } from '../../share-display';
 import { SharesService } from '../../shares.service';
 import { ToastService } from '../../toast/toast.service';
+
+function isMonth(value: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
 
 interface Loaded {
   categories: Category[];
@@ -47,7 +55,15 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
  */
 @Component({
   selector: 'app-delat-page',
-  imports: [RouterLink, MoneyPipe, CategoryIconComponent, CategoryTiles, DateField],
+  imports: [
+    NgTemplateOutlet,
+    RouterLink,
+    MoneyPipe,
+    CategoryIconComponent,
+    CategoryTiles,
+    DateField,
+    MonthField,
+  ],
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
       <header>
@@ -90,35 +106,51 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
               @if (settingOpen()) {
                 <form
                   data-setting-form
-                  class="expand-in flex flex-wrap items-end gap-3"
+                  class="expand-in flex flex-col gap-3"
                   (submit)="$event.preventDefault(); saveBalance()"
                 >
-                  <label class="flex flex-col gap-1 text-sm text-muted">
-                    Saldo
-                    <span class="field">
-                      <input
-                        type="text"
-                        inputmode="decimal"
-                        data-amount
-                        class="field-control"
-                        [value]="amount()"
-                        (input)="amount.set(value($event))"
+                  <div class="flex flex-wrap items-end gap-3">
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Saldo
+                      <span class="field">
+                        <input
+                          type="text"
+                          inputmode="decimal"
+                          data-amount
+                          class="field-control"
+                          [value]="amount()"
+                          (input)="amount.set(value($event))"
+                        />
+                        <span class="field-suffix">kr</span>
+                      </span>
+                    </label>
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Per
+                      <app-date-field
+                        data-as-of
+                        [value]="asOf()"
+                        (valueChange)="asOf.set($event)"
                       />
-                      <span class="field-suffix">kr</span>
-                    </span>
-                  </label>
-                  <label class="flex flex-col gap-1 text-sm text-muted">
-                    Per
-                    <app-date-field data-as-of [value]="asOf()" (valueChange)="asOf.set($event)" />
-                  </label>
-                  <button
-                    type="submit"
-                    data-save-balance
-                    class="btn btn-primary"
-                    [disabled]="saving() || !amountValid() || asOf() === ''"
-                  >
-                    Spara saldo
-                  </button>
+                    </label>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      data-save-balance
+                      class="btn btn-primary"
+                      [disabled]="saving() || !amountValid() || asOf() === ''"
+                    >
+                      Spara saldo
+                    </button>
+                    <button
+                      type="button"
+                      data-cancel-setting
+                      class="btn btn-ghost"
+                      (click)="cancelSetting()"
+                    >
+                      Avbryt
+                    </button>
+                  </div>
                 </form>
               } @else {
                 <div>
@@ -132,45 +164,133 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                   </button>
                 </div>
               }
+
+              @if (open(); as period) {
+                @if (closing()) {
+                  <form
+                    data-close-form
+                    class="flex flex-col gap-3 border-t border-line pt-3"
+                    (submit)="$event.preventDefault(); closeMonth()"
+                  >
+                    <div class="flex flex-wrap items-end gap-3">
+                      <label class="flex flex-col gap-1 text-sm text-muted">
+                        Avslutsdatum
+                        <app-date-field
+                          data-closing-date
+                          [value]="closingDate()"
+                          (valueChange)="closingDate.set($event)"
+                        />
+                      </label>
+                      <label class="flex flex-col gap-1 text-sm text-muted">
+                        Nästa månad
+                        <app-month-field
+                          data-next-month
+                          [value]="nextMonth()"
+                          (valueChange)="nextMonth.set($event)"
+                        />
+                      </label>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        type="submit"
+                        data-confirm-close
+                        class="btn btn-primary"
+                        [disabled]="saving() || closingDate() === '' || !nextMonthValid(period)"
+                      >
+                        Avsluta
+                      </button>
+                      <button type="button" class="btn btn-ghost" (click)="closing.set(false)">
+                        Avbryt
+                      </button>
+                    </div>
+                  </form>
+                } @else {
+                  <div>
+                    <button
+                      type="button"
+                      data-close-month
+                      class="btn btn-secondary btn-sm"
+                      (click)="startClosing(period)"
+                    >
+                      Avsluta {{ monthOnly(period.month).toLowerCase() }}
+                    </button>
+                  </div>
+                }
+              }
             </section>
 
             @if (open(); as period) {
               <section data-open-period class="card flex flex-col gap-3 p-5">
-                <h2 class="font-display text-lg font-semibold">Pågående period</h2>
+                <div class="flex items-center justify-between gap-3">
+                  <h2 class="font-display text-lg font-semibold">
+                    <span data-period-title>{{ monthName(period.month) }}</span>
+                    <span class="text-sm font-normal text-muted"> · pågående</span>
+                  </h2>
+                  @if (!editingMonth()) {
+                    <button
+                      type="button"
+                      data-edit-month
+                      class="btn btn-ghost btn-sm"
+                      (click)="startEditMonth(period)"
+                    >
+                      Ändra månad
+                    </button>
+                  }
+                </div>
+                @if (editingMonth()) {
+                  <form
+                    data-month-form
+                    class="flex flex-col gap-3"
+                    (submit)="$event.preventDefault(); saveMonth()"
+                  >
+                    <div class="flex flex-wrap items-end gap-3">
+                      <label class="flex flex-col gap-1 text-sm text-muted">
+                        Månad
+                        <app-month-field
+                          data-month-input
+                          [value]="monthDraft()"
+                          (valueChange)="monthDraft.set($event)"
+                        />
+                      </label>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        type="submit"
+                        data-save-month
+                        class="btn btn-primary"
+                        [disabled]="saving() || !monthDraftValid()"
+                      >
+                        Spara
+                      </button>
+                      <button type="button" class="btn btn-ghost" (click)="editingMonth.set(false)">
+                        Avbryt
+                      </button>
+                    </div>
+                  </form>
+                }
+                @if (period.overdue) {
+                  <p data-overdue class="text-sm text-danger">
+                    {{ monthOnly(period.month) }} är inte avslutad
+                  </p>
+                }
                 <div class="flex justify-between text-sm">
                   <span class="text-muted">Ingående saldo</span>
                   <span data-carried-in class="tabular-nums">{{ period.carriedIn | money }}</span>
                 </div>
-                <ul class="flex flex-col divide-y divide-line">
-                  @for (item of period.items; track item.transactionId) {
-                    <li data-item>
-                      <a
-                        [routerLink]="['/transaktioner', item.transactionId]"
-                        class="flex items-center gap-3 py-2.5"
-                      >
-                        <app-category-icon
-                          [icon]="item.icon ?? fallbackIcon"
-                          [colour]="item.colour ?? fallbackColour"
-                          [size]="28"
-                        />
-                        <span class="min-w-0 flex-1">
-                          <span class="block truncate text-sm">{{ item.description }}</span>
-                          <span class="text-xs text-muted">
-                            {{ item.date }} · {{ item.amount | money }} ·
-                            {{ shareName(item.share) }}
-                          </span>
-                        </span>
-                        <span
-                          data-partner-part
-                          class="text-sm tabular-nums"
-                          [class.text-danger]="item.partnerPart < 0"
-                        >
-                          {{ item.partnerPart | money }}
-                        </span>
-                      </a>
-                    </li>
-                  }
-                </ul>
+                <ng-container
+                  [ngTemplateOutlet]="itemList"
+                  [ngTemplateOutletContext]="{ $implicit: period.items }"
+                />
+                @if (period.payments.length > 0) {
+                  <ul class="flex flex-col gap-1 border-t border-line pt-3 text-sm">
+                    @for (payment of period.payments; track payment.transactionId) {
+                      <li data-payment class="flex justify-between">
+                        <span class="text-muted">Betalt {{ payment.date }}</span>
+                        <span class="tabular-nums">{{ payment.amount | money }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
                 <div class="flex justify-between border-t border-line pt-3 text-sm font-medium">
                   <span>Utgående saldo</span>
                   <span data-carried-out class="tabular-nums">{{ period.carriedOut | money }}</span>
@@ -191,10 +311,17 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                 </button>
               </div>
               @if (showClosed()) {
-                @for (period of closed(); track $index) {
-                  <section data-closed-period class="card expand-in flex flex-col gap-3 p-5">
-                    <h2 data-period-title class="font-display text-lg font-semibold">
-                      Avräknad {{ period.closedOn }}
+                @for (period of closed(); track period.month; let first = $first) {
+                  <section
+                    data-closed-period
+                    [attr.data-month]="period.month"
+                    class="card expand-in flex flex-col gap-3 p-5"
+                  >
+                    <h2 class="font-display text-lg font-semibold">
+                      <span data-period-title>{{ monthName(period.month) }}</span>
+                      <span class="text-sm font-normal text-muted">
+                        · avslutad, t.o.m. {{ period.closedThrough }}
+                      </span>
                     </h2>
                     <dl class="grid grid-cols-2 gap-y-1 text-sm">
                       <dt class="text-muted">Ingående saldo</dt>
@@ -205,13 +332,50 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                       <dd data-period-part class="text-right tabular-nums">
                         {{ partnerPartSum(period) | money }}
                       </dd>
-                      <dt class="text-muted">Betalt</dt>
-                      <dd data-paid class="text-right tabular-nums">{{ period.paid | money }}</dd>
+                      @for (payment of period.payments; track payment.transactionId) {
+                        <dt class="text-muted">Betalt {{ payment.date }}</dt>
+                        <dd data-payment class="text-right tabular-nums">
+                          {{ payment.amount | money }}
+                        </dd>
+                      }
                       <dt class="font-medium">Utgående saldo</dt>
                       <dd data-carried-out class="text-right font-medium tabular-nums">
                         {{ period.carriedOut | money }}
                       </dd>
                     </dl>
+                    @if (period.items.length > 0) {
+                      <div>
+                        <button
+                          type="button"
+                          data-toggle-items
+                          class="btn btn-ghost btn-sm"
+                          [attr.aria-expanded]="itemsShown(period)"
+                          (click)="toggleItems(period)"
+                        >
+                          {{ itemsShown(period) ? 'Dölj transaktioner' : 'Visa transaktioner' }}
+                          ({{ period.items.length }})
+                        </button>
+                      </div>
+                      @if (itemsShown(period)) {
+                        <ng-container
+                          [ngTemplateOutlet]="itemList"
+                          [ngTemplateOutletContext]="{ $implicit: period.items }"
+                        />
+                      }
+                    }
+                    @if (first) {
+                      <div>
+                        <button
+                          type="button"
+                          data-undo-close
+                          class="btn btn-ghost btn-sm"
+                          [disabled]="saving()"
+                          (click)="undoClose(period)"
+                        >
+                          Ångra avslut
+                        </button>
+                      </div>
+                    }
                   </section>
                 }
               }
@@ -404,6 +568,37 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
           </div>
         </div>
       }
+      <ng-template #itemList let-items>
+        <ul class="flex flex-col divide-y divide-line">
+          @for (item of items; track item.transactionId) {
+            <li data-item>
+              <a
+                [routerLink]="['/transaktioner', item.transactionId]"
+                class="flex items-center gap-3 py-2.5"
+              >
+                <app-category-icon
+                  [icon]="item.icon ?? fallbackIcon"
+                  [colour]="item.colour ?? fallbackColour"
+                  [size]="28"
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm">{{ item.description }}</span>
+                  <span class="text-xs text-muted">
+                    {{ item.date }} · {{ item.amount | money }} · {{ shareName(item.share) }}
+                  </span>
+                </span>
+                <span
+                  data-partner-part
+                  class="text-sm tabular-nums"
+                  [class.text-danger]="item.partnerPart < 0"
+                >
+                  {{ item.partnerPart | money }}
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      </ng-template>
     </main>
   `,
 })
@@ -412,6 +607,7 @@ export class DelatPage {
   private readonly shares = inject(SharesService);
   private readonly settlementService = inject(SettlementService);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly choices = SHARE_CHOICES;
   protected readonly fallbackIcon: CategoryIcon = 'arrow-left-right';
@@ -432,7 +628,17 @@ export class DelatPage {
   protected readonly amount = signal('');
   protected readonly amountValid = computed(() => parseAmount(this.amount()) !== null);
   protected readonly asOf = signal(today());
-  protected readonly showClosed = signal(false);
+  protected readonly showClosed = signal(
+    // ?manad=yyyy-MM opens the page at that month's period, which may be a closed one.
+    this.route.snapshot.queryParamMap.get('manad') !== null,
+  );
+  /** The closed periods (by month) whose transactions are listed. */
+  private readonly itemsOpen = signal<ReadonlySet<string>>(new Set());
+  protected readonly editingMonth = signal(false);
+  protected readonly monthDraft = signal('');
+  protected readonly closing = signal(false);
+  protected readonly closingDate = signal('');
+  protected readonly nextMonth = signal('');
 
   protected readonly ratio = signal<HouseholdRatioEntry[]>([]);
   protected readonly slider = signal<number | null>(null);
@@ -471,19 +677,23 @@ export class DelatPage {
   protected readonly balanceDirection = computed(() =>
     (this.settlement().balance ?? 0) < 0 ? 'Du är skyldig partnern' : 'Partnern är skyldig dig',
   );
-  /** The latest balance setting's date, as " · sedan avräkningen <date>". */
+  /** The latest settlement's or balance setting's date, as " · sedan avräkningen <date>". */
   protected readonly sinceText = computed(() => {
     const { periods, balanceSettings } = this.settlement();
-    const settled = periods.find((p) => p.closedOn !== null)?.closedOn ?? '';
-    const date = [settled, balanceSettings[0]?.asOf ?? ''].sort().at(-1);
+    const dates = [
+      balanceSettings[0]?.asOf ?? '',
+      ...periods.flatMap((p) => p.payments.map((payment) => payment.date)),
+    ];
+    const date = dates.sort().at(-1);
     return date ? ` · sedan avräkningen ${date}` : '';
   });
   protected readonly open = computed(() =>
-    this.settlement().periods.find((p) => p.closedOn === null),
+    this.settlement().periods.find((p) => p.closedThrough === null),
   );
   protected readonly closed = computed(() =>
-    this.settlement().periods.filter((p) => p.closedOn !== null),
+    this.settlement().periods.filter((p) => p.closedThrough !== null),
   );
+  protected readonly monthDraftValid = computed(() => isMonth(this.monthDraft()));
 
   /** The ratio in force today: the latest entry from today or before, else the first. */
   protected readonly current = computed(() => {
@@ -523,12 +733,100 @@ export class DelatPage {
     return SHARE_LABELS[option];
   }
 
+  /** `2026-10` as "Oktober 2026". */
+  protected monthName(month: string): string {
+    const [year, number] = month.split('-').map(Number) as [number, number];
+    const text = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long', year: 'numeric' }).format(
+      new Date(year, number - 1, 1),
+    );
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  /** `2026-10` as "Oktober". */
+  protected monthOnly(month: string): string {
+    return this.monthName(month).split(' ')[0]!;
+  }
+
+  protected itemsShown(period: SettlementPeriod): boolean {
+    return this.itemsOpen().has(period.month);
+  }
+
+  protected toggleItems(period: SettlementPeriod): void {
+    const next = new Set(this.itemsOpen());
+    if (!next.delete(period.month)) next.add(period.month);
+    this.itemsOpen.set(next);
+  }
+
+  protected startEditMonth(period: SettlementPeriod): void {
+    this.monthDraft.set(period.month);
+    this.editingMonth.set(true);
+  }
+
+  protected saveMonth(): void {
+    this.run(
+      this.settlementService.setOpenMonth({ month: this.monthDraft() }),
+      'Månaden kunde inte ändras. Den måste vara senare än den förra.',
+      () => this.editingMonth.set(false),
+    );
+  }
+
+  /** Opens the close form: the day the partner last paid in the period, else today. */
+  protected startClosing(period: SettlementPeriod): void {
+    this.closingDate.set(period.payments.at(-1)?.date ?? today());
+    this.nextMonth.set(shiftMonth(period.month, 1));
+    this.closing.set(true);
+  }
+
+  protected nextMonthValid(period: SettlementPeriod): boolean {
+    return isMonth(this.nextMonth()) && this.nextMonth() > period.month;
+  }
+
+  protected closeMonth(): void {
+    this.run(
+      this.settlementService.close({
+        closedThrough: this.closingDate(),
+        nextMonth: this.nextMonth(),
+      }),
+      'Månaden kunde inte avslutas. Kontrollera datum och nästa månad.',
+      () => this.closing.set(false),
+    );
+  }
+
+  protected undoClose(period: SettlementPeriod): void {
+    if (!confirm(`Ångra avslutet av ${this.monthName(period.month)}?`)) return;
+    this.run(this.settlementService.undoClose(), 'Avslutet kunde inte ångras.');
+  }
+
+  /** Sends a change to the periods and shows the answer, or `failure`. */
+  private run(request: Observable<SettlementResponse>, failure: string, done?: () => void): void {
+    this.saving.set(true);
+    this.error.set(null);
+    request.subscribe({
+      next: (response) => {
+        this.settlement.set(response);
+        done?.();
+        this.saving.set(false);
+      },
+      error: () => {
+        this.error.set(failure);
+        this.saving.set(false);
+      },
+    });
+  }
+
   protected partnerPartSum(period: { items: { partnerPart: number }[] }): number {
     return Math.round(period.items.reduce((sum, item) => sum + item.partnerPart, 0) * 100) / 100;
   }
 
   protected value(event: Event): string {
     return (event.target as HTMLInputElement).value;
+  }
+
+  protected cancelSetting(): void {
+    this.settingOpen.set(false);
+    this.amount.set('');
+    this.asOf.set(today());
+    this.error.set(null);
   }
 
   protected saveBalance(): void {
