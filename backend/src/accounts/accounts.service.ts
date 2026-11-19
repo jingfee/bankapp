@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNotNull, lt, max, or, sql } from 'drizzle-orm';
 import type {
   AccountsResponse,
   Money,
+  RemovedBank,
   SyncSummary,
   TransactionDetails,
   TransactionsResponse,
@@ -57,6 +58,7 @@ export class AccountsService {
         savings: accounts.savings,
         share: accounts.share,
         validUntil: connections.validUntil,
+        removed: connections.removedAt,
       })
       .from(accounts)
       .innerJoin(connections, eq(accounts.connectionId, connections.id))
@@ -73,8 +75,36 @@ export class AccountsService {
     );
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
+    const removedBanks = new Map<string, RemovedBank>();
     const now = this.clock.now();
-    for (const { id, bank, name, type, closed, hidden, savings, share, validUntil } of rows) {
+    for (const {
+      id,
+      bank,
+      name,
+      type,
+      closed,
+      hidden,
+      savings,
+      share,
+      validUntil,
+      removed,
+    } of rows) {
+      const account = {
+        id,
+        name,
+        type,
+        balance: shown.get(id) ?? null,
+        hidden,
+        savings,
+        share: share ?? ('me' as const),
+        lastSyncedAt: lastSynced.get(id)?.toISOString() ?? null,
+      };
+      if (removed !== null) {
+        const group = removedBanks.get(bank) ?? { bank, accounts: [] };
+        group.accounts.push(account);
+        removedBanks.set(bank, group);
+        continue;
+      }
       const group = byBank.get(bank) ?? {
         bank,
         status: connectionStatus(validUntil, now),
@@ -82,20 +112,12 @@ export class AccountsService {
         accounts: [],
         closedAccounts: [],
       };
-      (closed ? group.closedAccounts : group.accounts).push({
-        id,
-        name,
-        type,
-        balance: shown.get(id) ?? null,
-        hidden,
-        savings,
-        share: share ?? 'me',
-        lastSyncedAt: lastSynced.get(id)?.toISOString() ?? null,
-      });
+      (closed ? group.closedAccounts : group.accounts).push(account);
       byBank.set(bank, group);
     }
     return {
       banks: [...byBank.values()],
+      removedBanks: [...removedBanks.values()],
       syncing: this.sync.runningSync(),
       lastSync: this.lastSync(),
     };

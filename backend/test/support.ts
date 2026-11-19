@@ -44,6 +44,10 @@ export class FakeEnableBankingClient implements EnableBankingClient {
   /** What the bank returns when the owner completes BankID; `createSession` fails if unset. */
   session: EnableBankingSession | undefined;
   redeemedCodes: string[] = [];
+  /** The sessions revoked, in order. */
+  deletedSessions: string[] = [];
+  /** Makes `deleteSession` fail, as Enable Banking does when it refuses to revoke. */
+  failDeleteWith: Error | undefined;
   /** Balances by account `uid`; an account without an entry has none. */
   balances = new Map<string, EnableBankingBalance[]>();
   /** Account `uid`s whose balances the bank refuses to return. */
@@ -84,6 +88,11 @@ export class FakeEnableBankingClient implements EnableBankingClient {
     return this.session
       ? Promise.resolve(this.session)
       : Promise.reject(new Error('Enable Banking refused the code'));
+  }
+
+  deleteSession(sessionId: string): Promise<void> {
+    this.deletedSessions.push(sessionId);
+    return this.failDeleteWith ? Promise.reject(this.failDeleteWith) : Promise.resolve();
   }
 
   async getBalances(accountUid: string, options?: RequestOptions): Promise<EnableBankingBalance[]> {

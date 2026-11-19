@@ -11,6 +11,14 @@ export class InvalidInput extends DomainError {
   readonly kind = 'bad-request';
 }
 
+/** A bank addressed by the route that is not connected, or already removed. */
+export class NoSuchConnection extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such connected bank');
+  }
+}
+
 export class NoSuchAccount extends DomainError {
   readonly kind = 'not-found';
   constructor() {

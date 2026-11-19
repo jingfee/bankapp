@@ -141,7 +141,13 @@ describe('connecting a bank', () => {
       // Nothing in the API exposes these yet, so look at the stored rows.
       const db = app.get<AppDatabase>(DATABASE);
       expect(db.select().from(connections).all()).toEqual([
-        { id: 1, bankName: 'Swedbank', sessionId: 'session-1', validUntil: SESSION_VALID_UNTIL },
+        {
+          id: 1,
+          bankName: 'Swedbank',
+          sessionId: 'session-1',
+          validUntil: SESSION_VALID_UNTIL,
+          removedAt: null,
+        },
       ]);
       expect(db.select().from(accounts).all()).toContainEqual({
         id: 2,

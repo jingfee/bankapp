@@ -74,7 +74,12 @@ describe('BankerPage', () => {
 
   const failed: Respond = (request) => request.error(new ProgressEvent('error'));
   const noAccounts: Respond = (request) =>
-    request.flush({ banks: [], syncing: null, lastSync: null } satisfies AccountsResponse);
+    request.flush({
+      banks: [],
+      removedBanks: [],
+      syncing: null,
+      lastSync: null,
+    } satisfies AccountsResponse);
 
   it('has an empty state with a way to connect a bank', async () => {
     const page = await render();
@@ -92,6 +97,7 @@ describe('BankerPage', () => {
           group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
           group('Swedbank', [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')]),
         ],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       } satisfies AccountsResponse),
@@ -129,6 +135,7 @@ describe('BankerPage', () => {
     const page = await render((request) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       } satisfies AccountsResponse),
@@ -145,6 +152,7 @@ describe('BankerPage', () => {
       lastSync: SyncSummary | null = null,
     ): AccountsResponse => ({
       banks: [group('Swedbank', accounts)],
+      removedBanks: [],
       syncing,
       lastSync,
     });
@@ -275,6 +283,7 @@ describe('BankerPage', () => {
       lastSyncedAt: string | null = null,
     ): AccountsResponse => ({
       banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment'), lastSyncedAt }])],
+      removedBanks: [],
       syncing,
       lastSync,
     });
@@ -409,7 +418,12 @@ describe('BankerPage', () => {
     });
 
     it('is not offered when no bank is connected', async () => {
-      const { button } = await renderIdle({ banks: [], syncing: null, lastSync: null });
+      const { button } = await renderIdle({
+        banks: [],
+        removedBanks: [],
+        syncing: null,
+        lastSync: null,
+      });
 
       expect(button()).toBeNull();
     });
@@ -421,6 +435,7 @@ describe('BankerPage', () => {
     const swedbank = (overrides: Partial<BankAccounts>) => (request: TestRequest) =>
       request.flush({
         banks: [group('Swedbank', [account('Lönekonto', 'payment')], overrides)],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       } satisfies AccountsResponse);
@@ -527,6 +542,7 @@ describe('BankerPage', () => {
     it('hides a shown account and fetches the accounts again', async () => {
       const response = (hidden: boolean): AccountsResponse => ({
         banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment', 7), hidden }])],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       });
@@ -559,6 +575,7 @@ describe('BankerPage', () => {
     it('marks it with the hint and sends the choice', async () => {
       const response = (savings: boolean): AccountsResponse => ({
         banks: [group('Swedbank', [{ ...account('Sparkonto', 'payment', 7), savings }])],
+        removedBanks: [],
         syncing: null,
         lastSync: null,
       });
@@ -587,6 +604,7 @@ describe('BankerPage', () => {
   describe('the share of an account', () => {
     const response = (share: ConnectedAccount['share']): AccountsResponse => ({
       banks: [group('Swedbank', [{ ...account('Coop Mastercard', 'card', 7), share }])],
+      removedBanks: [],
       syncing: null,
       lastSync: null,
     });
@@ -637,6 +655,108 @@ describe('BankerPage', () => {
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('Hushåll');
       expect(select(page)?.value).toBe('me');
+    });
+  });
+
+  describe('removing a bank', () => {
+    const response = (overrides: Partial<AccountsResponse> = {}): AccountsResponse => ({
+      banks: [group('Swedbank', [account('Lönekonto', 'payment')])],
+      removedBanks: [],
+      syncing: null,
+      lastSync: null,
+      ...overrides,
+    });
+    const removeButton = (page: HTMLElement) =>
+      page.querySelector<HTMLButtonElement>('[data-remove-bank]');
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('removes the bank after the owner confirms and shows the page again', async () => {
+      const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const page = await render((request) => request.flush(response()));
+      const http = TestBed.inject(HttpTestingController);
+
+      removeButton(page)!.click();
+      expect(confirmation.mock.calls[0]![0]).toContain('historiken finns kvar');
+      http.expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' }).flush(null);
+      await new Promise((resolve) => setTimeout(resolve));
+
+      http.expectOne('/api/accounts').flush(
+        response({
+          banks: [],
+          removedBanks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment')] }],
+        }),
+      );
+      await TestBed.inject(ApplicationRef).whenStable();
+      expect(page.querySelector('[data-bank]')).toBeNull();
+      expect(page.querySelector('[data-removed-bank="Swedbank"]')?.textContent).toContain(
+        'Lönekonto',
+      );
+    });
+
+    it('does nothing when the owner cancels', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const page = await render((request) => request.flush(response()));
+
+      removeButton(page)!.click();
+
+      TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank');
+    });
+
+    it('says what happens to a savings account in the confirmation', async () => {
+      const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const savings = { ...account('Sparkonto', 'savings'), savings: true };
+      const page = await render((request) =>
+        request.flush(response({ banks: [group('Swedbank', [savings])] })),
+      );
+
+      removeButton(page)!.click();
+
+      expect(confirmation.mock.calls[0]![0]).toContain('Sparkonton avslutas');
+    });
+
+    it('says so when the bank could not be removed', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const page = await render((request) => request.flush(response()));
+
+      removeButton(page)!.click();
+      TestBed.inject(HttpTestingController)
+        .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' })
+        .flush(null, { status: 500, statusText: 'Error' });
+      await TestBed.inject(ApplicationRef).whenStable();
+
+      expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte tas bort');
+    });
+
+    it('lists removed banks in a collapsed section where accounts can be hidden and shown', async () => {
+      const hidden = { ...account('Dolt', 'payment', 2), hidden: true };
+      const page = await render((request) =>
+        request.flush(
+          response({
+            banks: [],
+            removedBanks: [
+              { bank: 'Swedbank', accounts: [account('Lönekonto', 'payment'), hidden] },
+            ],
+          }),
+        ),
+      );
+
+      const section = page.querySelector<HTMLDetailsElement>('[data-removed-banks]')!;
+      expect(section.open).toBe(false);
+      expect(section.textContent).toContain('Borttagna banker');
+      const rows = section.querySelectorAll('li');
+      expect(rows[1]?.querySelector('[data-visibility]')?.textContent).toBe('Dolt');
+
+      rows[1]!.querySelector<HTMLButtonElement>('[data-toggle-hidden]')!.click();
+      TestBed.inject(HttpTestingController)
+        .expectOne({ method: 'PUT', url: '/api/accounts/2/hidden' })
+        .flush(null);
+    });
+
+    it('shows no Borttagna banker section when none were removed', async () => {
+      const page = await render((request) => request.flush(response()));
+
+      expect(page.querySelector('[data-removed-banks]')).toBeNull();
     });
   });
 

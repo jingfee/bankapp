@@ -43,6 +43,13 @@ export interface BankAccounts {
   closedAccounts: ConnectedAccount[];
 }
 
+/** A bank the owner removed (_Borttagen bank_): every one of its accounts is closed. */
+export interface RemovedBank {
+  bank: string;
+  /** All of its accounts, hidden ones included and still hidden. */
+  accounts: ConnectedAccount[];
+}
+
 /** How the most recent finished sync went. */
 export interface SyncSummary {
   /** When it finished (ISO 8601). */
@@ -61,6 +68,8 @@ export type SyncTrigger = 'initial' | 'scheduled' | 'manual';
 /** Response body of `GET /api/accounts`, banks sorted by name and accounts by name. */
 export interface AccountsResponse {
   banks: BankAccounts[];
+  /** Banks the owner removed, sorted by name; they are not synced and raise no banners. */
+  removedBanks: RemovedBank[];
   /** What started the sync that is running, or null when none is; the overview refreshes until it is null. */
   syncing: SyncTrigger | null;
   /** The most recent finished sync, or null if none has finished yet. */

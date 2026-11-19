@@ -111,6 +111,7 @@ export class SyncService implements OnModuleInit {
         .where(
           and(
             eq(accounts.closed, false),
+            isNull(connections.removedAt),
             options.connectionId === undefined
               ? gt(connections.validUntil, now)
               : eq(connections.id, options.connectionId),

@@ -102,6 +102,8 @@ export abstract class EnableBankingClient {
   abstract startAuthorisation(request: AuthorisationRequest): Promise<{ url: string }>;
   /** Exchanges the code from the redirect for a session with the bank's accounts. */
   abstract createSession(code: string): Promise<EnableBankingSession>;
+  /** Revokes the session, ending the permission it granted; rejects when Enable Banking refuses. */
+  abstract deleteSession(sessionId: string): Promise<void>;
   /** Every balance the bank reports for the account with this Enable Banking `uid`. */
   abstract getBalances(
     accountUid: string,

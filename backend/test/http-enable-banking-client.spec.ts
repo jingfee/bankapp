@@ -228,6 +228,25 @@ describe('HttpEnableBankingClient', () => {
     });
   });
 
+  describe('deleteSession', () => {
+    it('deletes the session, which answers with no body', async () => {
+      respond = () => new Response(null, { status: 204 });
+
+      await client().deleteSession('s 1');
+
+      expect(requests[0]).toMatchObject({
+        url: 'https://enable.test/sessions/s%201',
+        method: 'DELETE',
+      });
+    });
+
+    it('rejects when Enable Banking refuses', async () => {
+      respond = () => new Response('', { status: 404 });
+
+      await expect(client().deleteSession('s1')).rejects.toThrow(/404/);
+    });
+  });
+
   describe('getAccountDetails', () => {
     it('fetches the account details and maps them like a session account', async () => {
       const resource = {
