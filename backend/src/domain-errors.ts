@@ -19,6 +19,14 @@ export class NoSuchConnection extends DomainError {
   }
 }
 
+/** Deleting for good is only for a bank that has already been removed. */
+export class BankNotRemoved extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('Only a removed bank can be deleted for good');
+  }
+}
+
 export class NoSuchAccount extends DomainError {
   readonly kind = 'not-found';
   constructor() {

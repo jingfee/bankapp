@@ -1,14 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, notInArray, or } from 'drizzle-orm';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
 import { BANK_COUNTRY } from '../banks/banks.service';
 import { CLOCK, type Clock } from '../clock';
 import { DATABASE } from '../db/database.module';
 import type { AppDatabase } from '../db/database';
-import { accounts, authorisations, banks, connections } from '../db/schema';
-import { InvalidInput, NoSuchConnection } from '../domain-errors';
+import {
+  accounts,
+  authorisations,
+  balances,
+  banks,
+  connections,
+  replaceRejections,
+  syncAccountResults,
+  transactions,
+} from '../db/schema';
+import { BankNotRemoved, InvalidInput, NoSuchConnection } from '../domain-errors';
 import { Savings } from '../savings/savings';
 import {
   EnableBankingClient,
@@ -248,6 +257,61 @@ export class ConnectionsService {
         .where(eq(accounts.connectionId, connection.id))
         .run();
       for (const accountId of new Set(continueManually)) this.savings.continueManually(accountId);
+    });
+  }
+
+  /**
+   * Erases a removed bank and everything it brought in (ADR 0013): its connection, accounts,
+   * transactions, balances and what hangs on them, in one database transaction. Refunds offset
+   * against its purchases keep their category but lose the link, and manual transactions its
+   * transactions replaced come back by themselves. A savings account that continued as a manual
+   * one is not part of the bank and stays.
+   */
+  deleteForGood(bankName: string): void {
+    const connection = this.db
+      .select()
+      .from(connections)
+      .where(eq(connections.bankName, bankName))
+      .get();
+    if (!connection) throw new NoSuchConnection();
+    if (connection.removedAt === null) throw new BankNotRemoved();
+    this.db.transaction((tx) => {
+      const accountIds = tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.connectionId, connection.id))
+        .all()
+        .map((row) => row.id);
+      if (accountIds.length > 0) {
+        const own = tx
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(inArray(transactions.accountId, accountIds));
+        tx.update(transactions)
+          .set({ offsetsTransactionId: null })
+          .where(inArray(transactions.offsetsTransactionId, own))
+          .run();
+        tx.update(transactions)
+          .set({ replacesTransactionId: null })
+          .where(inArray(transactions.replacesTransactionId, own))
+          .run();
+        tx.delete(replaceRejections)
+          .where(
+            or(
+              inArray(replaceRejections.manualTransactionId, own),
+              inArray(replaceRejections.bankTransactionId, own),
+            ),
+          )
+          .run();
+        tx.delete(transactions).where(inArray(transactions.accountId, accountIds)).run();
+        tx.delete(balances).where(inArray(balances.accountId, accountIds)).run();
+        tx.delete(syncAccountResults)
+          .where(inArray(syncAccountResults.accountId, accountIds))
+          .run();
+        tx.delete(accounts).where(inArray(accounts.id, accountIds)).run();
+      }
+      tx.delete(authorisations).where(eq(authorisations.bankName, bankName)).run();
+      tx.delete(connections).where(eq(connections.id, connection.id)).run();
     });
   }
 

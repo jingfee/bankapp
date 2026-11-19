@@ -27,4 +27,9 @@ export class ConnectionsService {
       continueManually.length > 0 ? { continueManually: continueManually.join(',') } : {};
     return this.http.delete<void>(`/api/connections/${encodeURIComponent(bank)}`, { params });
   }
+
+  /** Erases a removed bank and everything it brought in (ADR 0013). */
+  deleteForGood(bank: string): Observable<void> {
+    return this.http.delete<void>(`/api/connections/${encodeURIComponent(bank)}/permanent`);
+  }
 }

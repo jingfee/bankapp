@@ -7,6 +7,7 @@ import {
   type AccountsResponse,
   type BankAccounts,
   type ConnectedAccount,
+  type RemovedBank,
   type ShareOption,
   type SyncSummary,
 } from '@bankapp/shared';
@@ -379,6 +380,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             Borttagna banker
           </summary>
           <div class="mt-4 flex flex-col gap-5">
+            @if (deleteFailed()) {
+              <p role="alert" class="text-sm text-danger">
+                Banken kunde inte tas bort helt. Försök igen senare.
+              </p>
+            }
             @for (removed of result.removedBanks; track removed.bank) {
               <section [attr.data-removed-bank]="removed.bank" class="flex flex-col gap-2">
                 <h3 class="font-medium">{{ removed.bank }}</h3>
@@ -405,6 +411,57 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     </li>
                   }
                 </ul>
+                @if (confirmingDelete() === removed.bank) {
+                  <form
+                    data-delete-form
+                    class="flex flex-col gap-2 rounded-lg border border-line p-3"
+                    (submit)="$event.preventDefault(); deleteBank(removed, name.value)"
+                  >
+                    <p class="text-sm">
+                      {{ removed.bank }} raderas helt och för alltid: banken, dess konton, alla
+                      transaktioner och saldohistoriken. Månader du redan sett och uppgörelsen kan
+                      ändras. Sparkonton som du fortsatt följa manuellt tas inte bort.
+                    </p>
+                    <label class="flex flex-col gap-1 text-sm">
+                      Skriv bankens namn för att bekräfta
+                      <input
+                        #name
+                        data-delete-name
+                        type="text"
+                        autocomplete="off"
+                        class="rounded-lg border border-line px-3 py-2"
+                        (input)="typedName.set(name.value)"
+                      />
+                    </label>
+                    <div class="flex gap-2">
+                      <button
+                        type="submit"
+                        data-confirm-delete
+                        class="btn btn-sm btn-secondary"
+                        [disabled]="deleting() || typedName().trim() !== removed.bank"
+                      >
+                        Ta bort helt
+                      </button>
+                      <button
+                        type="button"
+                        data-cancel-delete
+                        class="btn btn-sm btn-secondary"
+                        (click)="confirmingDelete.set(null)"
+                      >
+                        Avbryt
+                      </button>
+                    </div>
+                  </form>
+                } @else {
+                  <button
+                    type="button"
+                    data-delete-bank
+                    class="btn btn-sm btn-secondary self-start"
+                    (click)="startDelete(removed.bank)"
+                  >
+                    Ta bort helt
+                  </button>
+                }
               </section>
             }
           </div>
@@ -422,6 +479,10 @@ export class BankerPage {
   protected readonly renewFailed = signal(false);
   protected readonly removing = signal(false);
   protected readonly removeFailed = signal(false);
+  protected readonly deleting = signal(false);
+  protected readonly confirmingDelete = signal<string | null>(null);
+  protected readonly typedName = signal('');
+  protected readonly deleteFailed = signal(false);
   protected readonly togglingHidden = signal(false);
   protected readonly hideFailed = signal(false);
   protected readonly savingShare = signal(false);
@@ -578,6 +639,33 @@ export class BankerPage {
       error: () => {
         this.removing.set(false);
         this.removeFailed.set(true);
+      },
+    });
+  }
+
+  protected startDelete(bank: string): void {
+    this.typedName.set('');
+    this.deleteFailed.set(false);
+    this.confirmingDelete.set(bank);
+  }
+
+  /**
+   * Erases a removed bank and everything it brought in, once the owner has typed its name
+   * (_Ta bort helt_, ADR 0013).
+   */
+  protected deleteBank(removed: RemovedBank, typed: string): void {
+    if (typed.trim() !== removed.bank) return;
+    this.deleting.set(true);
+    this.deleteFailed.set(false);
+    this.connections.deleteForGood(removed.bank).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.confirmingDelete.set(null);
+        this.refresh.next();
+      },
+      error: () => {
+        this.deleting.set(false);
+        this.deleteFailed.set(true);
       },
     });
   }
