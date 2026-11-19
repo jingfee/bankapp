@@ -260,6 +260,17 @@ export const balanceSettings = sqliteTable('balance_settings', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+/**
+ * A settlement period: a named month (`YYYY-MM`, strictly increasing) the owner closes by hand.
+ * `closedThrough` is the last day belonging to it; null for the one open period, which is always
+ * the latest (ADR 0014).
+ */
+export const settlementMonths = sqliteTable('settlement_months', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  month: text('month').notNull().unique(),
+  closedThrough: text('closed_through'),
+});
+
 /** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
 export const startupTasks = sqliteTable('startup_tasks', {
   name: text('name').primaryKey(),

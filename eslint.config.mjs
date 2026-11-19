@@ -44,10 +44,10 @@ export default tseslint.config(
     files: ['frontend/**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
     rules: {
-      // app-date-field wraps a native date input, so a label around it labels a control.
+      // app-date-field and app-month-field wrap a native input, so a label around them labels a control.
       '@angular-eslint/template/label-has-associated-control': [
         'error',
-        { controlComponents: ['app-date-field'] },
+        { controlComponents: ['app-date-field', 'app-month-field'] },
       ],
     },
   },

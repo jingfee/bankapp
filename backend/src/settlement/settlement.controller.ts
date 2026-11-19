@@ -1,6 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Put } from '@nestjs/common';
 import type {
+  CloseMonthRequest,
   SetBalanceSettingRequest,
+  SetOpenMonthRequest,
   SettlementBalanceResponse,
   SettlementResponse,
 } from '@bankapp/shared';
@@ -36,5 +38,23 @@ export class SettlementController {
       throw new BadRequestException('asOf cannot be in the future');
     }
     return this.settlement.setBalance(amount, asOf);
+  }
+
+  /** Closes the open period (_Avsluta månad_) and opens the next month. */
+  @Post('close')
+  close(@Body() body: Partial<CloseMonthRequest> | undefined): SettlementResponse {
+    return this.settlement.closeMonth(body);
+  }
+
+  /** Undoes the latest close. */
+  @Post('undo-close')
+  undoClose(): SettlementResponse {
+    return this.settlement.undoClose();
+  }
+
+  /** Renames the open period's month. */
+  @Put('month')
+  setMonth(@Body() body: Partial<SetOpenMonthRequest> | undefined): SettlementResponse {
+    return this.settlement.setOpenMonth(body?.month);
   }
 }

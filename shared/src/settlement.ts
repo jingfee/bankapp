@@ -26,20 +26,34 @@ export interface SettlementItem {
   partnerPart: number;
 }
 
-/** The stretch between two settlements (or since the last one, when still open). */
+/** One settlement the partner paid within a period. */
+export interface SettlementPayment {
+  transactionId: number;
+  /** The transaction date: when it was reserved, not booked. */
+  date: string;
+  amount: number;
+}
+
+/** A named month the owner closes by hand (ADR 0014). */
 export interface SettlementPeriod {
+  /** `YYYY-MM`; kept until the period is closed, however late that is. */
+  month: string;
+  /** The last day belonging to the period, or null for the open period. */
+  closedThrough: string | null;
   /** The balance when the period began. */
   carriedIn: number;
-  /** The day of the settlement that closed it, or null for the open period. */
-  closedOn: string | null;
   /** Balance settings made within the period, in order; each replaces the running balance. */
   balanceSettings: BalanceSetting[];
   /** The shared transactions dated in the period, oldest first. */
   items: SettlementItem[];
-  /** What the closing settlement paid, 0 for the open period. */
+  /** The settlements in the period, oldest first. */
+  payments: SettlementPayment[];
+  /** What the settlements in the period paid in total. */
   paid: number;
   /** The balance when the period ended; for the open period, the settlement balance now. */
   carriedOut: number;
+  /** Open period only: its month ended 7 or more days ago and it is still not closed. */
+  overdue: boolean;
 }
 
 /** Response body of `GET /api/settlement` and `POST /api/settlement/balance-settings`. */
@@ -61,4 +75,18 @@ export interface SettlementBalanceResponse {
 export interface SetBalanceSettingRequest {
   amount: number;
   asOf?: string;
+}
+
+/** Request body of `POST /api/settlement/close`. */
+export interface CloseMonthRequest {
+  /** The last day belonging to the closed period; not before the previous close, not after today. */
+  closedThrough: string;
+  /** `YYYY-MM`: the month of the period the close opens; later than the closed month. */
+  nextMonth: string;
+}
+
+/** Request body of `PUT /api/settlement/month`. */
+export interface SetOpenMonthRequest {
+  /** `YYYY-MM`: later than the latest closed period's month. */
+  month: string;
 }

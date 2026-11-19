@@ -162,6 +162,13 @@
       "when": 1794750760352,
       "tag": "0022_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795105046811,
+      "tag": "0023_settlement_months",
+      "breakpoints": true
     }
   ]
 }

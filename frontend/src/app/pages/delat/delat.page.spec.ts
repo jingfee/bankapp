@@ -57,12 +57,15 @@ describe('DelatPage', () => {
   const today = new Date().toLocaleDateString('sv-SE');
 
   const period = (overrides: Partial<SettlementPeriod> = {}): SettlementPeriod => ({
+    month: '2026-11',
+    closedThrough: null,
     carriedIn: 0,
-    closedOn: null,
     balanceSettings: [],
     items: [],
+    payments: [],
     paid: 0,
     carriedOut: 0,
+    overdue: false,
     ...overrides,
   });
 
@@ -97,6 +100,12 @@ describe('DelatPage', () => {
   }
 
   const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
+  /** Picks a month in a month field. */
+  const pick = (page: HTMLElement, selector: string, month: string) => {
+    const input = page.querySelector<HTMLInputElement>(`${selector} input`)!;
+    input.value = month;
+    input.dispatchEvent(new Event('change'));
+  };
   const type = (input: HTMLInputElement, value: string) => {
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -136,7 +145,7 @@ describe('DelatPage', () => {
       const { page } = await render({
         settlement: settlementOf({
           balance: 312,
-          periods: [period({ closedOn: '2026-10-20' }), period()],
+          periods: [period({ payments: [{ transactionId: 1, date: '2026-10-20', amount: 10 }] })],
         }),
       });
 
@@ -209,7 +218,14 @@ describe('DelatPage', () => {
             },
           ],
         }),
-        period({ closedOn: '2026-11-10', carriedIn: 50, paid: 200, carriedOut: 50 }),
+        period({
+          month: '2026-10',
+          closedThrough: '2026-11-02',
+          carriedIn: 50,
+          paid: 200,
+          payments: [{ transactionId: 5, date: '2026-11-02', amount: 200 }],
+          carriedOut: 50,
+        }),
       ],
     });
 
@@ -217,7 +233,7 @@ describe('DelatPage', () => {
       const { page } = await render({ settlement });
 
       const open = page.querySelector('[data-open-period]')!;
-      expect(text(open.querySelector('h2'))).toBe('Pågående period');
+      expect(text(open.querySelector('h2'))).toBe('November 2026 · pågående');
       expect(text(open.querySelector('[data-carried-in]'))).toBe('50,00 kr');
       expect([...open.querySelectorAll('[data-item]')].map((i) => text(i))).toEqual([
         expect.stringContaining('ICA'),
@@ -231,6 +247,42 @@ describe('DelatPage', () => {
       expect(text(open.querySelector('[data-carried-out]'))).toBe('80,00 kr');
     });
 
+    it('lists the transactions of a closed period on request', async () => {
+      const item = {
+        transactionId: 9,
+        date: '2026-10-05',
+        description: 'Hyra',
+        accountName: 'Lönekonto',
+        amount: -1000,
+        share: 'half' as const,
+        partnerPart: 500,
+        icon: null,
+        colour: null,
+      };
+      const { fixture, page } = await render({
+        settlement: settlementOf({
+          balance: 0,
+          periods: [
+            period(),
+            period({ month: '2026-10', closedThrough: '2026-10-31', items: [item] }),
+          ],
+        }),
+      });
+      page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+      await fixture.whenStable();
+      const closed = page.querySelector('[data-closed-period]')!;
+      expect(closed.querySelector('[data-item]')).toBeNull();
+
+      closed.querySelector<HTMLButtonElement>('[data-toggle-items]')!.click();
+      await fixture.whenStable();
+      expect(text(closed.querySelector('[data-item]'))).toContain('Hyra');
+      expect(text(closed.querySelector('[data-partner-part]'))).toBe('500,00 kr');
+
+      closed.querySelector<HTMLButtonElement>('[data-toggle-items]')!.click();
+      await fixture.whenStable();
+      expect(closed.querySelector('[data-item]')).toBeNull();
+    });
+
     it('expands the closed periods on request', async () => {
       const { fixture, page } = await render({ settlement });
       expect(page.querySelector('[data-closed-period]')).toBeNull();
@@ -239,10 +291,177 @@ describe('DelatPage', () => {
       await fixture.whenStable();
 
       const closed = page.querySelector('[data-closed-period]')!;
-      expect(text(closed.querySelector('[data-period-title]'))).toBe('Avräknad 2026-11-10');
+      expect(text(closed.querySelector('h2'))).toBe('Oktober 2026 · avslutad, t.o.m. 2026-11-02');
       expect(text(closed.querySelector('[data-carried-in]'))).toBe('50,00 kr');
-      expect(text(closed.querySelector('[data-paid]'))).toBe('200,00 kr');
+      expect(text(closed.querySelector('[data-payment]'))).toBe('200,00 kr');
       expect(text(closed.querySelector('[data-carried-out]'))).toBe('50,00 kr');
+    });
+  });
+
+  it('cancels the balance form and forgets what was typed', async () => {
+    const { fixture, page } = await render();
+    page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
+    await fixture.whenStable();
+    type(page.querySelector<HTMLInputElement>('[data-amount]')!, '500');
+    await fixture.whenStable();
+
+    page.querySelector<HTMLButtonElement>('[data-cancel-setting]')!.click();
+    await fixture.whenStable();
+    expect(page.querySelector('[data-setting-form]')).toBeNull();
+    page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
+    await fixture.whenStable();
+    expect(page.querySelector<HTMLInputElement>('[data-amount]')!.value).toBe('');
+  });
+
+  describe('closing a month', () => {
+    const settlement = settlementOf({
+      balance: 80,
+      periods: [
+        period({
+          month: '2026-10',
+          carriedOut: 80,
+          payments: [
+            { transactionId: 5, date: '2026-10-14', amount: 100 },
+            { transactionId: 6, date: '2026-10-28', amount: 100 },
+          ],
+        }),
+      ],
+    });
+
+    it('puts the close in the balance card', async () => {
+      const { page } = await render({ settlement });
+      expect(page.querySelector('[data-balance-card] [data-close-month]')).not.toBeNull();
+    });
+
+    it('offers the day of the latest settlement and the next month by default', async () => {
+      const { fixture, page } = await render({ settlement });
+      expect(text(page.querySelector('[data-close-month]'))).toBe('Avsluta oktober');
+      expect(text(page.querySelectorAll('[data-payment]')[1])).toContain('2026-10-28');
+
+      page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
+      await fixture.whenStable();
+
+      expect(text(page.querySelector('[data-closing-date] [data-date-text]'))).toBe('2026-10-28');
+      expect(text(page.querySelector('[data-next-month] [data-month-text]'))).toBe('2026-11');
+    });
+
+    it('defaults the closing date to today without a settlement', async () => {
+      const { fixture, page } = await render({
+        settlement: settlementOf({ balance: 0, periods: [period({ month: '2026-10' })] }),
+      });
+      page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
+      await fixture.whenStable();
+      expect(text(page.querySelector('[data-closing-date] [data-date-text]'))).toBe(today);
+    });
+
+    it('sends the close and shows the new periods', async () => {
+      const { fixture, page, http } = await render({ settlement });
+      page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
+      await fixture.whenStable();
+      pick(page, '[data-next-month]', '2026-12');
+      await fixture.whenStable();
+      page.querySelector<HTMLButtonElement>('[data-confirm-close]')!.click();
+
+      const request = http.expectOne('/api/settlement/close');
+      expect(request.request.body).toEqual({ closedThrough: '2026-10-28', nextMonth: '2026-12' });
+      request.flush(
+        settlementOf({
+          balance: 80,
+          periods: [
+            period({ month: '2026-12', carriedIn: 80 }),
+            period({ month: '2026-10', closedThrough: '2026-10-28' }),
+          ],
+        }),
+      );
+      await fixture.whenStable();
+
+      expect(text(page.querySelector('[data-open-period] h2'))).toBe('December 2026 · pågående');
+      expect(page.querySelector('[data-close-form]')).toBeNull();
+    });
+
+    it('does not accept a next month that is not later', async () => {
+      const { fixture, page } = await render({ settlement });
+      page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
+      await fixture.whenStable();
+      pick(page, '[data-next-month]', '2026-10');
+      await fixture.whenStable();
+      expect(page.querySelector<HTMLButtonElement>('[data-confirm-close]')!.disabled).toBe(true);
+    });
+
+    it('edits the month of the open period', async () => {
+      const { fixture, page, http } = await render({ settlement });
+      page.querySelector<HTMLButtonElement>('[data-edit-month]')!.click();
+      await fixture.whenStable();
+      pick(page, '[data-month-input]', '2026-09');
+      await fixture.whenStable();
+      page.querySelector<HTMLButtonElement>('[data-save-month]')!.click();
+      const request = http.expectOne('/api/settlement/month');
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ month: '2026-09' });
+      request.flush(settlementOf({ balance: 80, periods: [period({ month: '2026-09' })] }));
+      await fixture.whenStable();
+      expect(text(page.querySelector('[data-open-period] h2'))).toBe('September 2026 · pågående');
+    });
+
+    it('warns when the open month ended long ago', async () => {
+      const { page } = await render({
+        settlement: settlementOf({
+          balance: 0,
+          periods: [period({ month: '2026-10', overdue: true })],
+        }),
+      });
+      expect(text(page.querySelector('[data-overdue]'))).toBe('Oktober är inte avslutad');
+    });
+
+    it('shows no warning otherwise', async () => {
+      const { page } = await render({ settlement });
+      expect(page.querySelector('[data-overdue]')).toBeNull();
+    });
+
+    describe('undoing', () => {
+      const closedTwice = settlementOf({
+        balance: 0,
+        periods: [
+          period({ month: '2026-12' }),
+          period({ month: '2026-11', closedThrough: '2026-11-30' }),
+          period({ month: '2026-10', closedThrough: '2026-10-31' }),
+        ],
+      });
+
+      it('offers it on the latest close only, after confirmation', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const { fixture, page, http } = await render({ settlement: closedTwice });
+        page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        await fixture.whenStable();
+        const buttons = page.querySelectorAll('[data-undo-close]');
+        expect(buttons).toHaveLength(1);
+
+        (buttons[0] as HTMLButtonElement).click();
+        expect(confirm).toHaveBeenCalled();
+        const request = http.expectOne('/api/settlement/undo-close');
+        expect(request.request.method).toBe('POST');
+        request.flush(
+          settlementOf({
+            periods: [
+              period({ month: '2026-11' }),
+              period({ month: '2026-10', closedThrough: '2026-10-31' }),
+            ],
+          }),
+        );
+        await fixture.whenStable();
+        expect(text(page.querySelector('[data-open-period] h2'))).toBe('November 2026 · pågående');
+        confirm.mockRestore();
+      });
+
+      it('does nothing when not confirmed', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const { fixture, page } = await render({ settlement: closedTwice });
+        page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        await fixture.whenStable();
+        page.querySelector<HTMLButtonElement>('[data-undo-close]')!.click();
+        // afterEach verifies that no request was made.
+        confirm.mockRestore();
+      });
     });
   });
 
