@@ -78,6 +78,7 @@ describe('OverviewPage', () => {
     type: 'payment',
     balance: balance === null ? null : { amount: balance, currency: 'SEK' },
     hidden: false,
+    savings: false,
     share: 'me',
     lastSyncedAt: null,
   });
@@ -832,6 +833,16 @@ describe('OverviewPage', () => {
         { name: 'Kort', balance: '−99,00 kr' },
       ]);
       expect(page.querySelector('[data-accounts] li a, [data-accounts] li button')).toBeNull();
+    });
+
+    it('keeps a savings account listed with its balance, marked as such', async () => {
+      const { page } = await render(
+        overview(),
+        accountsOf([bankGroup('Swedbank', [{ ...account('Buffert', 500, 1), savings: true }])]),
+      );
+
+      expect(strip(page)).toEqual([{ name: 'Buffert', balance: '500,00 kr' }]);
+      expect(page.querySelector('[data-account-detail]')?.textContent).toContain('Sparkonto');
     });
 
     it('shows the bank and account type, a monogram, and links to Banker', async () => {

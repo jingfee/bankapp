@@ -21,6 +21,14 @@ export class AccountsController {
     if (typeof hidden !== 'boolean') throw new InvalidInput('hidden must be true or false');
     this.accounts.setHidden(parseId(id, new NoSuchAccount()), hidden);
   }
+
+  /** Marks an account as a savings account, or clears it, with `savings: true` or `false`. */
+  @Put(':id/savings')
+  setSavings(@Param('id') id: string, @Body() body: unknown): void {
+    const { savings } = (body ?? {}) as { savings?: unknown };
+    if (typeof savings !== 'boolean') throw new InvalidInput('savings must be true or false');
+    this.accounts.setSavings(parseId(id, new NoSuchAccount()), savings);
+  }
 }
 
 @Controller('transactions')

@@ -43,6 +43,11 @@ export const accounts = sqliteTable('accounts', {
   /** The owner hid the account: it is left off the overview and its transactions are not shown. */
   hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
   /**
+   * The owner follows the account by its balance only: it keeps syncing, but its transactions are
+   * left out of everything a hidden account's are. Never set together with `hidden`.
+   */
+  savings: integer('savings', { mode: 'boolean' }).notNull().default(false),
+  /**
    * The share the owner bears of the account's transactions (ADR 0007); null when not set, which
    * shows as Jag but lets the subcategory's share apply. Choosing Jag on Banker clears it.
    */

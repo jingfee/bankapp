@@ -154,6 +154,7 @@ describe('connecting a bank', () => {
         raw: '{"uid":"uid-1"}',
         closed: false,
         hidden: false,
+        savings: false,
         share: null,
         connectedOn: '2026-11-10',
       });

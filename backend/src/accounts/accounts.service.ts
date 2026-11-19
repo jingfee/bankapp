@@ -54,6 +54,7 @@ export class AccountsService {
         type: accounts.type,
         closed: accounts.closed,
         hidden: accounts.hidden,
+        savings: accounts.savings,
         share: accounts.share,
         validUntil: connections.validUntil,
       })
@@ -73,7 +74,7 @@ export class AccountsService {
     const shown = this.shownBalances();
     const byBank = new Map<string, AccountsResponse['banks'][number]>();
     const now = this.clock.now();
-    for (const { id, bank, name, type, closed, hidden, share, validUntil } of rows) {
+    for (const { id, bank, name, type, closed, hidden, savings, share, validUntil } of rows) {
       const group = byBank.get(bank) ?? {
         bank,
         status: connectionStatus(validUntil, now),
@@ -87,6 +88,7 @@ export class AccountsService {
         type,
         balance: shown.get(id) ?? null,
         hidden,
+        savings,
         share: share ?? 'me',
         lastSyncedAt: lastSynced.get(id)?.toISOString() ?? null,
       });
@@ -99,11 +101,22 @@ export class AccountsService {
     };
   }
 
-  /** Hides or shows an account. */
+  /** Hides or shows an account; hiding a savings account unmarks it. */
   setHidden(id: number, hidden: boolean): void {
     const updated = this.db
       .update(accounts)
-      .set({ hidden })
+      .set(hidden ? { hidden, savings: false } : { hidden })
+      .where(eq(accounts.id, id))
+      .returning({ id: accounts.id })
+      .get();
+    if (updated === undefined) throw new NoSuchAccount();
+  }
+
+  /** Marks an account as a savings account or not; marking a hidden account un-hides it. */
+  setSavings(id: number, savings: boolean): void {
+    const updated = this.db
+      .update(accounts)
+      .set(savings ? { savings, hidden: false } : { savings })
       .where(eq(accounts.id, id))
       .returning({ id: accounts.id })
       .get();
