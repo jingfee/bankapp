@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, output, signal } from '@angular/core';
 import type { BalanceEntry, ManualSavingsAccount } from '@bankapp/shared';
 import { type Observable, catchError, map, of } from 'rxjs';
 import { today } from '../dates';
@@ -115,21 +115,13 @@ import { ManualSavingsService } from '../manual-savings.service';
                 <span class="flex min-w-0 flex-col">
                   <span data-manual-name class="truncate font-medium">{{ account.name }}</span>
                   <span class="text-sm text-muted">
-                    {{ account.institution ?? 'Sparkonto' }} ·
+                    {{ account.institution ?? 'Sparkonto' }}
                     @if (account.closedOn) {
-                      <span data-closed>Avslutat {{ account.closedOn }}</span>
-                    } @else if (account.balance !== null) {
-                      <span class="amount" data-manual-balance>{{ account.balance | money }}</span>
-                    } @else {
-                      <span>Ingen saldonotering ännu</span>
+                      · <span data-closed>Avslutat {{ account.closedOn }}</span>
+                    } @else if (account.balance === null) {
+                      · <span>Ingen saldonotering ännu</span>
                     }
                   </span>
-                  @if (!account.closedOn && account.growth !== null) {
-                    <span data-growth class="text-sm text-muted">
-                      Utveckling {{ account.growthApproximate ? 'ca ' : ''
-                      }}{{ account.growth | money }} · Insatt {{ account.netDeposits! | money }}
-                    </span>
-                  }
                 </span>
                 <span class="flex flex-none flex-wrap justify-end gap-2">
                   <button
@@ -315,6 +307,8 @@ import { ManualSavingsService } from '../manual-savings.service';
 })
 export class ManualSavingsSection {
   private readonly service = inject(ManualSavingsService);
+  /** Emits after the owner has changed an account or an entry, so figures built on them can refresh. */
+  readonly changed = output<void>();
   protected readonly today = today;
 
   /** The accounts as last returned; every change replaces the account it touched. */
@@ -359,6 +353,7 @@ export class ManualSavingsSection {
       this.service.create(this.request()),
       (created) => {
         this.accounts.update((all) => [...all, created]);
+        this.changed.emit();
         this.adding.set(false);
         this.name.set('');
         this.institution.set('');
@@ -488,6 +483,7 @@ export class ManualSavingsSection {
 
   private replace(updated: ManualSavingsAccount): void {
     this.accounts.update((all) => all.map((one) => (one.id === updated.id ? updated : one)));
+    this.changed.emit();
   }
 
   private run<T>(call: Observable<T>, done: (result: T) => void, message: string): void {

@@ -17,6 +17,7 @@ import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
 import { ManualSavingsModule } from './manual-savings/manual-savings.module';
 import { OverviewModule } from './overview/overview.module';
+import { SavingsModule } from './savings/savings.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { DomainErrorFilter } from './domain-error.filter';
 import { SettlementModule } from './settlement/settlement.module';
@@ -74,6 +75,7 @@ export class AppModule {
         OverviewModule,
         SettlementModule,
         ManualSavingsModule,
+        SavingsModule,
         BackupModule,
         ...staticFrontendModules,
       ],
