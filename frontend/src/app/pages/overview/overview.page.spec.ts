@@ -11,6 +11,8 @@ import type {
   OverviewResponse,
   OverviewTotals,
   OverviewTransactionsResponse,
+  SettlementPeriod,
+  SettlementResponse,
   Transaction,
 } from '@bankapp/shared';
 import { OverviewPage } from './overview.page';
@@ -99,6 +101,29 @@ describe('OverviewPage', () => {
     lastSync: null,
   });
 
+  const period = (month: string, overrides: Partial<SettlementPeriod> = {}): SettlementPeriod => ({
+    month,
+    closedThrough: null,
+    carriedIn: 0,
+    balanceSettings: [],
+    items: [],
+    payments: [],
+    paid: 0,
+    carriedOut: 0,
+    overdue: false,
+    ...overrides,
+  });
+
+  /** A bare number is the live balance of an open November. */
+  const settlementOf = (setting: number | null | SettlementResponse): SettlementResponse =>
+    typeof setting === 'object' && setting !== null
+      ? setting
+      : {
+          balance: setting,
+          periods: setting === null ? [] : [period('2026-11', { carriedOut: setting })],
+          balanceSettings: [],
+        };
+
   const transaction = (id: number, overrides: Partial<Transaction> = {}): Transaction => ({
     id,
     status: 'booked',
@@ -116,7 +141,7 @@ describe('OverviewPage', () => {
   async function render(
     body: OverviewResponse | 'error' = overview(),
     accounts: AccountsResponse | 'error' = accountsOf([]),
-    settlement: number | null | 'error' = null,
+    settlement: number | null | SettlementResponse | 'error' = null,
   ) {
     const fixture = TestBed.createComponent(OverviewPage);
     await fixture.whenStable();
@@ -124,9 +149,9 @@ describe('OverviewPage', () => {
     const accountsRequest = http.expectOne('/api/accounts');
     if (accounts === 'error') accountsRequest.error(new ProgressEvent('error'));
     else accountsRequest.flush(accounts);
-    const settlementRequest = http.expectOne('/api/settlement/balance');
+    const settlementRequest = http.expectOne('/api/settlement');
     if (settlement === 'error') settlementRequest.error(new ProgressEvent('error'));
-    else settlementRequest.flush({ balance: settlement });
+    else settlementRequest.flush(settlementOf(settlement));
     await answer(http, body);
     await fixture.whenStable();
     return { fixture, page: fixture.nativeElement as HTMLElement, http };
@@ -158,13 +183,23 @@ describe('OverviewPage', () => {
 
   describe('the settlement tile', () => {
     const card = (page: HTMLElement) => page.querySelector('[data-total="settlement"]');
+    /** Opens the page at November, then steps back to `month`. */
+    const viewing = async (month: string, settlement: SettlementResponse) => {
+      const { fixture, page, http } = await render(overview(), accountsOf([]), settlement);
+      for (let m = 11; m > Number(month.slice(5)); m--) {
+        await click(fixture, page.querySelector('[data-previous-month]'));
+        await answer(http, overview({ month: `2026-${String(m - 1).padStart(2, '0')}` }));
+        await fixture.whenStable();
+      }
+      return page;
+    };
 
     it('shows what the partner owes and links to Delat', async () => {
       const { page } = await render(overview(), accountsOf([]), 4312);
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('4\u00a0312,00\u00a0kr');
       expect(text(card(page))).toContain('Partnern är skyldig dig');
-      expect(card(page)?.getAttribute('href')).toBe('/delat');
+      expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-11');
     });
 
     it('says the reverse when the balance is negative', async () => {
@@ -172,6 +207,75 @@ describe('OverviewPage', () => {
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('250,00\u00a0kr');
       expect(text(card(page))).toContain('Du är skyldig partnern');
+    });
+
+    it('shows what a closed month paid, with where it was closed and what was left', async () => {
+      const page = await viewing('2026-10', {
+        balance: 50,
+        periods: [
+          period('2026-11', { carriedIn: 120, carriedOut: 50 }),
+          period('2026-10', { closedThrough: '2026-11-02', paid: 800, carriedOut: 120 }),
+        ],
+        balanceSettings: [],
+      });
+
+      expect(text(card(page)?.querySelector('[data-amount]'))).toBe('800,00\u00a0kr');
+      expect(text(card(page))).toContain('Avslutad t.o.m. 2 nov');
+      expect(text(card(page))).toContain('120 kr kvar');
+      expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-10');
+    });
+
+    it('does not mention a balance left when the closed month ended even', async () => {
+      const page = await viewing('2026-10', {
+        balance: 0,
+        periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
+        balanceSettings: [],
+      });
+
+      expect(text(card(page))).not.toContain('kvar');
+    });
+
+    it('keeps a month closed late under its own month', async () => {
+      const page = await viewing('2026-10', {
+        balance: 0,
+        periods: [period('2026-12'), period('2026-10', { closedThrough: '2026-12-03', paid: 300 })],
+        balanceSettings: [],
+      });
+
+      expect(text(card(page))).toContain('Avslutad t.o.m. 3 dec');
+    });
+
+    it('warns when the open month ended a week or more ago', async () => {
+      const page = await viewing('2026-10', {
+        balance: 90,
+        periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
+        balanceSettings: [],
+      });
+
+      expect(text(card(page))).toContain('Partnern är skyldig dig');
+      expect(text(card(page))).toContain('Oktober är inte avslutad');
+    });
+
+    it('warns on the current month while an earlier month is still open', async () => {
+      const { page } = await render(overview(), accountsOf([]), {
+        balance: 90,
+        periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
+        balanceSettings: [],
+      });
+
+      expect(text(card(page)?.querySelector('[data-amount]'))).toBe('90,00\u00a0kr');
+      expect(text(card(page))).toContain('Oktober är inte avslutad');
+      expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-10');
+    });
+
+    it('is hidden for a month without a period', async () => {
+      const page = await viewing('2026-09', {
+        balance: 0,
+        periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31' })],
+        balanceSettings: [],
+      });
+
+      expect(card(page)).toBeNull();
     });
 
     it('is hidden when there is no balance setting', async () => {
@@ -410,7 +514,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement/balance').flush({ balance: null });
+      http.expectOne('/api/settlement').flush(settlementOf(null));
       const request = http.expectOne((r) => r.url === '/api/overview');
       expect(request.request.params.get('view')).toBe('mine');
       request.flush(overview());
@@ -443,7 +547,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement/balance').flush({ balance: null });
+      http.expectOne('/api/settlement').flush(settlementOf(null));
       const request = http.expectOne((r) => r.url === '/api/overview');
       expect(request.request.params.get('view')).toBe('full');
       request.flush(overview());
@@ -480,7 +584,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
       const http = TestBed.inject(HttpTestingController);
       http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement/balance').flush({ balance: null });
+      http.expectOne('/api/settlement').flush(settlementOf(null));
       http.expectOne((r) => r.url === '/api/overview').flush(body());
       await fixture.whenStable();
       const page = fixture.nativeElement as HTMLElement;

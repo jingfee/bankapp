@@ -108,6 +108,22 @@ interface AccountRow {
 
 const money = new MoneyPipe();
 
+const SHORT_DAY = new Intl.DateTimeFormat(APP_LOCALE, { day: 'numeric', month: 'short' });
+const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
+
+/** `2 nov` for a `YYYY-MM-DD` day. */
+function shortDay(day: string): string {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return SHORT_DAY.format(new Date(year, month - 1, date)).replace('.', '');
+}
+
+/** `Oktober` for a `YYYY-MM` month. */
+function monthName(month: string): string {
+  const [year, number] = month.split('-').map(Number) as [number, number];
+  const name = MONTH_LONG.format(new Date(year, number - 1, 1));
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 const VIEWS: { view: OverviewView; label: string }[] = [
   { view: 'mine', label: 'Min andel' },
   { view: 'full', label: 'Hela beloppet' },
@@ -608,7 +624,7 @@ export class OverviewPage {
   /** Fetched once; the card is a convenience, so a failure just leaves it out. */
   private readonly settlement = toSignal(
     inject(SettlementService)
-      .balance()
+      .get()
       .pipe(catchError(() => of(undefined))),
     { initialValue: undefined },
   );
@@ -825,24 +841,52 @@ export class OverviewPage {
               params: this.monthParams({ subcategories: '' + o.savings.subcategoryId }),
             },
     });
-    const balance = this.settlement()?.balance;
-    if (balance !== undefined && balance !== null) {
-      tiles.push({
-        kind: 'settlement',
-        label: 'Avräkning',
-        amount: money.transform(Math.abs(balance)),
-        line:
-          balance === 0
-            ? 'Ni är kvitt'
-            : balance > 0
-              ? 'Partnern är skyldig dig'
-              : 'Du är skyldig partnern',
-        positive: false,
-        link: { path: '/delat', params: {} },
-      });
-    }
+    const settlement = this.settlementTile(o.month);
+    if (settlement !== null) tiles.push(settlement);
     return tiles;
   });
+
+  /**
+   * Avräkning for the month shown, from the settlement period named for it (ADR 0014):
+   * what a closed period paid, or the live balance of the open one.
+   */
+  private settlementTile(month: string): Tile | null {
+    const settlement = this.settlement();
+    if (settlement === undefined) return null;
+    const open = settlement.periods.find((p) => p.closedThrough === null);
+    const base = { kind: 'settlement' as const, label: 'Avräkning', positive: false };
+
+    const closed = settlement.periods.find((p) => p.month === month && p.closedThrough !== null);
+    if (closed?.closedThrough) {
+      const lines = [`Avslutad t.o.m. ${shortDay(closed.closedThrough)}`];
+      if (closed.carriedOut !== 0) lines.push(`${KR.format(Math.abs(closed.carriedOut))} kr kvar`);
+      return {
+        ...base,
+        amount: money.transform(closed.paid),
+        line: lines.join(' · '),
+        link: { path: '/delat', params: { manad: month } },
+      };
+    }
+
+    const balance = settlement.balance;
+    if (open === undefined || balance === null) return null;
+    const earlierOpen = month === this.currentMonth && open.month < month;
+    if (open.month !== month && !earlierOpen) return null;
+    const lines = [
+      balance === 0
+        ? 'Ni är kvitt'
+        : balance > 0
+          ? 'Partnern är skyldig dig'
+          : 'Du är skyldig partnern',
+    ];
+    if (open.overdue) lines.push(`${monthName(open.month)} är inte avslutad`);
+    return {
+      ...base,
+      amount: money.transform(Math.abs(balance)),
+      line: lines.join(' · '),
+      link: { path: '/delat', params: { manad: open.month } },
+    };
+  }
 
   protected accountType(account: ConnectedAccount): string {
     return ACCOUNT_TYPES[account.type];
