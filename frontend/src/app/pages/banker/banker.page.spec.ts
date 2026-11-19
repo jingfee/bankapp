@@ -764,6 +764,72 @@ describe('BankerPage', () => {
         .flush(null);
     });
 
+    describe('deleting a removed bank for good', () => {
+      const removedResponse = () =>
+        response({
+          banks: [],
+          removedBanks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment')] }],
+        });
+      const open = async (page: HTMLElement) => {
+        page.querySelector<HTMLButtonElement>('[data-delete-bank]')!.click();
+        await TestBed.inject(ApplicationRef).whenStable();
+      };
+      const type = async (page: HTMLElement, text: string) => {
+        const input = page.querySelector<HTMLInputElement>('[data-delete-name]')!;
+        input.value = text;
+        input.dispatchEvent(new Event('input'));
+        await TestBed.inject(ApplicationRef).whenStable();
+      };
+      const confirm = (page: HTMLElement) =>
+        page.querySelector<HTMLButtonElement>('[data-confirm-delete]')!;
+
+      it('erases the bank once its name is typed', async () => {
+        const page = await render((request) => request.flush(removedResponse()));
+        const http = TestBed.inject(HttpTestingController);
+
+        await open(page);
+        expect(page.querySelector('[data-delete-form]')?.textContent).toContain(
+          'manuellt tas inte bort',
+        );
+        expect(confirm(page).disabled).toBe(true);
+        await type(page, 'Swed');
+        expect(confirm(page).disabled).toBe(true);
+        await type(page, 'Swedbank');
+        confirm(page).click();
+
+        http
+          .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank/permanent' })
+          .flush(null);
+        await new Promise((resolve) => setTimeout(resolve));
+        http.expectOne('/api/accounts').flush(response());
+      });
+
+      it('can be cancelled', async () => {
+        const page = await render((request) => request.flush(removedResponse()));
+
+        await open(page);
+        page.querySelector<HTMLButtonElement>('[data-cancel-delete]')!.click();
+        await TestBed.inject(ApplicationRef).whenStable();
+
+        expect(page.querySelector('[data-delete-form]')).toBeNull();
+        TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank/permanent');
+      });
+
+      it('says so when it fails', async () => {
+        const page = await render((request) => request.flush(removedResponse()));
+
+        await open(page);
+        await type(page, 'Swedbank');
+        confirm(page).click();
+        TestBed.inject(HttpTestingController)
+          .expectOne('/api/connections/Swedbank/permanent')
+          .flush(null, { status: 500, statusText: 'Error' });
+        await TestBed.inject(ApplicationRef).whenStable();
+
+        expect(page.querySelector('[role=alert]')?.textContent).toContain('tas bort helt');
+      });
+    });
+
     it('shows no Borttagna banker section when none were removed', async () => {
       const page = await render((request) => request.flush(response()));
 

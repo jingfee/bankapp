@@ -47,6 +47,13 @@ export class ConnectionsController {
     return this.connections.remove(bank, accountIds(continueManually));
   }
 
+  /** Erases a removed bank and everything it brought in (_Ta bort helt_, ADR 0013). */
+  @Delete(':bank/permanent')
+  @HttpCode(204)
+  deleteForGood(@Param('bank') bank: string): void {
+    this.connections.deleteForGood(bank);
+  }
+
   /**
    * Where Enable Banking sends the owner back after BankID. Public because that cross-site
    * redirect never carries the SameSite=Strict session cookie; the unguessable `state` of a
