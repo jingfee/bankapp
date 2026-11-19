@@ -281,6 +281,36 @@ export const settlementMonths = sqliteTable('settlement_months', {
   closedThrough: text('closed_through'),
 });
 
+/**
+ * A savings account the app cannot reach through Enable Banking, such as an ISK, kept up to date
+ * by the owner with balance entries. It belongs to no connection. `closedOn` is the day the
+ * owner closed it (`YYYY-MM-DD`), or null while it is open.
+ */
+export const manualSavingsAccounts = sqliteTable('manual_savings_accounts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  institution: text('institution'),
+  closedOn: text('closed_on'),
+});
+
+/**
+ * The owner stating that a manual savings account held `balance` and, optionally, `netDeposits`
+ * on `date` (`YYYY-MM-DD`). At most one per account per day; null net deposits mean unchanged.
+ */
+export const balanceEntries = sqliteTable(
+  'balance_entries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => manualSavingsAccounts.id),
+    date: text('date').notNull(),
+    balance: real('balance').notNull(),
+    netDeposits: real('net_deposits'),
+  },
+  (table) => [uniqueIndex('balance_entries_account_date').on(table.accountId, table.date)],
+);
+
 /** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
 export const startupTasks = sqliteTable('startup_tasks', {
   name: text('name').primaryKey(),

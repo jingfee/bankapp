@@ -108,3 +108,33 @@ export class FollowsPurchase extends DomainError {
     super('A kvittad refund follows its purchase; change the purchase');
   }
 }
+
+export class NoSuchManualSavingsAccount extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such manual savings account');
+  }
+}
+
+export class NoSuchBalanceEntry extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such balance entry');
+  }
+}
+
+/** A closed manual savings account asks for no more entries; reopen it first. */
+export class AccountClosed extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('The account is closed; reopen it to add entries');
+  }
+}
+
+/** Moving an entry onto a day that already has one would silently replace that one. */
+export class EntryDateTaken extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('The account already has an entry for that day');
+  }
+}

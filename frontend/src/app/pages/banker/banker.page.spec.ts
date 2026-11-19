@@ -7,6 +7,7 @@ import {
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import type {
   AccountsResponse,
   BankAccounts,
@@ -14,6 +15,7 @@ import type {
   SyncSummary,
   SyncTrigger,
 } from '@bankapp/shared';
+import { ManualSavingsService } from '../../manual-savings.service';
 import { Redirector } from '../../redirector';
 import { BankerPage, SYNC_POLL_INTERVAL_MS } from './banker.page';
 
@@ -28,6 +30,8 @@ describe('BankerPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        // The Manuella sparkonton section has its own spec.
+        { provide: ManualSavingsService, useValue: { list: () => of({ accounts: [] }) } },
         { provide: Redirector, useValue: { goTo: (url: string) => redirects.push(url) } },
       ],
     });
