@@ -48,16 +48,8 @@ function pending(
     categoryConfirmedAt: null,
     share: null,
     replacesTransactionId: null,
-    raw: '{}',
     ...overrides,
   };
-}
-
-/** A raw response for a card purchase made in another currency. */
-function foreign(amount: string, currency = 'EUR'): string {
-  return JSON.stringify({
-    exchange_rate: { instructed_amount: { amount, currency } },
-  });
 }
 
 function booked(id: number, dedupKey: string, overrides: Partial<StoredBooked> = {}): StoredBooked {
@@ -153,36 +145,24 @@ describe('reconciling stored transactions with what the bank returns', () => {
       ],
       ['not for an empty description', { description: '' }, fetched(-35), false],
       [
-        'for a purchase in another currency whose rate changed, by its original amount',
-        { raw: foreign('3.10') },
-        fetched(-35.8, { raw: foreign('3.10') }),
+        'for a purchase in another currency whose converted amount drifted, made the same day',
+        { transactionDate: '2026-11-21' },
+        fetched(-35.8, { transactionDate: '2026-11-21' }),
         true,
       ],
       [
-        'not for a purchase in another currency of another original amount',
-        { raw: foreign('3.10') },
-        fetched(-35.8, { raw: foreign('3.20') }),
+        'not for a drifted amount made another day',
+        { transactionDate: '2026-11-20' },
+        fetched(-35.8, { transactionDate: '2026-11-21' }),
         false,
       ],
+      ['not for a drifted amount without a transaction date', {}, fetched(-35.8), false],
       [
-        'for a reservation held in the purchase’s own currency',
-        { amount: -3.1, currency: 'EUR' },
-        fetched(-35.8, { raw: foreign('3.10') }),
-        true,
-      ],
-      [
-        'for a purchase in another currency when only one side says so, close in amount',
-        {},
-        fetched(-36.5, { raw: foreign('3.10') }),
-        true,
-      ],
-      [
-        'not for a purchase in another currency far off in amount',
-        {},
-        fetched(-40, { raw: foreign('3.10') }),
+        'not for an amount drifted too far',
+        { transactionDate: '2026-11-21' },
+        fetched(-37, { transactionDate: '2026-11-21' }),
         false,
       ],
-      ['not for a close amount without another currency', {}, fetched(-35.5), false],
     ])('match %s', (_, stored, transaction, twins) => {
       const plan = reconcile(
         { pending: [pending(1, -35, stored)], booked: [] },
@@ -207,6 +187,19 @@ describe('reconciling stored transactions with what the bank returns', () => {
         expect(plan.remove).toEqual([1]);
         expect(plan.insert).toMatchObject([{ status: 'booked' }]);
       }
+    });
+
+    it('matches the reservation of the exact amount before one that drifted', () => {
+      const day = { transactionDate: '2026-11-21' };
+      const plan = reconcile(
+        { pending: [pending(1, -100, day), pending(2, -103, day)], booked: [] },
+        [fetched(-101, day), fetched(-103, day)],
+        TODAY,
+      );
+      expect(plan.update.map((u) => [u.id, u.row.amount])).toEqual([
+        [2, -103],
+        [1, -101],
+      ]);
     });
 
     it('drops the bank’s own pending entry when it returns both, one twin each', () => {
