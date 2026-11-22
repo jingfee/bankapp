@@ -16,6 +16,7 @@ import type { EnableBankingClient } from './enable-banking/enable-banking-client
 import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
 import { ManualSavingsModule } from './manual-savings/manual-savings.module';
+import { MortgageModule } from './mortgage/mortgage.module';
 import { OverviewModule } from './overview/overview.module';
 import { SavingsModule } from './savings/savings.module';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -76,6 +77,7 @@ export class AppModule {
         SettlementModule,
         ManualSavingsModule,
         SavingsModule,
+        MortgageModule,
         BackupModule,
         ...staticFrontendModules,
       ],

@@ -146,3 +146,33 @@ export class EntryDateTaken extends DomainError {
     super('The account already has an entry for that day');
   }
 }
+
+export class NoSuchLoanPart extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such loan part');
+  }
+}
+
+export class NoSuchMortgageEntry extends DomainError {
+  readonly kind = 'not-found';
+  constructor() {
+    super('There is no such mortgage entry');
+  }
+}
+
+/** An ended part takes no more changes. */
+export class LoanPartEnded extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('The loan part has ended');
+  }
+}
+
+/** Moving a mortgage entry onto a day that already has one would silently replace that one. */
+export class MortgageEntryDateTaken extends DomainError {
+  readonly kind = 'conflict';
+  constructor() {
+    super('The mortgage already has an entry for that day');
+  }
+}

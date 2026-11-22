@@ -4,6 +4,7 @@ import { LoggaInPage } from './pages/logga-in/logga-in.page';
 import { ConnectBankPage } from './pages/connect-bank/connect-bank.page';
 import { ConnectionResultPage } from './pages/connection-result/connection-result.page';
 import { DelatPage } from './pages/delat/delat.page';
+import { BolanPage } from './pages/bolan/bolan.page';
 import { BankerPage } from './pages/banker/banker.page';
 import { ReviewPage } from './pages/review/review.page';
 import { TransactionDetailsPage } from './pages/transaction-details/transaction-details.page';
@@ -40,6 +41,7 @@ export const routes: Routes = [
       { path: '', component: OverviewPage, title: 'Bankapp' },
       { matcher: listMatcher, component: TransactionsPage, title: 'Transaktioner – Bankapp' },
       { path: 'banker', component: BankerPage, title: 'Banker – Bankapp' },
+      { path: 'bolan', component: BolanPage, title: 'Bolån – Bankapp' },
       { path: 'delat', component: DelatPage, title: 'Delat – Bankapp' },
       { path: 'sparande', component: SparandePage, title: 'Sparande – Bankapp' },
       { path: 'andelar', redirectTo: 'delat' },
