@@ -144,6 +144,25 @@ describe('reconciling stored transactions with what the bank returns', () => {
         false,
       ],
       ['not for an empty description', { description: '' }, fetched(-35), false],
+      [
+        'for a purchase in another currency whose converted amount drifted, made the same day',
+        { transactionDate: '2026-11-21' },
+        fetched(-35.8, { transactionDate: '2026-11-21' }),
+        true,
+      ],
+      [
+        'not for a drifted amount made another day',
+        { transactionDate: '2026-11-20' },
+        fetched(-35.8, { transactionDate: '2026-11-21' }),
+        false,
+      ],
+      ['not for a drifted amount without a transaction date', {}, fetched(-35.8), false],
+      [
+        'not for an amount drifted too far',
+        { transactionDate: '2026-11-21' },
+        fetched(-37, { transactionDate: '2026-11-21' }),
+        false,
+      ],
     ])('match %s', (_, stored, transaction, twins) => {
       const plan = reconcile(
         { pending: [pending(1, -35, stored)], booked: [] },
@@ -168,6 +187,19 @@ describe('reconciling stored transactions with what the bank returns', () => {
         expect(plan.remove).toEqual([1]);
         expect(plan.insert).toMatchObject([{ status: 'booked' }]);
       }
+    });
+
+    it('matches the reservation of the exact amount before one that drifted', () => {
+      const day = { transactionDate: '2026-11-21' };
+      const plan = reconcile(
+        { pending: [pending(1, -100, day), pending(2, -103, day)], booked: [] },
+        [fetched(-101, day), fetched(-103, day)],
+        TODAY,
+      );
+      expect(plan.update.map((u) => [u.id, u.row.amount])).toEqual([
+        [2, -103],
+        [1, -101],
+      ]);
     });
 
     it('drops the bank’s own pending entry when it returns both, one twin each', () => {
@@ -355,6 +387,44 @@ describe('reconciling stored transactions with what the bank returns', () => {
         remove: [1],
         update: [],
         inherit: [{ id: 2, inheritance: { ...decided, replacesTransactionId: 3 } }],
+        insert: [],
+      });
+    });
+
+    it.each([
+      ['while the bank still returns it', true],
+      ['once the bank stops returning it', false],
+    ])('repairs a foreign purchase already stored twice, %s', (_, stillReturned) => {
+      // SP Schnittbox: reserved at 499.45 kr, booked at 507.69 kr, both made on 2026-11-21.
+      const day = { transactionDate: '2026-11-21', description: 'SP SCHNITTBOX' };
+      const reservation = fetched(-499.45, {
+        ...day,
+        status: 'pending',
+        entryReference: '1450886977',
+      });
+      const plan = reconcile(
+        {
+          pending: [
+            pending(1, -499.45, {
+              ...day,
+              ...decided,
+              entryReference: '1450886977',
+              dedupKey: 'ref:1450886977',
+              share: 'me',
+            }),
+          ],
+          booked: [booked(2, 'ref:1950760498')],
+        },
+        [
+          ...(stillReturned ? [reservation] : []),
+          fetched(-507.69, { ...day, entryReference: '1950760498' }),
+        ],
+        TODAY,
+      );
+      expect(plan).toEqual({
+        remove: [1],
+        update: [],
+        inherit: [{ id: 2, inheritance: { ...decided, share: 'me' } }],
         insert: [],
       });
     });

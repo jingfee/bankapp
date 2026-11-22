@@ -122,24 +122,32 @@ export function reconcile(
   const kept = new Set<number>();
 
   // Each booked transaction is the twin of at most one pending one: first the bank's own
-  // pending entry, else a stored one the bank no longer returns.
+  // pending entry, else a stored one the bank no longer returns. Exact amounts are matched
+  // before converted ones that drifted, so a drifted match cannot take an exact one's twin.
   const merges: { stored: StoredPending; booked: (typeof entries)[number] }[] = [];
-  for (const entry of booked) {
-    const signature = twinSignature(entry.row);
-    const twin = pending.find((p) => !p.claimed && areTwins(twinSignature(p.row), signature));
-    let row = twin ? storedByKey.get(twin.row.dedupKey) : undefined;
-    if (twin) twin.claimed = true;
-    else {
-      row = identified.find(
-        (candidate) =>
-          !kept.has(candidate.id) &&
-          !fetchedPendingKeys.has(candidate.dedupKey) &&
-          areTwins(twinSignature(candidate), signature),
+  const paired = new Set<(typeof entries)[number]>();
+  for (const drift of [false, true]) {
+    for (const entry of booked) {
+      if (paired.has(entry)) continue;
+      const signature = twinSignature(entry.row);
+      const twin = pending.find(
+        (p) => !p.claimed && areTwins(twinSignature(p.row), signature, drift),
       );
-    }
-    if (row && !kept.has(row.id)) {
-      kept.add(row.id);
-      merges.push({ stored: row, booked: entry });
+      let row = twin ? storedByKey.get(twin.row.dedupKey) : undefined;
+      if (twin) twin.claimed = true;
+      else {
+        row = identified.find(
+          (candidate) =>
+            !kept.has(candidate.id) &&
+            !fetchedPendingKeys.has(candidate.dedupKey) &&
+            areTwins(twinSignature(candidate), signature, drift),
+        );
+      }
+      if (twin || row) paired.add(entry);
+      if (row && !kept.has(row.id)) {
+        kept.add(row.id);
+        merges.push({ stored: row, booked: entry });
+      }
     }
   }
 
@@ -183,7 +191,10 @@ export function reconcile(
   }
   const takeHandedOn = (row: FetchedRow): Inheritance | undefined => {
     const signature = twinSignature(row);
-    const index = handedOn.findIndex((entry) => areTwins(entry.signature, signature));
+    let index = handedOn.findIndex((entry) => areTwins(entry.signature, signature, false));
+    if (index === -1) {
+      index = handedOn.findIndex((entry) => areTwins(entry.signature, signature, true));
+    }
     return index === -1 ? undefined : handedOn.splice(index, 1)[0]!.inheritance;
   };
 
@@ -281,27 +292,43 @@ function isUpcoming(transaction: EnableBankingTransaction): boolean {
  * transactions are twins when currency and size of the amount agree and the description's letters
  * and digits agree, or one only adds to the other, such as a reference number the bank appends
  * when booking ("lufthansa.com" becomes "Lufthansa.com 22041073").
+ *
+ * A purchase made in another currency is converted again when it books, so its amount drifts, and
+ * the bank does not say it was in another currency. Allowing for `drift`, amounts within
+ * {@link CONVERSION_DRIFT} of each other agree too, but only for two transactions made the same day.
  */
 interface TwinSignature {
   size: number;
   currency: string;
+  transactionDate: string | null;
   text: string;
 }
+
+/** How far a converted amount may move between reservation and booking. */
+const CONVERSION_DRIFT = 0.05;
 
 function twinSignature(row: {
   amount: number;
   currency: string;
+  transactionDate: string | null;
   description: string;
 }): TwinSignature {
   return {
     size: Math.abs(row.amount),
     currency: row.currency,
+    transactionDate: row.transactionDate,
     text: row.description.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''),
   };
 }
 
-function areTwins(a: TwinSignature, b: TwinSignature): boolean {
-  if (a.size !== b.size || a.currency !== b.currency) return false;
+function areTwins(a: TwinSignature, b: TwinSignature, drift: boolean): boolean {
+  if (a.currency !== b.currency) return false;
+  if (a.size !== b.size) {
+    if (!drift || a.transactionDate === null || a.transactionDate !== b.transactionDate) {
+      return false;
+    }
+    if (Math.abs(a.size - b.size) > Math.max(a.size, b.size) * CONVERSION_DRIFT) return false;
+  }
   if (a.text === b.text) return true;
   const [short, long] = a.text.length <= b.text.length ? [a.text, b.text] : [b.text, a.text];
   return short !== '' && long.startsWith(short);
