@@ -1,7 +1,8 @@
+import { of } from 'rxjs';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import {
   CATEGORY_PALETTE,
   type Category,
@@ -279,6 +280,20 @@ describe('TransactionsPage', () => {
       expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
       expect(page.querySelector('button[data-more]')).not.toBeNull();
     });
+  });
+
+  it('lifts the page above the bottom tab bar (z-30) while the manual transaction sheet is open', async () => {
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: {
+        url: of([{ path: 'transaktioner' }, { path: 'ny' }]),
+        snapshot: { queryParamMap: convertToParamMap({}) },
+        queryParamMap: of(convertToParamMap({})),
+      },
+    });
+    const { fixture, http } = await render(response([transaction(1)]));
+    http.match(() => true);
+
+    expect((fixture.nativeElement as HTMLElement).classList.contains('z-40')).toBe(true);
   });
 
   it('shows Manuell where a manual transaction’s account would be and links to adding one', async () => {
@@ -584,6 +599,24 @@ describe('TransactionsPage', () => {
       expect(request.request.params.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(request.request.params.has('to')).toBe(false);
       request.flush(response([transaction(1)]));
+    });
+
+    it('lifts the page above the bottom tab bar (z-30) while the filter panel is open', async () => {
+      const { fixture, http, page } = await visit({});
+      listRequest(http).flush(response([transaction(1)]));
+      await fixture.whenStable();
+      const zIndex = () => {
+        const host = fixture.nativeElement as HTMLElement;
+        return host.classList.contains('z-40') ? 40 : host.classList.contains('z-30') ? 30 : 0;
+      };
+      expect(zIndex()).toBe(0);
+
+      (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      lookups(http);
+      await fixture.whenStable();
+
+      expect(zIndex()).toBeGreaterThan(30);
     });
 
     it('opens a panel whose changes narrow the list', async () => {

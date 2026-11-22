@@ -52,7 +52,7 @@ const SEARCH_DEBOUNCE_MS = 250;
   // The routed page is its own stacking context (see `router-outlet + *`), so while the filter
   // panel or the add form is open it must rise above the side menu and bottom tabs (z-20).
   // Otherwise the page would cover the bottom tabs.
-  host: { class: 'relative', '[class.z-30]': 'panelOpen() || adding()' },
+  host: { class: 'relative', '[class.z-40]': 'panelOpen() || adding()' },
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-10">
       <header class="flex items-center justify-between gap-3">

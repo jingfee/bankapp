@@ -78,7 +78,7 @@ function formatOriginal({ amount, currency }: Money): string {
   ],
   // The routed page is its own stacking context, so while the form is open it must rise above
   // the side menu and bottom tabs (z-20).
-  host: { class: 'relative', '[class.z-30]': 'editing()' },
+  host: { class: 'relative', '[class.z-40]': 'editing()' },
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:py-10">
       @switch (state().status) {
