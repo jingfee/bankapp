@@ -19,6 +19,7 @@ export type StoredPending = Pick<
   | 'categoryConfirmedAt'
   | 'share'
   | 'replacesTransactionId'
+  | 'raw'
 >;
 
 /** A stored booked transaction of the account, as far as a pending twin can hand anything on to it. */
@@ -278,33 +279,80 @@ function isUpcoming(transaction: EnableBankingTransaction): boolean {
 /**
  * Banks keep returning a pending transaction alongside the booked transaction it turned into, and
  * may hold a refund as pending with the wrong sign and describe the merchant differently. So two
- * transactions are twins when currency and size of the amount agree and the description's letters
- * and digits agree, or one only adds to the other, such as a reference number the bank appends
- * when booking ("lufthansa.com" becomes "Lufthansa.com 22041073").
+ * transactions are twins when their amounts agree and the description's letters and digits
+ * agree, or one only adds to the other, such as a reference number the bank appends when booking
+ * ("lufthansa.com" becomes "Lufthansa.com 22041073").
+ *
+ * Amounts agree when currency and size agree. A purchase made in another currency is converted
+ * again when it books, so its amount in the account's currency drifts: there, the original amount
+ * the bank gives (its `instructed_amount`) is compared instead, and when only one side gives it,
+ * amounts within {@link CONVERSION_DRIFT} of each other agree.
  */
 interface TwinSignature {
-  size: number;
-  currency: string;
+  amount: Money;
+  /** The amount in the currency the purchase was made in, when the bank gives it. */
+  original: Money | null;
   text: string;
 }
+
+interface Money {
+  size: number;
+  currency: string;
+}
+
+/** How far a converted amount may move between reservation and booking. */
+const CONVERSION_DRIFT = 0.05;
 
 function twinSignature(row: {
   amount: number;
   currency: string;
   description: string;
+  raw: string;
 }): TwinSignature {
   return {
-    size: Math.abs(row.amount),
-    currency: row.currency,
+    amount: { size: Math.abs(row.amount), currency: row.currency },
+    original: originalAmount(row.raw),
     text: row.description.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''),
   };
 }
 
 function areTwins(a: TwinSignature, b: TwinSignature): boolean {
-  if (a.size !== b.size || a.currency !== b.currency) return false;
+  if (!amountsAgree(a, b)) return false;
   if (a.text === b.text) return true;
   const [short, long] = a.text.length <= b.text.length ? [a.text, b.text] : [b.text, a.text];
   return short !== '' && long.startsWith(short);
+}
+
+function amountsAgree(a: TwinSignature, b: TwinSignature): boolean {
+  const same = (x: Money | null, y: Money | null): boolean =>
+    x !== null && y !== null && x.currency === y.currency && x.size === y.size;
+  if (same(a.amount, b.amount)) return true;
+  if (a.original && b.original) return same(a.original, b.original);
+  // Only one side says what it was in another currency: it may be the other's own amount, or
+  // else the converted amounts may have drifted apart.
+  const known = a.original ?? b.original;
+  if (!known) return false;
+  if (same(known, a.amount) || same(known, b.amount)) return true;
+  if (a.amount.currency !== b.amount.currency) return false;
+  const larger = Math.max(a.amount.size, b.amount.size);
+  return Math.abs(a.amount.size - b.amount.size) <= larger * CONVERSION_DRIFT;
+}
+
+/** The amount in another currency the bank says a transaction was made in, if any. */
+function originalAmount(rawJson: string): Money | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawJson);
+  } catch {
+    return null;
+  }
+  const instructed = (raw as { exchange_rate?: { instructed_amount?: unknown } } | null)
+    ?.exchange_rate?.instructed_amount as { amount?: unknown; currency?: unknown } | undefined;
+  const size = Number(instructed?.amount);
+  const currency = instructed?.currency;
+  if (typeof instructed?.amount !== 'string' && typeof instructed?.amount !== 'number') return null;
+  if (!Number.isFinite(size) || typeof currency !== 'string' || currency === '') return null;
+  return { size: Math.abs(size), currency };
 }
 
 /**

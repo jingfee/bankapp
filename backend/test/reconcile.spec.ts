@@ -48,8 +48,16 @@ function pending(
     categoryConfirmedAt: null,
     share: null,
     replacesTransactionId: null,
+    raw: '{}',
     ...overrides,
   };
+}
+
+/** A raw response for a card purchase made in another currency. */
+function foreign(amount: string, currency = 'EUR'): string {
+  return JSON.stringify({
+    exchange_rate: { instructed_amount: { amount, currency } },
+  });
 }
 
 function booked(id: number, dedupKey: string, overrides: Partial<StoredBooked> = {}): StoredBooked {
@@ -144,6 +152,37 @@ describe('reconciling stored transactions with what the bank returns', () => {
         false,
       ],
       ['not for an empty description', { description: '' }, fetched(-35), false],
+      [
+        'for a purchase in another currency whose rate changed, by its original amount',
+        { raw: foreign('3.10') },
+        fetched(-35.8, { raw: foreign('3.10') }),
+        true,
+      ],
+      [
+        'not for a purchase in another currency of another original amount',
+        { raw: foreign('3.10') },
+        fetched(-35.8, { raw: foreign('3.20') }),
+        false,
+      ],
+      [
+        'for a reservation held in the purchase’s own currency',
+        { amount: -3.1, currency: 'EUR' },
+        fetched(-35.8, { raw: foreign('3.10') }),
+        true,
+      ],
+      [
+        'for a purchase in another currency when only one side says so, close in amount',
+        {},
+        fetched(-36.5, { raw: foreign('3.10') }),
+        true,
+      ],
+      [
+        'not for a purchase in another currency far off in amount',
+        {},
+        fetched(-40, { raw: foreign('3.10') }),
+        false,
+      ],
+      ['not for a close amount without another currency', {}, fetched(-35.5), false],
     ])('match %s', (_, stored, transaction, twins) => {
       const plan = reconcile(
         { pending: [pending(1, -35, stored)], booked: [] },
