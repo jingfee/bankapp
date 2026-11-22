@@ -391,6 +391,44 @@ describe('reconciling stored transactions with what the bank returns', () => {
       });
     });
 
+    it.each([
+      ['while the bank still returns it', true],
+      ['once the bank stops returning it', false],
+    ])('repairs a foreign purchase already stored twice, %s', (_, stillReturned) => {
+      // SP Schnittbox: reserved at 499.45 kr, booked at 507.69 kr, both made on 2026-11-21.
+      const day = { transactionDate: '2026-11-21', description: 'SP SCHNITTBOX' };
+      const reservation = fetched(-499.45, {
+        ...day,
+        status: 'pending',
+        entryReference: '1450886977',
+      });
+      const plan = reconcile(
+        {
+          pending: [
+            pending(1, -499.45, {
+              ...day,
+              ...decided,
+              entryReference: '1450886977',
+              dedupKey: 'ref:1450886977',
+              share: 'me',
+            }),
+          ],
+          booked: [booked(2, 'ref:1950760498')],
+        },
+        [
+          ...(stillReturned ? [reservation] : []),
+          fetched(-507.69, { ...day, entryReference: '1950760498' }),
+        ],
+        TODAY,
+      );
+      expect(plan).toEqual({
+        remove: [1],
+        update: [],
+        inherit: [{ id: 2, inheritance: { ...decided, share: 'me' } }],
+        insert: [],
+      });
+    });
+
     it('does not override a category the owner confirmed on the stored booked twin', () => {
       const plan = reconcile(
         {
