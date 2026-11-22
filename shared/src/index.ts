@@ -88,3 +88,19 @@ export type {
   SavingsResponse,
   SavingsTotals,
 } from './savings';
+export type {
+  AddLoanPartRequest,
+  AmortisationChange,
+  AmortisationChangeRequest,
+  EndLoanPartRequest,
+  InterestRateChangeRequest,
+  LoanPart,
+  MortgageEntry,
+  MortgageEntryDebt,
+  MortgageEntryRequest,
+  MortgageResponse,
+  RateChange,
+  RecurringDay,
+  RecurringDayRequest,
+  UpdateLoanPartRequest,
+} from './mortgage';

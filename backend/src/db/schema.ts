@@ -317,6 +317,71 @@ export const balanceEntries = sqliteTable(
   (table) => [uniqueIndex('balance_entries_account_date').on(table.accountId, table.date)],
 );
 
+/**
+ * One part of the owner's mortgage. There is no mortgage row: the mortgage is its parts. An
+ * ended part (`endedOn`, `YYYY-MM-DD`) counts as 0 from that day. The two recurring days are
+ * stored as the latest date the owner set; the next one is worked out on read.
+ */
+export const loanParts = sqliteTable('loan_parts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  startedOn: text('started_on').notNull(),
+  endedOn: text('ended_on'),
+  rateAdjustmentDate: text('rate_adjustment_date').notNull(),
+  rateAdjustmentIntervalMonths: integer('rate_adjustment_interval_months').notNull(),
+  termsChangeDate: text('terms_change_date').notNull(),
+  termsChangeIntervalMonths: integer('terms_change_interval_months').notNull(),
+});
+
+/** A loan part's interest rate (%) in force from `fromDate` until the next change. */
+export const interestRateChanges = sqliteTable(
+  'interest_rate_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    partId: integer('part_id')
+      .notNull()
+      .references(() => loanParts.id),
+    fromDate: text('from_date').notNull(),
+    rate: real('rate').notNull(),
+  },
+  (table) => [uniqueIndex('interest_rate_changes_part_from').on(table.partId, table.fromDate)],
+);
+
+/** A loan part's amortisation (kr per month) in force from `fromDate` until the next change. */
+export const amortisationChanges = sqliteTable(
+  'amortisation_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    partId: integer('part_id')
+      .notNull()
+      .references(() => loanParts.id),
+    fromDate: text('from_date').notNull(),
+    amount: real('amount').notNull(),
+  },
+  (table) => [uniqueIndex('amortisation_changes_part_from').on(table.partId, table.fromDate)],
+);
+
+/** The owner stating the loan parts' remaining debt on `date`. At most one per day. */
+export const mortgageEntries = sqliteTable('mortgage_entries', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull().unique(),
+});
+
+/** One loan part's remaining debt in a mortgage entry. */
+export const mortgageEntryDebts = sqliteTable(
+  'mortgage_entry_debts',
+  {
+    entryId: integer('entry_id')
+      .notNull()
+      .references(() => mortgageEntries.id),
+    partId: integer('part_id')
+      .notNull()
+      .references(() => loanParts.id),
+    debt: real('debt').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.entryId, table.partId] })],
+);
+
 /** One-off jobs the app runs once at startup, such as guessing categories for stored history. */
 export const startupTasks = sqliteTable('startup_tasks', {
   name: text('name').primaryKey(),
