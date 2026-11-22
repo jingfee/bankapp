@@ -38,6 +38,11 @@ export class SettlementService {
     return this.http.post<SettlementResponse>('/api/settlement/undo-close', {});
   }
 
+  /** Saves a closed month's Excel report again, with the current figures. */
+  saveReport(month: string): Observable<SettlementResponse> {
+    return this.http.post<SettlementResponse>(`/api/settlement/periods/${month}/report`, {});
+  }
+
   /** Renames the open period's month. */
   setOpenMonth(request: SetOpenMonthRequest): Observable<SettlementResponse> {
     return this.http.put<SettlementResponse>('/api/settlement/month', request);

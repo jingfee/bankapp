@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, gte, isNotNull, isNull, or } from 'drizzle-orm';
 import type {
   BalanceSetting,
@@ -9,6 +9,7 @@ import type {
   SettlementPeriod,
   SettlementResponse,
 } from '@bankapp/shared';
+import { ReportsService } from '../reports/reports.service';
 import { effectiveShares, ownerPart, roundOre } from '../transactions/shares';
 import { onVisibleAccount } from '../transactions/query';
 import { CLOCK, type Clock, isDay } from '../clock';
@@ -49,7 +50,10 @@ export class SettlementService {
   constructor(
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly reports: ReportsService,
   ) {}
+
+  private readonly logger = new Logger(SettlementService.name);
 
   /** The balance now, its settlement periods and every balance setting, worked out live (ADR 0008). */
   get(): SettlementResponse {
@@ -77,13 +81,19 @@ export class SettlementService {
     const today = this.clock.today();
     let running: number | null = null;
     let index = 0;
-    let period = emptyPeriod(rows[0]!, 0, today);
+    let period = emptyPeriod(rows[0]!, 0, today, null, this.reports);
     const built: SettlementPeriod[] = [];
     /** Ends the current period and starts the next one, which carries the balance on. */
     const closeCurrent = () => {
       built.push({ ...period, carriedOut: running ?? 0 });
       index += 1;
-      period = emptyPeriod(rows[index]!, running ?? 0, today);
+      period = emptyPeriod(
+        rows[index]!,
+        running ?? 0,
+        today,
+        rows[index - 1]!.closedThrough,
+        this.reports,
+      );
     };
     /** Moves on past every closed period that ended before `date`. */
     const advanceTo = (date: string) => {
@@ -108,6 +118,7 @@ export class SettlementService {
       period.payments.push({
         transactionId: item.transactionId,
         date: item.date,
+        description: item.description,
         amount: event.paid,
       });
       period.paid = round(period.paid + event.paid);
@@ -123,7 +134,7 @@ export class SettlementService {
   }
 
   /** Closes the open period through `closedThrough` and opens `nextMonth` (_Avsluta månad_). */
-  closeMonth(request: Partial<CloseMonthRequest> | undefined): SettlementResponse {
+  async closeMonth(request: Partial<CloseMonthRequest> | undefined): Promise<SettlementResponse> {
     const { closedThrough, nextMonth } = request ?? {};
     if (typeof closedThrough !== 'string' || !isDay(closedThrough)) {
       throw new BadRequestException('closedThrough must be a day as YYYY-MM-DD');
@@ -152,7 +163,28 @@ export class SettlementService {
         .run();
       tx.insert(settlementMonths).values({ month: nextMonth, closedThrough: null }).run();
     });
+    // The close stands even when the report cannot be saved; it can be saved again later.
+    await this.tryWriteReport(open.month);
     return this.get();
+  }
+
+  /** Writes the report of the closed period `month` again, with the current figures. */
+  async saveReport(month: string): Promise<SettlementResponse> {
+    const period = this.get().periods.find((p) => p.month === month && p.closedThrough !== null);
+    if (!period) throw new NotFoundException(`there is no closed period ${month}`);
+    await this.reports.write(period);
+    return this.get();
+  }
+
+  /** Writes a closed period's report; a failure is logged, never thrown. */
+  private async tryWriteReport(month: string): Promise<void> {
+    try {
+      const period = this.get().periods.find((p) => p.month === month);
+      // Without a balance setting there are no periods to report on.
+      if (period) await this.reports.write(period);
+    } catch (error) {
+      this.logger.error(`Settlement report for ${month} failed: ${String(error)}`);
+    }
   }
 
   /** Undoes the latest close: the period it opened is removed and the one it closed reopens. */
@@ -168,6 +200,7 @@ export class SettlementService {
         .where(eq(settlementMonths.id, latest.id))
         .run();
     });
+    this.reports.remove(latest.month);
     return this.get();
   }
 
@@ -236,6 +269,7 @@ export class SettlementService {
         connectedOn: accounts.connectedOn,
         kind: categories.kind,
         subcategoryName: subcategories.name,
+        categoryName: categories.name,
         subcategoryIcon: subcategories.icon,
         categoryColour: categories.colour,
       })
@@ -278,6 +312,11 @@ export class SettlementService {
           colour: row.categoryColour as CategoryColour | null,
           amount: transaction.amount,
           share: share.option,
+          ownerPercent: share.percent,
+          category: row.categoryName,
+          subcategory: row.subcategoryName,
+          paidBy: transaction.paidBy === 'partner' ? 'partner' : 'owner',
+          status: transaction.status,
           partnerPart,
         },
       });
@@ -307,10 +346,14 @@ function emptyPeriod(
   row: typeof settlementMonths.$inferSelect,
   carriedIn: number,
   today: string,
+  previousClosedThrough: string | null,
+  reports: ReportsService,
 ): SettlementPeriod {
   return {
     month: row.month,
     closedThrough: row.closedThrough,
+    startsOn: previousClosedThrough === null ? null : nextDay(previousClosedThrough),
+    reportSaved: row.closedThrough === null ? null : reports.exists(row.month),
     carriedIn,
     balanceSettings: [],
     items: [],
@@ -319,6 +362,12 @@ function emptyPeriod(
     carriedOut: carriedIn,
     overdue: row.closedThrough === null && endedDaysAgo(row.month, today) >= 7,
   };
+}
+
+function nextDay(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 function isMonth(value: string): boolean {

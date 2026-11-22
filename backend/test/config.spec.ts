@@ -37,6 +37,7 @@ describe('loadConfig', () => {
       privateKeyPath: join(dir, 'key.pem'),
       redirectUrl: 'https://bankapp.example/callback',
       dataDir: join(dir, 'data'),
+      reportsDir: join(dir, 'data', 'reports'),
       timezone: 'Europe/Stockholm',
       scheduledSyncs: false,
       syncTimes: ['06:00', '11:00', '16:00', '21:00'],
@@ -141,6 +142,19 @@ describe('loadConfig', () => {
     validEnv['DATA_DIR'] = join(dir, 'file', 'data');
 
     expect(() => loadConfig(validEnv)).toThrow(/DATA_DIR cannot be created or written to/);
+  });
+
+  it('keeps settlement reports under the data directory unless REPORTS_DIR says otherwise', () => {
+    expect(loadConfig(validEnv).reportsDir).toBe(join(dir, 'data', 'reports'));
+    validEnv['REPORTS_DIR'] = join(dir, 'elsewhere');
+    expect(loadConfig(validEnv).reportsDir).toBe(join(dir, 'elsewhere'));
+  });
+
+  it('rejects a reports directory that cannot be created', () => {
+    writeFileSync(join(dir, 'file'), '');
+    validEnv['REPORTS_DIR'] = join(dir, 'file', 'reports');
+
+    expect(() => loadConfig(validEnv)).toThrow(/REPORTS_DIR cannot be created or written to/);
   });
 
   it('reports every problem at once', () => {

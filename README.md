@@ -41,9 +41,12 @@ The backend refuses to start unless all of these are set and valid. Locally, cop
 | `ENABLE_BANKING_PRIVATE_KEY_PATH` | Path of the application's RSA private key (PEM), readable  |
 | `REDIRECT_URL`                    | Where Enable Banking sends the owner back after BankID     |
 | `DATA_DIR`                        | Directory for the SQLite database (`bankapp.db`)           |
+| `REPORTS_DIR`                     | Optional: where settlement reports (Excel) are saved       |
 | `TIMEZONE`                        | IANA time zone for scheduled jobs, e.g. `Europe/Stockholm` |
 | `BANKAPP_USERNAME`                | The owner's username for logging in                        |
 | `BANKAPP_PASSWORD_HASH`           | scrypt hash of the owner's password (see below)            |
+
+**Settlement reports.** Closing a month with _Avsluta månad_ saves an Excel report as `<REPORTS_DIR>/<yyyy>/<yyyy-MM> Avräkning <månad> <yyyy>.xlsx`. `REPORTS_DIR` defaults to `DATA_DIR/reports`, and the app refuses to start if it cannot be created or written. In Docker, mount a host folder there (the example compose file maps `./reports` to `/reports`): it must be writable by uid 1000 and should be kept private, as the reports hold personal data (ADR 0002).
 
 **Login.** There is no registration: the one login comes from `BANKAPP_USERNAME` and `BANKAPP_PASSWORD_HASH`, and the app refuses to start without them. Make the hash with `pnpm hash-password`, which asks for the password without echoing it and prints a line like `scrypt:32768:8:1:…` to paste into the environment. Never put the password itself there. A login lasts 400 days, the longest a browser keeps a cookie; see [ADR 0012](docs/adr/0012-the-owner-logs-in-with-a-long-lived-session.md).
 

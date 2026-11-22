@@ -1,4 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 import { hashPassword } from '../src/auth/password-hash';
 import { SessionService } from '../src/auth/session.service';
@@ -25,6 +28,7 @@ export const testConfig: AppConfig = {
   privateKeyPath: '/not/used/in/tests.pem',
   redirectUrl: 'http://localhost:3000/api/connections/callback',
   dataDir: '/not/used/in/tests',
+  reportsDir: mkdtempSync(join(tmpdir(), 'bankapp-reports-')),
   timezone: 'Europe/Stockholm',
   scheduledSyncs: false,
   syncTimes: ['06:00', '18:00'],

@@ -22,6 +22,13 @@ export interface SettlementItem {
   /** The transaction's own amount, negative when money left the account. */
   amount: number;
   share: ShareOption;
+  /** The owner's whole percentage of the amount under {@link share}; names the Hushåll ratio. */
+  ownerPercent: number;
+  /** The category and subcategory names; null while uncategorised. */
+  category: string | null;
+  subcategory: string | null;
+  paidBy: 'owner' | 'partner';
+  status: 'booked' | 'pending';
   /** The partner's part, 100% − share of the amount, sign-flipped: a purchase gives a positive one. */
   partnerPart: number;
 }
@@ -31,6 +38,7 @@ export interface SettlementPayment {
   transactionId: number;
   /** The transaction date: when it was reserved, not booked. */
   date: string;
+  description: string;
   amount: number;
 }
 
@@ -40,6 +48,10 @@ export interface SettlementPeriod {
   month: string;
   /** The last day belonging to the period, or null for the open period. */
   closedThrough: string | null;
+  /** The first day of the period: the day after the previous close; null for the first period. */
+  startsOn: string | null;
+  /** Closed periods only: whether the Excel report is saved on disk; null for the open period. */
+  reportSaved: boolean | null;
   /** The balance when the period began. */
   carriedIn: number;
   /** Balance settings made within the period, in order; each replaces the running balance. */

@@ -59,6 +59,8 @@ describe('DelatPage', () => {
   const period = (overrides: Partial<SettlementPeriod> = {}): SettlementPeriod => ({
     month: '2026-11',
     closedThrough: null,
+    startsOn: null,
+    reportSaved: null,
     carriedIn: 0,
     balanceSettings: [],
     items: [],
@@ -145,7 +147,13 @@ describe('DelatPage', () => {
       const { page } = await render({
         settlement: settlementOf({
           balance: 312,
-          periods: [period({ payments: [{ transactionId: 1, date: '2026-10-20', amount: 10 }] })],
+          periods: [
+            period({
+              payments: [
+                { transactionId: 1, date: '2026-10-20', description: 'Swish', amount: 10 },
+              ],
+            }),
+          ],
         }),
       });
 
@@ -202,6 +210,11 @@ describe('DelatPage', () => {
               amount: -60,
               share: 'half',
               partnerPart: 30,
+              ownerPercent: 50,
+              category: null,
+              subcategory: null,
+              paidBy: 'owner',
+              status: 'booked',
               icon: 'shopping-basket',
               colour: 'green',
             },
@@ -213,6 +226,11 @@ describe('DelatPage', () => {
               amount: 200,
               share: 'half',
               partnerPart: -100,
+              ownerPercent: 50,
+              category: null,
+              subcategory: null,
+              paidBy: 'owner',
+              status: 'booked',
               icon: null,
               colour: null,
             },
@@ -223,7 +241,7 @@ describe('DelatPage', () => {
           closedThrough: '2026-11-02',
           carriedIn: 50,
           paid: 200,
-          payments: [{ transactionId: 5, date: '2026-11-02', amount: 200 }],
+          payments: [{ transactionId: 5, date: '2026-11-02', description: 'Swish', amount: 200 }],
           carriedOut: 50,
         }),
       ],
@@ -256,6 +274,11 @@ describe('DelatPage', () => {
         amount: -1000,
         share: 'half' as const,
         partnerPart: 500,
+        ownerPercent: 50,
+        category: null,
+        subcategory: null,
+        paidBy: 'owner' as const,
+        status: 'booked' as const,
         icon: null,
         colour: null,
       };
@@ -321,8 +344,8 @@ describe('DelatPage', () => {
           month: '2026-10',
           carriedOut: 80,
           payments: [
-            { transactionId: 5, date: '2026-10-14', amount: 100 },
-            { transactionId: 6, date: '2026-10-28', amount: 100 },
+            { transactionId: 5, date: '2026-10-14', description: 'Swish', amount: 100 },
+            { transactionId: 6, date: '2026-10-28', description: 'Swish', amount: 100 },
           ],
         }),
       ],
@@ -416,6 +439,49 @@ describe('DelatPage', () => {
     it('shows no warning otherwise', async () => {
       const { page } = await render({ settlement });
       expect(page.querySelector('[data-overdue]')).toBeNull();
+    });
+
+    describe('the report', () => {
+      const opened = async (reportSaved: boolean) => {
+        const rendered = await render({
+          settlement: settlementOf({
+            periods: [
+              period({ month: '2026-11' }),
+              period({ month: '2026-10', closedThrough: '2026-10-31', reportSaved }),
+            ],
+          }),
+        });
+        rendered.page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        await rendered.fixture.whenStable();
+        return rendered;
+      };
+
+      it('shows no notice when it is saved', async () => {
+        const { page } = await opened(true);
+        expect(page.querySelector('[data-report-failed]')).toBeNull();
+        expect(page.querySelector('[data-save-report]')).not.toBeNull();
+      });
+
+      it('can be saved again, which clears the notice', async () => {
+        const { fixture, page, http } = await opened(false);
+        expect(text(page.querySelector('[data-report-failed]'))).toBe(
+          'Rapporten kunde inte sparas',
+        );
+
+        page.querySelector<HTMLButtonElement>('[data-save-report]')!.click();
+        const request = http.expectOne('/api/settlement/periods/2026-10/report');
+        expect(request.request.method).toBe('POST');
+        request.flush(
+          settlementOf({
+            periods: [
+              period({ month: '2026-11' }),
+              period({ month: '2026-10', closedThrough: '2026-10-31', reportSaved: true }),
+            ],
+          }),
+        );
+        await fixture.whenStable();
+        expect(page.querySelector('[data-report-failed]')).toBeNull();
+      });
     });
 
     describe('undoing', () => {

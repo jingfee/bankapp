@@ -1,5 +1,6 @@
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createPrivateKey } from 'node:crypto';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { isPasswordHash } from '../auth/password-hash';
 
@@ -12,6 +13,8 @@ export interface AppConfig {
   redirectUrl: string;
   /** Directory holding the SQLite database. */
   dataDir: string;
+  /** Directory the settlement reports (Excel) are saved in, one folder per year. */
+  reportsDir: string;
   /** IANA time zone the scheduler runs in, e.g. `Europe/Stockholm`. */
   timezone: string;
   /** Whether syncs run on a schedule; off in development, which shares the banks' request limit. */
@@ -48,6 +51,7 @@ const schema = z.object({
     z.url({ protocol: /^https?$/, error: 'REDIRECT_URL must be an http(s) URL' }),
   ),
   DATA_DIR: required('DATA_DIR'),
+  REPORTS_DIR: z.string().trim().optional(),
   SCHEDULED_SYNCS: z
     .enum(['true', 'false', ''], { error: 'SCHEDULED_SYNCS must be true or false' })
     .optional(),
@@ -117,6 +121,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   } catch {
     problems.push(`DATA_DIR cannot be created or written to: ${values.DATA_DIR}`);
   }
+  const reportsDir = values.REPORTS_DIR || join(values.DATA_DIR, 'reports');
+  try {
+    mkdirSync(reportsDir, { recursive: true, mode: 0o700 });
+    accessSync(reportsDir, constants.W_OK);
+  } catch {
+    problems.push(`REPORTS_DIR cannot be created or written to: ${reportsDir}`);
+  }
   if (problems.length > 0) throw new ConfigError(problems);
 
   return {
@@ -124,6 +135,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     privateKeyPath: values.ENABLE_BANKING_PRIVATE_KEY_PATH,
     redirectUrl: values.REDIRECT_URL,
     dataDir: values.DATA_DIR,
+    reportsDir,
     timezone: values.TIMEZONE,
     scheduledSyncs: values.SCHEDULED_SYNCS === 'true',
     syncTimes: values.SYNC_TIMES,

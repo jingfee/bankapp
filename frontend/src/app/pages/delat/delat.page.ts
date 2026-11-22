@@ -363,8 +363,22 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                         />
                       }
                     }
-                    @if (first) {
-                      <div>
+                    @if (period.reportSaved === false) {
+                      <p data-report-failed class="text-sm text-danger" role="alert">
+                        Rapporten kunde inte sparas
+                      </p>
+                    }
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        data-save-report
+                        class="btn btn-ghost btn-sm"
+                        [disabled]="saving()"
+                        (click)="saveReport(period)"
+                      >
+                        Spara rapport igen
+                      </button>
+                      @if (first) {
                         <button
                           type="button"
                           data-undo-close
@@ -374,8 +388,8 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                         >
                           Ångra avslut
                         </button>
-                      </div>
-                    }
+                      }
+                    </div>
                   </section>
                 }
               }
@@ -790,6 +804,10 @@ export class DelatPage {
       'Månaden kunde inte avslutas. Kontrollera datum och nästa månad.',
       () => this.closing.set(false),
     );
+  }
+
+  protected saveReport(period: SettlementPeriod): void {
+    this.run(this.settlementService.saveReport(period.month), 'Rapporten kunde inte sparas.');
   }
 
   protected undoClose(period: SettlementPeriod): void {
