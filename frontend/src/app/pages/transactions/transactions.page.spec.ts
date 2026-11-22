@@ -294,6 +294,10 @@ describe('TransactionsPage', () => {
     http.match(() => true);
 
     expect((fixture.nativeElement as HTMLElement).classList.contains('z-40')).toBe(true);
+
+    // The sheet moves itself into <body>, where the test teardown would leave it behind.
+    fixture.destroy();
+    document.querySelectorAll('[data-sheet]').forEach((el) => el.remove());
   });
 
   it('shows Manuell where a manual transaction’s account would be and links to adding one', async () => {
