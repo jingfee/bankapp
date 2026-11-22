@@ -50,8 +50,8 @@ const SEARCH_DEBOUNCE_MS = 250;
   selector: 'app-transactions-page',
   imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe, ManualTransactionSheet],
   // The routed page is its own stacking context (see `router-outlet + *`), so while the filter
-  // panel or the add form is open it must rise above the side menu and bottom tabs (z-20).
-  // Otherwise the page would cover the bottom tabs.
+  // panel or the add form is open it must rise above the bottom tabs (z-30),
+  // otherwise they would cover the panel's footer.
   host: { class: 'relative', '[class.z-40]': 'panelOpen() || adding()' },
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-10">

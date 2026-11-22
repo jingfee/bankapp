@@ -282,7 +282,7 @@ describe('TransactionsPage', () => {
     });
   });
 
-  it('lifts the page above the bottom tab bar (z-30) while the manual transaction sheet is open', async () => {
+  it('lifts the page above the bottom tab bar (z-40 over z-30) while the manual transaction sheet is open', async () => {
     TestBed.overrideProvider(ActivatedRoute, {
       useValue: {
         url: of([{ path: 'transaktioner' }, { path: 'ny' }]),
@@ -601,22 +601,19 @@ describe('TransactionsPage', () => {
       request.flush(response([transaction(1)]));
     });
 
-    it('lifts the page above the bottom tab bar (z-30) while the filter panel is open', async () => {
+    it('lifts the page above the bottom tab bar (z-40 over z-30) while the filter panel is open', async () => {
       const { fixture, http, page } = await visit({});
       listRequest(http).flush(response([transaction(1)]));
       await fixture.whenStable();
-      const zIndex = () => {
-        const host = fixture.nativeElement as HTMLElement;
-        return host.classList.contains('z-40') ? 40 : host.classList.contains('z-30') ? 30 : 0;
-      };
-      expect(zIndex()).toBe(0);
+      const raised = () => (fixture.nativeElement as HTMLElement).classList.contains('z-40');
+      expect(raised()).toBe(false);
 
       (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
       await fixture.whenStable();
       lookups(http);
       await fixture.whenStable();
 
-      expect(zIndex()).toBeGreaterThan(30);
+      expect(raised()).toBe(true);
     });
 
     it('opens a panel whose changes narrow the list', async () => {
