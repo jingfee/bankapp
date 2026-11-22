@@ -234,8 +234,8 @@ describe('the settlement balance', () => {
       expect(periods).toHaveLength(1);
       expect(periods[0]).toMatchObject({ paid: 300, carriedIn: 0, carriedOut: 200 });
       expect(periods[0]?.payments).toEqual([
-        { transactionId: b, date: '2026-11-12', amount: 200 },
-        { transactionId: a, date: '2026-11-14', amount: 100 },
+        { transactionId: b, date: '2026-11-12', description: expect.any(String), amount: 200 },
+        { transactionId: a, date: '2026-11-14', description: expect.any(String), amount: 100 },
       ]);
       expect(periods[0]?.items.map((i) => i.transactionId)).toEqual([purchase]);
     });

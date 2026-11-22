@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import type {
   CloseMonthRequest,
   SetBalanceSettingRequest,
@@ -42,8 +42,14 @@ export class SettlementController {
 
   /** Closes the open period (_Avsluta månad_) and opens the next month. */
   @Post('close')
-  close(@Body() body: Partial<CloseMonthRequest> | undefined): SettlementResponse {
+  close(@Body() body: Partial<CloseMonthRequest> | undefined): Promise<SettlementResponse> {
     return this.settlement.closeMonth(body);
+  }
+
+  /** Saves a closed month's Excel report again, replacing the file with the current figures. */
+  @Post('periods/:month/report')
+  saveReport(@Param('month') month: string): Promise<SettlementResponse> {
+    return this.settlement.saveReport(month);
   }
 
   /** Undoes the latest close. */

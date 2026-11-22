@@ -106,6 +106,8 @@ describe('OverviewPage', () => {
   const period = (month: string, overrides: Partial<SettlementPeriod> = {}): SettlementPeriod => ({
     month,
     closedThrough: null,
+    startsOn: null,
+    reportSaved: null,
     carriedIn: 0,
     balanceSettings: [],
     items: [],
