@@ -1,5 +1,5 @@
 import { Location, NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
@@ -18,6 +18,8 @@ interface NavItem {
   /** Path data of the 24×24 stroke icon. */
   readonly icon: readonly string[];
   readonly reviewCount?: true;
+  /** Lives in the Mer sheet of the bottom tabs instead of a tab of its own. */
+  readonly more?: true;
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
@@ -52,19 +54,31 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     path: '/sparande',
+    more: true,
     label: 'Sparande',
     tabLabel: 'Sparande',
     exact: false,
     icon: ['M4 19h16', 'M6 16v-5M10 16V8M14 16v-3M18 16V6'],
   },
   {
+    path: '/bolan',
+    more: true,
+    label: 'Bolån',
+    tabLabel: 'Bolån',
+    exact: false,
+    icon: ['M3 11 12 4l9 7', 'M5 10v10h14V10', 'M10 20v-6h4v6'],
+  },
+  {
     path: '/banker',
+    more: true,
     label: 'Banker',
     tabLabel: 'Banker',
     exact: false,
     icon: ['M3 10 12 4l9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 21h18'],
   },
 ];
+
+const MORE_ICON = ['M5 12h.01M12 12h.01M19 12h.01'];
 
 const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9'];
 
@@ -138,17 +152,9 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
       </aside>
 
       <header
-        class="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
+        class="sticky top-0 z-20 flex items-center border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
       >
         <a routerLink="/" class="font-display text-lg font-bold tracking-tight">Bankapp</a>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm size-9 px-0"
-          aria-label="Logga ut"
-          (click)="logout()"
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
-        </button>
       </header>
     }
 
@@ -164,9 +170,9 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
       <nav
         data-tabs
         aria-label="Flikar"
-        class="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
+        class="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
       >
-        @for (item of items; track item.path) {
+        @for (item of tabItems; track item.path) {
           <a
             [routerLink]="item.path"
             routerLinkActive="active"
@@ -189,13 +195,69 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
             <span>{{ item.tabLabel }}</span>
           </a>
         }
+        <button
+          type="button"
+          data-more
+          class="tab-link"
+          [class.active]="moreOpen() || moreActive()"
+          aria-haspopup="dialog"
+          [attr.aria-expanded]="moreOpen()"
+          (click)="moreOpen.set(!moreOpen())"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: moreIcon, size: 24 }" />
+          <span>Mer</span>
+        </button>
       </nav>
+    }
+
+    @if (!onLoginPage() && moreOpen()) {
+      <button
+        type="button"
+        data-more-backdrop
+        tabindex="-1"
+        aria-label="Stäng"
+        class="sheet-backdrop fixed inset-0 z-20 cursor-default bg-black/50 sm:hidden"
+        (click)="moreOpen.set(false)"
+      ></button>
+      <div
+        data-more-sheet
+        role="dialog"
+        aria-label="Mer"
+        class="sheet fixed inset-x-0 bottom-0 z-[25] flex flex-col gap-1 rounded-t-2xl border border-b-0 border-line-strong bg-surface-2 px-3 pt-3 pb-[calc(76px+env(safe-area-inset-bottom))] sm:hidden"
+      >
+        @for (item of moreItems; track item.path) {
+          <a
+            [routerLink]="item.path"
+            routerLinkActive="active"
+            ariaCurrentWhenActive="page"
+            [routerLinkActiveOptions]="{ exact: item.exact }"
+            class="nav-link"
+          >
+            <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 20 }" />
+            <span class="flex-1">{{ item.label }}</span>
+          </a>
+        }
+        <button
+          type="button"
+          class="nav-link border-t border-line"
+          aria-label="Logga ut"
+          (click)="logout()"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
+          <span class="flex-1 text-left">Logga ut</span>
+        </button>
+      </div>
     }
 
     <app-toast />
   `,
 })
 export class App {
+  @HostListener('document:keydown.escape')
+  protected closeMore(): void {
+    this.moreOpen.set(false);
+  }
+
   private readonly transactions = inject(TransactionsService);
   private readonly categories = inject(CategoriesService);
   private readonly auth = inject(AuthService);
@@ -204,6 +266,12 @@ export class App {
   protected readonly onLoginPage = signal(inject(Location).path().startsWith('/logga-in'));
   protected readonly reviewCount = this.transactions.reviewCount;
   protected readonly items = NAV_ITEMS;
+  protected readonly tabItems = NAV_ITEMS.filter((item) => !item.more);
+  protected readonly moreItems = NAV_ITEMS.filter((item) => item.more);
+  protected readonly moreIcon = MORE_ICON;
+  protected readonly moreOpen = signal(false);
+  /** The current page is one of those in the Mer sheet. */
+  protected readonly moreActive = signal(false);
   protected readonly logoutIcon = LOGOUT_ICON;
   protected readonly reviewBadge = computed(() =>
     this.reviewCount() > 99 ? '99+' : String(this.reviewCount()),
@@ -222,11 +290,16 @@ export class App {
       )
       .subscribe((event) => {
         this.onLoginPage.set(event.urlAfterRedirects.startsWith('/logga-in'));
+        this.moreOpen.set(false);
+        this.moreActive.set(
+          this.moreItems.some((item) => event.urlAfterRedirects.startsWith(item.path)),
+        );
         if (!this.onLoginPage()) this.transactions.refreshReviewCount();
       });
   }
 
   protected logout(): void {
+    this.moreOpen.set(false);
     this.auth.logout().subscribe({
       next: () => {
         this.transactions.reviewCount.set(0);
