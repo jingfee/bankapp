@@ -112,3 +112,34 @@ export interface MortgageEntryRequest {
   /** The debt of every part open on the day. */
   debts: MortgageEntryDebt[];
 }
+
+/** A loan part's remaining debt, in kr. */
+export interface LoanPartDebt {
+  partId: number;
+  debt: number;
+}
+
+/** One calendar month of the mortgage's figures. */
+export interface MortgageMonth {
+  /** `YYYY-MM`. */
+  month: string;
+  /** Each part open in the month, with its remaining debt at the start of it. */
+  debts: LoanPartDebt[];
+  /** Estimated interest for the month, in kr; no interest tax deduction. */
+  interest: number;
+  /** Amortisation in force for the month, in kr. */
+  amortisation: number;
+  /** `interest` plus `amortisation`. */
+  total: number;
+  /** What was paid in Bolån ränta & amortering in the month (booked and pending, whole amounts), as a positive amount. */
+  paid: number;
+}
+
+export interface MortgageFiguresResponse {
+  /** Each part's remaining debt now, worked out from its latest entry and the booked payments since. */
+  debts: LoanPartDebt[];
+  /** From the first mortgage entry's month to the current one, oldest first. Empty before any entry. */
+  months: MortgageMonth[];
+  /** `YYYY-MM` of each ended month since the first entry with no booked payment, oldest first. */
+  monthsWithoutPayment: string[];
+}

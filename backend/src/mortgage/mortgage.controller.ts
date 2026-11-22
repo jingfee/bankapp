@@ -1,16 +1,26 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
-import type { MortgageResponse } from '@bankapp/shared';
+import type { MortgageFiguresResponse, MortgageResponse } from '@bankapp/shared';
 import { NoSuchLoanPart, NoSuchMortgageEntry } from '../domain-errors';
 import { parseId } from '../transactions/ids';
 import { Mortgage } from './mortgage';
+import { MortgageReport } from './report';
 
 @Controller('mortgage')
 export class MortgageController {
-  constructor(private readonly mortgage: Mortgage) {}
+  constructor(
+    private readonly mortgage: Mortgage,
+    private readonly report: MortgageReport,
+  ) {}
 
   @Get()
   get(): MortgageResponse {
     return this.mortgage.get();
+  }
+
+  /** Remaining debt, estimated monthly payment and what was paid, per month. */
+  @Get('figures')
+  figures(): MortgageFiguresResponse {
+    return this.report.figures();
   }
 
   @Post('parts')
