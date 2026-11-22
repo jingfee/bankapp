@@ -1,36 +1,276 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import type {
-  LoanPart,
-  MortgageEntry,
-  MortgageResponse,
-  RecurringDayRequest,
+import { RouterLink } from '@angular/router';
+import {
+  CATEGORY_PALETTE,
+  type LoanPart,
+  type MortgageEntry,
+  type MortgageFiguresResponse,
+  type MortgageMonth,
+  type MortgageResponse,
+  type RecurringDayRequest,
 } from '@bankapp/shared';
-import { type Observable, concat, last } from 'rxjs';
+import { type Observable, type Subscription, concat, last } from 'rxjs';
+import { CategoriesService } from '../../categories.service';
 import { DateField } from '../../date-field/date-field';
 import { today } from '../../dates';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { APP_LOCALE } from '../../formatting/locale';
 import { MortgageService } from '../../mortgage.service';
+import {
+  type ChartMode,
+  type Range,
+  RANGES,
+  buildChart,
+  countdown,
+  currentMonth,
+  inRange,
+  lastDayOf,
+  needsNewRate,
+  totals,
+} from './bolan-view';
 
 /** The form that is open besides a part's own edit form: at most one at a time. */
 type Panel = { kind: 'add-part' } | { kind: 'entry'; entry: MortgageEntry | null };
 
 const INTERVAL = /^\d+$/;
 
+const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
+const MONTH_SHORT = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short' });
+const MONTH_YEAR = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short', year: '2-digit' });
+const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
+
+const monthDate = (month: string) =>
+  new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1);
+
+/** A colour for each loan part's segment, in the order the parts are listed. */
+const PART_COLOURS = [
+  'indigo',
+  'teal',
+  'amber',
+  'rose',
+  'sky',
+  'emerald',
+  'purple',
+  'orange',
+] as const;
+
 /**
- * Bolån: set up the mortgage and keep its loan parts' terms up to date by hand. A simple page
- * for now; the figures and the overview come with the Bolån page proper.
+ * Bolån: what is left of the mortgage, what it costs per month, when its rate and terms come
+ * up, and the actions to set it up and keep it up to date by hand. Nothing mortgage-related is
+ * shown anywhere else.
  */
 @Component({
   selector: 'app-bolan-page',
-  imports: [DateField, MoneyPipe, NgTemplateOutlet],
+  imports: [DateField, MoneyPipe, NgTemplateOutlet, RouterLink],
   template: `
     <main class="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:gap-5 sm:p-8">
       <h1 class="font-display text-2xl font-bold tracking-tight">Bolån</h1>
 
       @if (failed(); as message) {
         <p role="alert" class="text-danger">{{ message }}</p>
+      }
+
+      @if (parts().length === 0) {
+        <section class="card flex flex-col gap-3 p-5" data-intro>
+          <p class="text-muted">
+            Följ bolånet här: vad som är kvar att betala, vad det kostar per månad och när räntan
+            och villkoren ska ses över. Lägg till bolånet med dess första lånedel.
+          </p>
+          <div>
+            <button
+              type="button"
+              data-add-part-intro
+              class="btn btn-primary"
+              (click)="startAddPart()"
+            >
+              Lägg till bolån
+            </button>
+          </div>
+        </section>
+      }
+
+      @if (openParts().length > 0) {
+        <section class="card grid gap-4 p-5 sm:grid-cols-3" data-summary>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm text-muted">Kvarvarande skuld</span>
+            <span data-total-debt class="amount text-2xl">{{ summary().debt | money }}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm text-muted">Snittränta</span>
+            <span data-average-rate class="amount text-2xl">{{
+              summary().rate === null ? '–' : percent(summary().rate!)
+            }}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm text-muted">Beräknad månadsbetalning</span>
+            @if (estimate(); as e) {
+              <span data-estimate class="amount text-2xl">{{ e.total | money }}</span>
+              <span class="text-sm text-muted">
+                Ränta <span data-estimate-interest class="amount">{{ e.interest | money }}</span> ·
+                Amortering
+                <span data-estimate-amortisation class="amount">{{ e.amortisation | money }}</span>
+              </span>
+            } @else {
+              <span data-estimate class="amount text-2xl">–</span>
+            }
+          </div>
+        </section>
+
+        @for (month of unpaidMonths(); track month.month) {
+          <p data-no-payment class="text-sm text-muted">
+            Ingen bolånebetalning hittad i {{ month.name }}.
+            <a
+              data-no-payment-link
+              class="text-accent underline"
+              routerLink="/transaktioner"
+              [queryParams]="month.params"
+              >Visa transaktionerna</a
+            >
+          </p>
+        }
+      }
+
+      @if (chartMonths().length > 0) {
+        <section class="card p-4 sm:p-5" data-chart-card>
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="font-display text-lg font-semibold">
+              {{ mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt' }}
+            </h2>
+            <div class="flex flex-wrap gap-2">
+              <div class="flex gap-1" role="group" aria-label="Diagram">
+                <button
+                  type="button"
+                  data-mode="debt"
+                  class="chip"
+                  [attr.aria-pressed]="mode() === 'debt'"
+                  (click)="mode.set('debt'); hovered.set(null)"
+                >
+                  Skuld
+                </button>
+                <button
+                  type="button"
+                  data-mode="paid"
+                  class="chip"
+                  [attr.aria-pressed]="mode() === 'paid'"
+                  (click)="mode.set('paid'); hovered.set(null)"
+                >
+                  Beräknat vs Betalt
+                </button>
+              </div>
+              <div class="flex gap-1" role="group" aria-label="Period">
+                @for (option of ranges; track option.id) {
+                  <button
+                    type="button"
+                    [attr.data-range]="option.id"
+                    class="chip"
+                    [attr.aria-pressed]="range() === option.id"
+                    (click)="range.set(option.id); hovered.set(null)"
+                  >
+                    {{ option.label }}
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+          @if (chart(); as c) {
+            <div class="flex gap-2">
+              <div class="relative h-36 w-16 shrink-0" aria-hidden="true">
+                @for (tick of c.yTicks; track tick.pct) {
+                  <span
+                    class="absolute right-0 translate-y-1/2 text-[11px] whitespace-nowrap text-muted"
+                    [style.bottom.%]="tick.pct"
+                    >{{ kr(tick.value) }}</span
+                  >
+                }
+              </div>
+              <div class="min-w-0 flex-1">
+                <div
+                  data-chart-plot
+                  class="relative h-36 touch-pan-y"
+                  (pointerleave)="hovered.set(null)"
+                  (pointerdown)="touchMonth($event)"
+                  (pointermove)="touchMonth($event)"
+                >
+                  @for (tick of c.yTicks; track tick.pct) {
+                    <div
+                      class="absolute inset-x-0 border-t border-line"
+                      [style.bottom.%]="tick.pct"
+                    ></div>
+                  }
+                  <svg
+                    viewBox="0 0 300 120"
+                    class="absolute inset-0 size-full overflow-visible"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    @for (bar of c.bars; track $index) {
+                      <rect
+                        data-bar
+                        [attr.data-series]="bar.series"
+                        [attr.x]="bar.x"
+                        [attr.y]="bar.y"
+                        [attr.width]="bar.width"
+                        [attr.height]="bar.height"
+                        [attr.fill]="bar.colour"
+                      />
+                    }
+                  </svg>
+                  @if (tip(); as t) {
+                    <div
+                      class="pointer-events-none absolute inset-y-0 w-px bg-line-strong"
+                      [style.left.%]="t.pct"
+                    ></div>
+                    <div
+                      data-chart-tooltip
+                      class="pointer-events-none absolute top-0 z-10 flex flex-col gap-1 rounded-[10px] border border-line-strong bg-surface-3 px-3 py-2 text-xs whitespace-nowrap shadow-lg"
+                      [style.left.%]="t.pct"
+                      [style.transform]="'translateX(-' + t.pct + '%)'"
+                    >
+                      <span class="font-semibold">{{ t.title }}</span>
+                      @for (line of t.lines; track line.label) {
+                        <span class="flex items-center gap-2"
+                          ><span class="size-2 rounded-full" [style.background]="line.colour"></span
+                          >{{ line.label }}
+                          <span class="amount">{{ line.amount | money }}</span></span
+                        >
+                      }
+                    </div>
+                  }
+                  @for (slot of c.slots; track slot.month; let i = $index) {
+                    <div
+                      class="absolute inset-y-0"
+                      [attr.data-chart-month]="slot.month"
+                      [style.left.%]="(i / c.slots.length) * 100"
+                      [style.width.%]="100 / c.slots.length"
+                      (pointerenter)="hovered.set(i)"
+                    ></div>
+                  }
+                </div>
+                <div class="relative mt-1 h-4" aria-hidden="true">
+                  @for (tick of xTicks(); track tick.month) {
+                    <span
+                      data-x-tick
+                      class="absolute text-[11px] text-muted"
+                      [style.left.%]="tick.pct"
+                      [style.transform]="'translateX(-' + tick.pct + '%)'"
+                      >{{ tick.label }}</span
+                    >
+                  }
+                </div>
+              </div>
+            </div>
+            <p class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" data-legend>
+              @for (item of legend(); track item.label) {
+                <span class="flex items-center gap-1.5"
+                  ><span class="size-2 rounded-full" [style.background]="item.colour"></span
+                  >{{ item.label }}</span
+                >
+              }
+            </p>
+          }
+        </section>
       }
 
       <section class="card flex flex-col gap-4 p-5" data-mortgage>
@@ -54,7 +294,7 @@ const INTERVAL = /^\d+$/;
                 class="btn btn-sm btn-secondary"
                 (click)="startAddPart()"
               >
-                {{ parts().length === 0 ? 'Ställ in bolånet' : 'Lägg till lånedel' }}
+                {{ parts().length === 0 ? 'Lägg till bolån' : 'Lägg till lånedel' }}
               </button>
             }
           </div>
@@ -129,38 +369,72 @@ const INTERVAL = /^\d+$/;
           </form>
         }
 
-        @if (parts().length === 0 && panel()?.kind !== 'add-part') {
-          <p class="text-sm text-muted">Inget bolån ännu. Ställ in det med sin första lånedel.</p>
-        }
-
         <ul class="flex flex-col divide-y divide-line">
-          @for (part of parts(); track part.id) {
+          @for (part of openParts(); track part.id) {
             <li class="flex flex-col gap-3 py-4 first:pt-0 last:pb-0" [attr.data-part]="part.id">
               <div class="flex items-start justify-between gap-3">
                 <div class="flex min-w-0 flex-col gap-1">
                   <span data-part-name class="truncate font-medium">{{ part.name }}</span>
-                  @if (part.endedOn) {
-                    <span data-ended class="text-sm text-muted">Avslutad {{ part.endedOn }}</span>
-                  } @else {
-                    <span class="text-sm text-muted">
-                      Skuld
-                      <span data-part-debt class="amount">{{
-                        part.debt === null ? '–' : (part.debt | money)
-                      }}</span>
-                      · Ränta
-                      <span data-part-rate>{{
-                        part.rate === null ? '–' : percent(part.rate)
-                      }}</span>
-                      · Amortering
-                      <span data-part-amortisation class="amount">{{
-                        part.amortisation === null ? '–' : (part.amortisation | money)
-                      }}</span
-                      >/mån
+                  <span class="text-sm text-muted">
+                    Skuld
+                    <span data-part-debt class="amount">{{
+                      partDebt(part) === null ? '–' : (partDebt(part)! | money)
+                    }}</span>
+                    · Ränta
+                    <span data-part-rate>{{ part.rate === null ? '–' : percent(part.rate) }}</span>
+                    · Amortering
+                    <span data-part-amortisation class="amount">{{
+                      part.amortisation === null ? '–' : (part.amortisation | money)
+                    }}</span
+                    >/mån
+                    @if (partInterest(part); as interest) {
+                      · Ränta denna månad
+                      <span data-part-interest class="amount">{{ interest | money }}</span>
+                    }
+                  </span>
+                  <span class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+                    <span>
+                      Räntejustering
+                      <span
+                        data-rate-day
+                        [class.text-accent]="countdown(part.rateAdjustment.next).soon"
+                        [class.font-medium]="countdown(part.rateAdjustment.next).soon"
+                        >{{ part.rateAdjustment.next }}</span
+                      >
+                      @if (countdown(part.rateAdjustment.next).text; as text) {
+                        <span data-rate-soon class="pill pill-accent">{{ text }}</span>
+                      }
                     </span>
-                    <span class="text-sm text-muted">
-                      Räntejustering <span data-rate-day>{{ part.rateAdjustment.next }}</span> ·
-                      Villkorsändring <span data-terms-day>{{ part.termsChange.next }}</span>
+                    <span>
+                      Villkorsändring
+                      <span
+                        data-terms-day
+                        [class.text-accent]="countdown(part.termsChange.next).soon"
+                        [class.font-medium]="countdown(part.termsChange.next).soon"
+                        >{{ part.termsChange.next }}</span
+                      >
+                      @if (countdown(part.termsChange.next).text; as text) {
+                        <span data-terms-soon class="pill pill-accent">{{ text }}</span>
+                      }
                     </span>
+                  </span>
+                  @if (needsNewRate(part)) {
+                    <div
+                      data-rate-prompt
+                      class="mt-1 flex flex-wrap items-center gap-3 rounded-[10px] bg-surface-2 px-3 py-2 text-sm"
+                    >
+                      <span>Dags att ange ny ränta för {{ part.name }}</span>
+                      @if (newRateId() !== part.id) {
+                        <button
+                          type="button"
+                          data-new-rate
+                          class="btn btn-sm btn-secondary"
+                          (click)="startNewRate(part)"
+                        >
+                          Ny ränta
+                        </button>
+                      }
+                    </div>
                   }
                 </div>
                 @if (!part.endedOn && editingId() !== part.id) {
@@ -174,6 +448,41 @@ const INTERVAL = /^\d+$/;
                   </button>
                 }
               </div>
+
+              @if (newRateId() === part.id) {
+                <form
+                  data-new-rate-form
+                  class="flex flex-col gap-3"
+                  (submit)="$event.preventDefault(); saveNewRate(part)"
+                >
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Ny ränta
+                      <span class="field">
+                        <input
+                          data-rate
+                          type="text"
+                          inputmode="decimal"
+                          class="field-control"
+                          [value]="rate()"
+                          (input)="rate.set(value($event))"
+                        />
+                        <span class="field-suffix">%</span>
+                      </span>
+                    </label>
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Gäller från
+                      <app-date-field
+                        data-rate-from
+                        [value]="rateFrom()"
+                        (valueChange)="rateFrom.set($event)"
+                      />
+                    </label>
+                  </div>
+                  <p class="text-xs text-muted">Samma ränta som förut går också bra.</p>
+                  <ng-container *ngTemplateOutlet="formActions; context: { save: 'Spara ränta' }" />
+                </form>
+              }
 
               @if (editingId() === part.id) {
                 <form
@@ -278,6 +587,27 @@ const INTERVAL = /^\d+$/;
             </li>
           }
         </ul>
+
+        @if (endedParts().length > 0) {
+          <details data-ended-parts>
+            <summary class="cursor-pointer text-sm text-muted">
+              Avslutade lånedelar ({{ endedParts().length }})
+            </summary>
+            <ul class="mt-3 flex flex-col divide-y divide-line">
+              @for (part of endedParts(); track part.id) {
+                <li
+                  class="flex flex-col gap-1 py-3 first:pt-0 last:pb-0"
+                  [attr.data-part]="part.id"
+                >
+                  <span data-part-name class="truncate font-medium">{{ part.name }}</span>
+                  <span data-ended class="text-sm text-muted">
+                    {{ part.startedOn }} – {{ part.endedOn }}
+                  </span>
+                </li>
+              }
+            </ul>
+          </details>
+        }
       </section>
 
       @if (panel()?.kind === 'entry') {
@@ -419,11 +749,115 @@ const INTERVAL = /^\d+$/;
 })
 export class BolanPage {
   private readonly service = inject(MortgageService);
+  private readonly categories = inject(CategoriesService);
+  private readonly now = today();
+  private figuresRequest: Subscription | undefined;
 
   protected readonly mortgage = signal<MortgageResponse>({ parts: [], entries: [] });
   protected readonly parts = computed(() => this.mortgage().parts);
   protected readonly entries = computed(() => this.mortgage().entries);
   protected readonly openParts = computed(() => this.parts().filter((part) => !part.endedOn));
+  protected readonly endedParts = computed(() => this.parts().filter((part) => part.endedOn));
+  protected readonly figures = signal<MortgageFiguresResponse>({
+    debts: [],
+    months: [],
+    monthsWithoutPayment: [],
+  });
+  /** The id of Bolån ränta & amortering, for the link from a month with no payment. */
+  private readonly subcategoryId = signal<number | null>(null);
+  protected readonly newRateId = signal<number | null>(null);
+  protected readonly mode = signal<ChartMode>('debt');
+  protected readonly range = signal<Range>('1y');
+  protected readonly ranges = RANGES;
+  protected readonly hovered = signal<number | null>(null);
+
+  protected readonly summary = computed(() => totals(this.parts(), this.figures().debts));
+  /** This month's estimate, if the mortgage has figures. */
+  protected readonly estimate = computed(() => {
+    const month = currentMonth(this.figures(), this.now);
+    return month === undefined
+      ? null
+      : { total: month.total, interest: month.interest, amortisation: month.amortisation };
+  });
+
+  /** A calm note for each month flagged by the backend, linking to its transactions. */
+  protected readonly unpaidMonths = computed(() =>
+    this.figures().monthsWithoutPayment.map((month) => ({
+      month,
+      name: MONTH_LONG.format(monthDate(month)),
+      params: {
+        from: `${month}-01`,
+        to: lastDayOf(month),
+        ...(this.subcategoryId() === null ? {} : { subcategories: String(this.subcategoryId()) }),
+      },
+    })),
+  );
+
+  protected readonly chartMonths = computed(() => inRange(this.figures().months, this.range()));
+
+  private readonly colours = computed(() => {
+    const colours = new Map<number | string, string>();
+    this.parts().forEach((part, i) => {
+      colours.set(part.id, CATEGORY_PALETTE[PART_COLOURS[i % PART_COLOURS.length]!].colour);
+    });
+    colours.set('estimate', 'var(--color-accent)');
+    colours.set('paid', CATEGORY_PALETTE.teal.colour);
+    return colours;
+  });
+
+  protected readonly chart = computed(() => {
+    const months = this.chartMonths();
+    return months.length === 0 ? null : buildChart(months, this.mode(), this.colours());
+  });
+
+  protected readonly xTicks = computed(() => {
+    const months = this.chartMonths();
+    const every = months.length <= 12 ? 1 : Math.ceil(months.length / 6);
+    return months.flatMap((m, i) =>
+      i % every === 0 || i === months.length - 1
+        ? [
+            {
+              month: m.month,
+              pct: ((i + 0.5) / months.length) * 100,
+              label: (months.length <= 12 ? MONTH_SHORT : MONTH_YEAR).format(monthDate(m.month)),
+            },
+          ]
+        : [],
+    );
+  });
+
+  protected readonly legend = computed(() =>
+    this.mode() === 'paid'
+      ? [
+          { label: 'Beräknat', colour: this.colours().get('estimate')! },
+          { label: 'Betalt', colour: this.colours().get('paid')! },
+        ]
+      : this.parts()
+          .filter((part) =>
+            this.chartMonths().some((m) => m.debts.some((d) => d.partId === part.id)),
+          )
+          .map((part) => ({ label: part.name, colour: this.colours().get(part.id)! })),
+  );
+
+  protected readonly tip = computed(() => {
+    const c = this.chart();
+    const index = this.hovered();
+    const month = index === null ? undefined : this.chartMonths()[index];
+    if (c === null || month === undefined || index === null) return null;
+    const title = `${MONTH_LONG.format(monthDate(month.month))} ${month.month.slice(0, 4)}`;
+    const lines =
+      this.mode() === 'debt'
+        ? month.debts.map((d) => ({
+            label: this.partName(d.partId),
+            colour: this.colours().get(d.partId)!,
+            amount: d.debt,
+          }))
+        : [
+            { label: 'Beräknat', colour: this.colours().get('estimate')!, amount: month.total },
+            { label: 'Betalt', colour: this.colours().get('paid')!, amount: month.paid },
+          ];
+    return { title, lines, pct: ((index + 0.5) / this.chartMonths().length) * 100 };
+  });
   protected readonly failed = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly panel = signal<Panel | null>(null);
@@ -461,6 +895,78 @@ export class BolanPage {
       next: (mortgage) => this.mortgage.set(mortgage),
       error: () => this.failed.set('Bolånet kunde inte hämtas. Försök igen senare.'),
     });
+    this.loadFigures();
+    this.categories.subcategories().subscribe({
+      next: (all) =>
+        this.subcategoryId.set(
+          all.find((item) => item.subcategory.name === 'Bolån ränta & amortering')?.subcategory
+            .id ?? null,
+        ),
+      // The note then links to the month's transactions without the category filter.
+      error: () => undefined,
+    });
+  }
+
+  /** The figures follow every change to the mortgage, so they are asked for again after one. */
+  private loadFigures(): void {
+    // Only the latest request counts: an older, slower response must not overwrite a newer one.
+    this.figuresRequest?.unsubscribe();
+    this.figuresRequest = this.service.figures().subscribe({
+      next: (figures) => {
+        this.figures.set(figures);
+        this.failed.set(null);
+      },
+      error: () => this.failed.set('Bolånets siffror kunde inte hämtas. Försök igen senare.'),
+    });
+  }
+
+  protected countdown(day: string) {
+    return countdown(day, this.now);
+  }
+
+  protected needsNewRate(part: LoanPart): boolean {
+    return needsNewRate(part, this.now);
+  }
+
+  protected kr(value: number): string {
+    return `${KR.format(Math.round(value))} kr`;
+  }
+
+  /** The debt now, from the figures; the latest entry's until they arrive. */
+  protected partDebt(part: LoanPart): number | null {
+    return this.figures().debts.find((d) => d.partId === part.id)?.debt ?? part.debt;
+  }
+
+  /** This month's estimated interest on the part: its debt at the start of the month, at its rate. */
+  protected partInterest(part: LoanPart): number | null {
+    const month: MortgageMonth | undefined = currentMonth(this.figures(), this.now);
+    const debt = month?.debts.find((d) => d.partId === part.id)?.debt;
+    if (debt === undefined || part.rate === null) return null;
+    return Math.round(((debt * part.rate) / 1200) * 100) / 100;
+  }
+
+  /** Follows a finger across the chart: a touch pointer never enters the per-month columns. */
+  protected touchMonth(event: PointerEvent): void {
+    const length = this.chartMonths().length;
+    if (event.pointerType !== 'touch' || length < 1) return;
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    if (box.width <= 0) return;
+    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 0.999999);
+    this.hovered.set(Math.floor(ratio * length));
+  }
+
+  protected startNewRate(part: LoanPart): void {
+    this.reset();
+    this.rate.set(part.rate === null ? '' : formatAmountInput(part.rate));
+    this.newRateId.set(part.id);
+  }
+
+  /** Records the rate, also when it is the same as before: that clears the prompt. */
+  protected saveNewRate(part: LoanPart): void {
+    const rate = parseAmount(this.rate());
+    if (rate === null || rate < 0) return this.formError.set('Ange räntan i procent, t.ex. 3,85.');
+    if (this.rateFrom() === '') return this.formError.set('Ange från vilket datum räntan gäller.');
+    this.submit(this.service.addRateChange(part.id, { from: this.rateFrom(), rate }));
   }
 
   protected value(event: Event): string {
@@ -497,6 +1003,7 @@ export class BolanPage {
   protected cancel(): void {
     this.panel.set(null);
     this.editingId.set(null);
+    this.newRateId.set(null);
   }
 
   /** Opens the entry form for a new entry, prefilled with the current debts, or to correct one. */
@@ -618,6 +1125,7 @@ export class BolanPage {
       next: (mortgage) => {
         this.busy.set(false);
         this.mortgage.set(mortgage);
+        this.loadFigures();
       },
       error: () => {
         this.busy.set(false);
@@ -649,6 +1157,7 @@ export class BolanPage {
     this.formError.set(null);
     this.panel.set(null);
     this.editingId.set(null);
+    this.newRateId.set(null);
     this.ending.set(false);
     this.endDate.set(today());
     this.rateFrom.set(today());
@@ -672,8 +1181,10 @@ export class BolanPage {
       next: (mortgage) => {
         this.busy.set(false);
         this.mortgage.set(mortgage);
+        this.loadFigures();
         this.panel.set(null);
         this.editingId.set(null);
+        this.newRateId.set(null);
         this.ending.set(false);
       },
       error: (error: unknown) => {

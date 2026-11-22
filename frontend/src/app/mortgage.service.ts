@@ -5,6 +5,7 @@ import type {
   AmortisationChangeRequest,
   EndLoanPartRequest,
   InterestRateChangeRequest,
+  MortgageFiguresResponse,
   MortgageEntryRequest,
   MortgageResponse,
   UpdateLoanPartRequest,
@@ -20,6 +21,11 @@ export class MortgageService {
 
   get(): Observable<MortgageResponse> {
     return this.http.get<MortgageResponse>(BASE);
+  }
+
+  /** Remaining debt now, and the estimate and what was paid per month. */
+  figures(): Observable<MortgageFiguresResponse> {
+    return this.http.get<MortgageFiguresResponse>(`${BASE}/figures`);
   }
 
   addPart(request: AddLoanPartRequest): Observable<MortgageResponse> {

@@ -45,30 +45,88 @@ describe('App', () => {
     await fixture.whenStable();
   }
 
-  it('has the six destinations in the sidebar and the bottom tabs, on every page', async () => {
+  it('has seven destinations in the sidebar, and five tabs with the rest under Mer', async () => {
     const fixture = TestBed.createComponent(App);
     for (const url of ['/', '/banker', '/anslut-bank']) {
       await navigate(fixture, url);
-      for (const [nav, labels] of [
-        [
-          sidebar(fixture),
-          ['Översikt', 'Transaktioner', 'Att granska', 'Delat', 'Sparande', 'Banker'],
-        ],
-        [tabs(fixture), ['Översikt', 'Transaktioner', 'Granska', 'Delat', 'Sparande', 'Banker']],
-      ] as const) {
-        const links = [...nav.querySelectorAll('a')];
-        expect(links.map((a) => a.textContent?.replace(/\d+/, '').trim())).toEqual([...labels]);
-        expect(links.map((a) => a.getAttribute('href'))).toEqual([
-          '/',
-          '/transaktioner',
-          '/granska',
-          '/delat',
-          '/sparande',
-          '/banker',
-        ]);
-      }
+      const label = (a: Element) => a.textContent?.replace(/\d+/, '').trim();
+      const side = [...sidebar(fixture).querySelectorAll('a')];
+      expect(side.map(label)).toEqual([
+        'Översikt',
+        'Transaktioner',
+        'Att granska',
+        'Delat',
+        'Sparande',
+        'Bolån',
+        'Banker',
+      ]);
+      expect(side.map((a) => a.getAttribute('href'))).toEqual([
+        '/',
+        '/transaktioner',
+        '/granska',
+        '/delat',
+        '/sparande',
+        '/bolan',
+        '/banker',
+      ]);
+      const bar = tabs(fixture);
+      expect([...bar.querySelectorAll('a, button')].map(label)).toEqual([
+        'Översikt',
+        'Transaktioner',
+        'Granska',
+        'Delat',
+        'Mer',
+      ]);
     }
     TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  describe('Mer', () => {
+    const more = (fixture: { nativeElement: unknown }) =>
+      html(fixture).querySelector('[data-more]') as HTMLButtonElement;
+    const sheet = (fixture: { nativeElement: unknown }) =>
+      html(fixture).querySelector('[data-more-sheet]');
+
+    it('opens a sheet with Sparande, Bolån and Banker, and closes on navigating', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      expect(sheet(fixture)).toBeNull();
+      more(fixture).click();
+      await fixture.whenStable();
+      const links = [...sheet(fixture)!.querySelectorAll('a')];
+      expect(links.map((a) => a.textContent?.trim())).toEqual(['Sparande', 'Bolån', 'Banker']);
+      (links[1] as HTMLAnchorElement).click();
+      await navigate(fixture, '/bolan');
+      expect(sheet(fixture)).toBeNull();
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('closes from the backdrop', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      more(fixture).click();
+      await fixture.whenStable();
+      (html(fixture).querySelector('[data-more-backdrop]') as HTMLElement).click();
+      await fixture.whenStable();
+      expect(sheet(fixture)).toBeNull();
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('is the active tab on the pages inside it, and no other tab is', async () => {
+      const fixture = TestBed.createComponent(App);
+      for (const [url, mer] of [
+        ['/bolan', true],
+        ['/sparande', true],
+        ['/banker', true],
+        ['/delat', false],
+        ['/', false],
+      ] as const) {
+        await navigate(fixture, url);
+        expect(more(fixture).classList.contains('active')).toBe(mer);
+        expect(tabs(fixture).querySelectorAll('a.active').length).toBe(mer ? 0 : 1);
+      }
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
   });
 
   it('shows the brand and a logout button in the sidebar, and the brand in a mobile header', async () => {
@@ -79,7 +137,8 @@ describe('App', () => {
     expect(html(fixture).querySelector('aside button[aria-label="Logga ut"]')).not.toBeNull();
     const header = html(fixture).querySelector('header') as HTMLElement;
     expect(header.textContent).toContain('Bankapp');
-    expect(header.querySelector('button[aria-label="Logga ut"]')).not.toBeNull();
+    // On mobile, signing out lives in the Mer sheet.
+    expect(header.querySelector('button')).toBeNull();
     TestBed.inject(HttpTestingController).match(() => true);
   });
 
@@ -89,11 +148,14 @@ describe('App', () => {
       ['/', 'Översikt'],
       ['/transaktioner', 'Transaktioner'],
       ['/transaktioner/7', 'Transaktioner'],
+      ['/bolan', 'Bolån'],
       ['/banker', 'Banker'],
       ['/delat', 'Delat'],
     ] as const) {
       await navigate(fixture, url);
-      for (const nav of [sidebar(fixture), tabs(fixture)]) {
+      // Bolån and Banker have no tab; the Mer tab covers them (tested under Mer).
+      const inMore = active === 'Bolån' || active === 'Banker';
+      for (const nav of inMore ? [sidebar(fixture)] : [sidebar(fixture), tabs(fixture)]) {
         const current = [...nav.querySelectorAll('a.active')];
         expect(current).toHaveLength(1);
         expect(current[0].textContent).toContain(active);
@@ -207,7 +269,7 @@ describe('App logout', () => {
     });
   });
 
-  it.each(['aside', 'header'])(
+  it.each(['aside', '[data-more-sheet]'])(
     'signs out from the %s button and shows the login page',
     async (where) => {
       const fixture = TestBed.createComponent(App);
@@ -218,6 +280,10 @@ describe('App logout', () => {
         .forEach((r) => r.flush({ count: 0 }));
       await fixture.whenStable();
       const html = fixture.nativeElement as HTMLElement;
+      if (where !== 'aside') {
+        (html.querySelector('[data-more]') as HTMLButtonElement).click();
+        await fixture.whenStable();
+      }
 
       (html.querySelector(`${where} button[aria-label="Logga ut"]`) as HTMLButtonElement).click();
       await fixture.whenStable();
