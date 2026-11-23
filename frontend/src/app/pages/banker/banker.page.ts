@@ -13,6 +13,10 @@ import {
 } from '@bankapp/shared';
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { Callout } from '../../callout/callout';
+import { Disclosure } from '../../disclosure/disclosure';
+import { Empty } from '../../empty/empty';
+import { Skeleton } from '../../skeleton/skeleton';
 import { ConnectionsService } from '../../connections.service';
 import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -55,7 +59,17 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 @Component({
   selector: 'app-banker-page',
-  imports: [RouterLink, DateTimePipe, MoneyPipe, Page, ShareControl],
+  imports: [
+    RouterLink,
+    DateTimePipe,
+    MoneyPipe,
+    Page,
+    ShareControl,
+    Callout,
+    Disclosure,
+    Empty,
+    Skeleton,
+  ],
   host: {
     '(document:keydown.escape)': 'menuOpen.set(null)',
     '(document:click)': 'closeMenuOnOutsideClick($event)',
@@ -141,55 +155,58 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
       </div>
 
       @if (!result) {
-        <p aria-live="polite">Hämtar konton…</p>
+        <div aria-busy="true" class="grid gap-4 lg:grid-cols-2">
+          <app-skeleton shape="card" />
+          <app-skeleton shape="card" />
+        </div>
       } @else if ('failed' in result) {
-        <p role="alert">Kontona kunde inte hämtas. Försök igen senare.</p>
+        <app-callout variant="danger">Kontona kunde inte hämtas. Försök igen senare.</app-callout>
       } @else if (result.banks.length === 0) {
-        <section class="card p-4 sm:p-5">
-          <p>Inga banker är anslutna ännu.</p>
-        </section>
+        <app-empty icon="landmark" text="Inga banker anslutna">
+          <a empty-action routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
+        </app-empty>
       } @else {
         @if (summary(); as done) {
           @if (done.rateLimited) {
-            <p role="alert" class="text-sm text-warning">
+            <app-callout variant="warning">
               Banken tillåter inte fler uppdateringar just nu.
               @if (lastSyncedAt(result); as at) {
                 Senast uppdaterad {{ at | dateTime }}.
               }
-            </p>
+            </app-callout>
           }
           @if (done.failedAccounts > 0) {
-            <p role="alert" class="text-sm text-warning">
+            <app-callout variant="warning">
               {{
                 done.failedAccounts === 1
                   ? '1 konto kunde inte uppdateras.'
                   : done.failedAccounts + ' konton kunde inte uppdateras.'
               }}
-            </p>
+            </app-callout>
           }
         }
         @if (renewFailed()) {
-          <p role="alert" class="text-sm text-danger">
+          <app-callout variant="danger">
             Förnyelsen kunde inte startas. Försök igen senare.
-          </p>
+          </app-callout>
         }
         @if (hideFailed()) {
-          <p role="alert" class="text-sm text-danger">
+          <app-callout variant="danger">
             Kontot kunde inte ändras. Försök igen senare.
-          </p>
+          </app-callout>
         }
         @if (shareFailed(); as message) {
-          <p role="alert" class="text-sm text-danger">{{ message }}</p>
+          <app-callout variant="danger">{{ message }}</app-callout>
         }
         @if (removeFailed()) {
-          <p role="alert" class="text-sm text-danger">
+          <app-callout variant="danger">
             Banken kunde inte tas bort. Försök igen senare.
-          </p>
+          </app-callout>
         }
         @if (startFailed()) {
-          <p role="alert" class="text-sm text-danger">
+          <app-callout variant="danger">
             Uppdateringen kunde inte startas. Försök igen senare.
-          </p>
+          </app-callout>
         }
         <div class="stagger grid items-start gap-4 lg:grid-cols-2">
           @for (group of result.banks; track group.bank) {
@@ -285,13 +302,13 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   <span [style.width.%]="meterPercent(group)"></span>
                 </div>
                 @if (group.status === 'expired') {
-                  <p data-expiry role="alert" class="mt-2 text-sm text-warning">
+                  <app-callout data-expiry variant="danger" class="mt-3">
                     Kopplingen till {{ group.bank }} har gått ut. Kontona uppdateras inte längre.
-                  </p>
+                  </app-callout>
                 } @else if (group.status === 'expiring') {
-                  <p data-expiry class="mt-2 text-sm text-warning">
+                  <app-callout data-expiry variant="warning" class="mt-3">
                     Kopplingen till {{ group.bank }} går ut om {{ daysLeftText(group) }}.
-                  </p>
+                  </app-callout>
                 }
               </div>
 
@@ -446,95 +463,102 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </div>
       }
       @if (result && !('failed' in result) && result.removedBanks.length > 0) {
-        <details data-removed-banks class="card p-4 sm:p-5">
-          <summary class="card-title cursor-pointer">Borttagna banker</summary>
-          <div class="mt-4 flex flex-col gap-5">
-            @if (deleteFailed()) {
-              <p role="alert" class="text-sm text-danger">
-                Banken kunde inte tas bort helt. Försök igen senare.
-              </p>
-            }
-            @for (removed of result.removedBanks; track removed.bank) {
-              <section [attr.data-removed-bank]="removed.bank" class="flex flex-col gap-2">
-                <h3 class="font-medium">{{ removed.bank }}</h3>
-                <ul class="flex flex-col divide-y divide-line">
-                  @for (account of removed.accounts; track account.id) {
-                    <li
-                      class="flex items-center justify-between gap-3 py-2"
-                      [attr.data-hidden-row]="account.hidden ? '' : null"
+        <div data-removed-banks class="card p-4 sm:p-5">
+          <app-disclosure
+            label="Borttagna banker"
+            [count]="result.removedBanks.length"
+            [title]="true"
+          >
+            <div class="flex flex-col gap-5">
+              @if (deleteFailed()) {
+                <app-callout variant="danger">
+                  Banken kunde inte tas bort helt. Försök igen senare.
+                </app-callout>
+              }
+              @for (removed of result.removedBanks; track removed.bank) {
+                <section [attr.data-removed-bank]="removed.bank" class="flex flex-col gap-2">
+                  <h3 class="font-medium">{{ removed.bank }}</h3>
+                  <ul class="flex flex-col divide-y divide-line">
+                    @for (account of removed.accounts; track account.id) {
+                      <li
+                        class="flex items-center justify-between gap-3 py-2"
+                        [attr.data-hidden-row]="account.hidden ? '' : null"
+                      >
+                        <span class="flex min-w-0 flex-col" [class.opacity-55]="account.hidden">
+                          <span data-account-name class="truncate">{{ account.name }}</span>
+                          <span class="text-sm text-muted">{{ typeLabel(account.type) }}</span>
+                        </span>
+                        <button
+                          type="button"
+                          data-toggle-hidden
+                          class="btn btn-sm btn-secondary"
+                          [class.border-dashed]="account.hidden"
+                          [disabled]="togglingHidden()"
+                          (click)="setHidden(account.id, !account.hidden)"
+                        >
+                          <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                  @if (confirmingDelete() === removed.bank) {
+                    <form
+                      data-delete-form
+                      class="flex flex-col gap-2 rounded-lg border border-line p-3"
+                      (submit)="$event.preventDefault(); deleteBank(removed, name.value)"
                     >
-                      <span class="flex min-w-0 flex-col" [class.opacity-55]="account.hidden">
-                        <span data-account-name class="truncate">{{ account.name }}</span>
-                        <span class="text-sm text-muted">{{ typeLabel(account.type) }}</span>
-                      </span>
-                      <button
-                        type="button"
-                        data-toggle-hidden
-                        class="btn btn-sm btn-secondary"
-                        [class.border-dashed]="account.hidden"
-                        [disabled]="togglingHidden()"
-                        (click)="setHidden(account.id, !account.hidden)"
-                      >
-                        <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
-                      </button>
-                    </li>
+                      <p class="text-sm">
+                        {{ removed.bank }} raderas helt och för alltid: banken, dess konton, alla
+                        transaktioner och saldohistoriken. Månader du redan sett och uppgörelsen kan
+                        ändras. Sparkonton som du fortsatt följa manuellt tas inte bort.
+                      </p>
+                      <label class="flex flex-col gap-1 text-sm">
+                        Skriv bankens namn för att bekräfta
+                        <span class="field">
+                          <input
+                            #name
+                            data-delete-name
+                            type="text"
+                            autocomplete="off"
+                            class="field-control"
+                            (input)="typedName.set(name.value)"
+                          />
+                        </span>
+                      </label>
+                      <div class="flex gap-2">
+                        <button
+                          type="submit"
+                          data-confirm-delete
+                          class="btn btn-sm btn-danger"
+                          [disabled]="deleting() || typedName().trim() !== removed.bank"
+                        >
+                          Ta bort helt
+                        </button>
+                        <button
+                          type="button"
+                          data-cancel-delete
+                          class="btn btn-sm btn-secondary"
+                          (click)="confirmingDelete.set(null)"
+                        >
+                          Avbryt
+                        </button>
+                      </div>
+                    </form>
+                  } @else {
+                    <button
+                      type="button"
+                      data-delete-bank
+                      class="btn btn-sm btn-danger-soft self-start"
+                      (click)="startDelete(removed.bank)"
+                    >
+                      Ta bort helt
+                    </button>
                   }
-                </ul>
-                @if (confirmingDelete() === removed.bank) {
-                  <form
-                    data-delete-form
-                    class="flex flex-col gap-2 rounded-lg border border-line p-3"
-                    (submit)="$event.preventDefault(); deleteBank(removed, name.value)"
-                  >
-                    <p class="text-sm">
-                      {{ removed.bank }} raderas helt och för alltid: banken, dess konton, alla
-                      transaktioner och saldohistoriken. Månader du redan sett och uppgörelsen kan
-                      ändras. Sparkonton som du fortsatt följa manuellt tas inte bort.
-                    </p>
-                    <label class="flex flex-col gap-1 text-sm">
-                      Skriv bankens namn för att bekräfta
-                      <input
-                        #name
-                        data-delete-name
-                        type="text"
-                        autocomplete="off"
-                        class="rounded-lg border border-line px-3 py-2"
-                        (input)="typedName.set(name.value)"
-                      />
-                    </label>
-                    <div class="flex gap-2">
-                      <button
-                        type="submit"
-                        data-confirm-delete
-                        class="btn btn-sm btn-secondary"
-                        [disabled]="deleting() || typedName().trim() !== removed.bank"
-                      >
-                        Ta bort helt
-                      </button>
-                      <button
-                        type="button"
-                        data-cancel-delete
-                        class="btn btn-sm btn-secondary"
-                        (click)="confirmingDelete.set(null)"
-                      >
-                        Avbryt
-                      </button>
-                    </div>
-                  </form>
-                } @else {
-                  <button
-                    type="button"
-                    data-delete-bank
-                    class="btn btn-sm btn-secondary self-start"
-                    (click)="startDelete(removed.bank)"
-                  >
-                    Ta bort helt
-                  </button>
-                }
-              </section>
-            }
-          </div>
-        </details>
+                </section>
+              }
+            </div>
+          </app-disclosure>
+        </div>
       }
     </app-page>
   `,

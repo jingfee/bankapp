@@ -21,7 +21,10 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { OverviewService } from '../../overview.service';
 import { SettlementService } from '../../settlement.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
+import { Callout } from '../../callout/callout';
+import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 
 type Status = 'loading' | 'ready' | 'failed';
 type TotalKind = keyof OverviewTotals;
@@ -158,7 +161,17 @@ function bars<T extends { id: number; name: string; total: number }>(
 /** One calendar month: income, spending and net, and where the money went. */
 @Component({
   selector: 'app-overview-page',
-  imports: [Page, NgTemplateOutlet, RouterLink, MoneyPipe, CategoryBar, TransactionList],
+  imports: [
+    Page,
+    NgTemplateOutlet,
+    RouterLink,
+    MoneyPipe,
+    CategoryBar,
+    TransactionList,
+    Callout,
+    Empty,
+    Skeleton,
+  ],
   template: `
     <ng-template #tileBody let-tile>
       <span class="eyebrow">{{ tile.label }}</span>
@@ -217,37 +230,28 @@ function bars<T extends { id: number; name: string; total: number }>(
       </div>
 
       @if (banner(); as b) {
-        <p
-          data-connection-banner
-          class="flex items-center gap-3 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="size-5 shrink-0"
-            aria-hidden="true"
+        <app-callout data-connection-banner variant="warning">
+          {{ b }}
+          <a
+            callout-action
+            routerLink="/banker"
+            class="shrink-0 font-semibold whitespace-nowrap text-accent"
+            >Förnya →</a
           >
-            <path
-              d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"
-            />
-            <path d="M12 9v4M12 17h.01" />
-          </svg>
-          <span class="flex-1 text-ink">{{ b }}</span>
-          <a routerLink="/banker" class="shrink-0 font-semibold whitespace-nowrap">Förnya →</a>
-        </p>
+        </app-callout>
       }
 
       @switch (status()) {
         @case ('loading') {
-          <p aria-live="polite">Hämtar översikt…</p>
+          <div aria-busy="true" class="flex flex-col gap-4">
+            <app-skeleton shape="tiles" [count]="5" />
+            <app-skeleton shape="card" />
+          </div>
         }
         @case ('failed') {
-          <p role="alert">Översikten kunde inte hämtas. Försök igen senare.</p>
+          <app-callout variant="danger"
+            >Översikten kunde inte hämtas. Försök igen senare.</app-callout
+          >
         }
         @default {
           @if (overview(); as o) {
@@ -277,12 +281,13 @@ function bars<T extends { id: number; name: string; total: number }>(
             </div>
 
             @if (spending().length === 0 && income().length === 0) {
-              <p>Inga transaktioner den här månaden.</p>
-              @if (!accountRows()) {
-                <a routerLink="/anslut-bank" class="self-start font-medium underline"
-                  >Anslut bank</a
-                >
-              }
+              <app-empty icon="receipt" text="Inga transaktioner den här månaden.">
+                @if (!accountRows()) {
+                  <a empty-action routerLink="/anslut-bank" class="btn btn-secondary btn-sm"
+                    >Anslut bank</a
+                  >
+                }
+              </app-empty>
             }
 
             <div
@@ -431,7 +436,7 @@ function bars<T extends { id: number; name: string; total: number }>(
                   <section data-section="spending" class="card @container p-4 sm:p-5">
                     <h2 class="mb-4 card-title">Utgifter per kategori</h2>
                     @if (spending().length === 0) {
-                      <p class="text-muted">Inga utgifter den här månaden.</p>
+                      <app-empty icon="receipt" text="Inga utgifter den här månaden." />
                     } @else {
                       <div class="flex flex-col gap-5 @lg:flex-row @lg:items-start">
                         <div
@@ -507,13 +512,13 @@ function bars<T extends { id: number; name: string; total: number }>(
                                       />
                                       @if (openSubcategory() === sub.item.id) {
                                         @if (subStatus() === 'failed') {
-                                          <p role="alert" class="px-2 py-2">
+                                          <app-callout variant="danger" class="my-2">
                                             Transaktionerna kunde inte hämtas. Försök igen senare.
-                                          </p>
+                                          </app-callout>
                                         } @else if (subStatus() === 'loading') {
-                                          <p aria-live="polite" class="px-2 py-2">
-                                            Hämtar transaktioner…
-                                          </p>
+                                          <div aria-busy="true" class="py-2">
+                                            <app-skeleton [count]="2" />
+                                          </div>
                                         } @else {
                                           <div class="expand-in mt-2 mb-3">
                                             <app-transaction-list

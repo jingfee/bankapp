@@ -337,15 +337,34 @@ describe('BolanPage', () => {
   });
 
   describe('months without a payment', () => {
-    it('notes each one with a link to the filtered transactions', async () => {
-      const { root } = await render(MORTGAGE, { ...FIGURES, monthsWithoutPayment: ['2026-09'] });
+    it('notes it, with a link per month to the filtered transactions', async () => {
+      const { root, click } = await render(MORTGAGE, {
+        ...FIGURES,
+        monthsWithoutPayment: ['2026-09'],
+      });
       const note = root.querySelector('[data-no-payment]')!;
-      expect(note.textContent).toContain('Ingen bolånebetalning hittad i september');
+      expect(note.textContent).toContain('Ingen bolånebetalning hittad i 1 månad');
+      expect(note.querySelector('a')).toBeNull();
+      await click('[data-no-payment-toggle]');
+      expect(note.textContent).toContain('september');
       const href = note.querySelector('a')!.getAttribute('href')!;
       expect(href).toContain('/transaktioner');
       expect(href).toContain('from=2026-09-01');
       expect(href).toContain('to=2026-09-30');
       expect(href).toContain('subcategories=42');
+    });
+
+    it('collapses several months into one notice', async () => {
+      const { root, click } = await render(MORTGAGE, {
+        ...FIGURES,
+        monthsWithoutPayment: ['2026-07', '2026-08', '2026-09'],
+      });
+      expect(root.querySelectorAll('[data-no-payment]')).toHaveLength(1);
+      expect(root.querySelector('[data-no-payment]')?.textContent).toContain(
+        'Ingen bolånebetalning hittad i 3 månader',
+      );
+      await click('[data-no-payment-toggle]');
+      expect(root.querySelectorAll('[data-no-payment-link]')).toHaveLength(3);
     });
 
     it('shows nothing when every month was paid', async () => {
@@ -398,15 +417,17 @@ describe('BolanPage', () => {
   });
 
   it('puts ended parts in a collapsed group', async () => {
-    const { root } = await render({
+    const { root, click } = await render({
       ...MORTGAGE,
       parts: [...MORTGAGE.parts, part(3, 'Del 0', { endedOn: '2026-06-01', debt: 0 })],
     });
-    const group = root.querySelector<HTMLDetailsElement>('[data-ended-parts]')!;
-    expect(group.open).toBe(false);
-    expect(group.querySelector('summary')?.textContent).toContain('Avslutade lånedelar');
+    const group = root.querySelector<HTMLElement>('[data-ended-parts]')!;
+    const toggle = group.querySelector<HTMLButtonElement>('[data-disclosure-toggle]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.textContent).toContain('Avslutade lånedelar');
+    expect(group.querySelector('[data-part="3"]')).toBeNull();
+    await click('[data-ended-parts] [data-disclosure-toggle]');
     expect(group.querySelector('[data-part="3"]')).not.toBeNull();
-    expect(root.querySelector('ul [data-part="3"]:not(details *)')).toBeNull();
   });
 
   it('reloads the figures after a change', async () => {

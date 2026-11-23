@@ -2,6 +2,9 @@ import { Component, inject, output, signal } from '@angular/core';
 import type { BalanceEntry, ManualSavingsAccount } from '@bankapp/shared';
 import { type Observable, catchError, map, of } from 'rxjs';
 import { today } from '../dates';
+import { Callout } from '../callout/callout';
+import { Empty } from '../empty/empty';
+import { Icon } from '../icon/icon';
 import { DateField } from '../date-field/date-field';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { MoneyPipe } from '../formatting/money.pipe';
@@ -10,7 +13,7 @@ import { ManualSavingsService } from '../manual-savings.service';
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
 @Component({
   selector: 'app-manual-savings-section',
-  imports: [DateField, MoneyPipe],
+  imports: [DateField, MoneyPipe, Callout, Empty, Icon],
   template: `
     <section data-manual-savings class="card flex flex-col gap-4 p-4 sm:p-5">
       <div class="flex items-center justify-between gap-3">
@@ -22,13 +25,14 @@ import { ManualSavingsService } from '../manual-savings.service';
             class="btn btn-sm btn-secondary"
             (click)="openAdd()"
           >
+            <app-icon name="plus" [size]="16" />
             Lägg till sparkonto
           </button>
         }
       </div>
 
       @if (failed(); as message) {
-        <p role="alert" class="text-sm text-danger">{{ message }}</p>
+        <app-callout variant="danger">{{ message }}</app-callout>
       }
 
       @if (adding()) {
@@ -39,21 +43,23 @@ import { ManualSavingsService } from '../manual-savings.service';
         >
           <label class="flex flex-col gap-1 text-sm text-muted">
             Namn
-            <input
-              data-account-name-input
-              class="input"
-              [value]="name()"
-              (input)="name.set(value($event))"
-            />
+            <span class="field"
+              ><input
+                data-account-name-input
+                class="field-control"
+                [value]="name()"
+                (input)="name.set(value($event))"
+            /></span>
           </label>
           <label class="flex flex-col gap-1 text-sm text-muted">
             Bank eller förvaltare (valfritt)
-            <input
-              data-institution-input
-              class="input"
-              [value]="institution()"
-              (input)="institution.set(value($event))"
-            />
+            <span class="field"
+              ><input
+                data-institution-input
+                class="field-control"
+                [value]="institution()"
+                (input)="institution.set(value($event))"
+            /></span>
           </label>
           <button
             type="submit"
@@ -69,9 +75,10 @@ import { ManualSavingsService } from '../manual-savings.service';
 
       @let list = accounts();
       @if (list.length === 0 && !adding()) {
-        <p class="text-sm text-muted">
-          Inga manuella sparkonton ännu. Lägg till t.ex. en ISK och ange saldot då och då.
-        </p>
+        <app-empty
+          icon="piggy-bank"
+          text="Inga manuella sparkonton ännu. Lägg till t.ex. en ISK och ange saldot då och då."
+        />
       }
       <ul class="flex flex-col divide-y divide-line">
         @for (account of list; track account.id) {
@@ -86,19 +93,21 @@ import { ManualSavingsService } from '../manual-savings.service';
                   class="flex flex-wrap items-end gap-2"
                   (submit)="$event.preventDefault(); rename(account)"
                 >
-                  <input
-                    data-rename-input
-                    class="input"
-                    aria-label="Namn"
-                    [value]="name()"
-                    (input)="name.set(value($event))"
-                  />
-                  <input
-                    class="input"
-                    aria-label="Bank eller förvaltare"
-                    [value]="institution()"
-                    (input)="institution.set(value($event))"
-                  />
+                  <span class="field"
+                    ><input
+                      data-rename-input
+                      class="field-control"
+                      aria-label="Namn"
+                      [value]="name()"
+                      (input)="name.set(value($event))"
+                  /></span>
+                  <span class="field"
+                    ><input
+                      class="field-control"
+                      aria-label="Bank eller förvaltare"
+                      [value]="institution()"
+                      (input)="institution.set(value($event))"
+                  /></span>
                   <button
                     type="submit"
                     data-save-rename
@@ -227,7 +236,7 @@ import { ManualSavingsService } from '../manual-savings.service';
                     </label>
                   </div>
                   @if (entryError(); as message) {
-                    <p data-entry-error role="alert" class="text-sm text-danger">{{ message }}</p>
+                    <app-callout data-entry-error variant="danger">{{ message }}</app-callout>
                   }
                   <div class="flex flex-wrap gap-2">
                     <button
@@ -288,7 +297,7 @@ import { ManualSavingsService } from '../manual-savings.service';
                       <button
                         type="button"
                         data-delete-entry
-                        class="btn btn-sm btn-ghost"
+                        class="btn btn-sm btn-danger-soft"
                         [disabled]="busy()"
                         (click)="deleteEntry(account, entry)"
                       >

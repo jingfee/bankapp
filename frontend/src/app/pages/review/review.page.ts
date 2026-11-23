@@ -16,7 +16,10 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { accountLabel } from '../../share-display';
 import { TransactionsService } from '../../transactions.service';
 import { similarUpdatedNote } from '../../similar-updated-note';
+import { Callout } from '../../callout/callout';
+import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 
 type Status = 'loading' | 'ready' | 'failed';
 
@@ -36,6 +39,9 @@ const COLLAPSE_MS = 450;
     CategoryIconComponent,
     CategoryPickerComponent,
     Page,
+    Callout,
+    Empty,
+    Skeleton,
   ],
   template: `
     <app-page width="narrow" title="Att granska">
@@ -46,10 +52,12 @@ const COLLAPSE_MS = 450;
       }
       @switch (status()) {
         @case ('loading') {
-          <p aria-live="polite">Hämtar transaktioner att granska…</p>
+          <div aria-busy="true"><app-skeleton [count]="5" /></div>
         }
         @case ('failed') {
-          <p role="alert">Transaktionerna kunde inte hämtas. Försök igen senare.</p>
+          <app-callout variant="danger"
+            >Transaktionerna kunde inte hämtas. Försök igen senare.</app-callout
+          >
         }
         @default {
           <header class="flex flex-col gap-3">
@@ -68,33 +76,12 @@ const COLLAPSE_MS = 450;
             }
           </header>
           @if (finished()) {
-            <section
-              data-empty
-              class="card flex flex-col items-center gap-3 px-6 py-10 text-center"
-            >
-              <span
-                aria-hidden="true"
-                class="grid size-12 place-content-center rounded-full bg-positive/15 text-positive"
-              >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M5 12.5l4.5 4.5L19 7.5" />
-                </svg>
-              </span>
-              <p class="text-lg font-semibold">Allt är granskat</p>
-              <a routerLink="/" class="btn btn-secondary mt-2">Till översikten</a>
-            </section>
+            <app-empty data-empty icon="check" text="Allt är granskat">
+              <a empty-action routerLink="/" class="btn btn-secondary">Till översikten</a>
+            </app-empty>
           }
           @if (error(); as message) {
-            <p role="alert" class="text-sm text-danger">{{ message }}</p>
+            <app-callout variant="danger">{{ message }}</app-callout>
           }
           @if (similarNote(); as note) {
             <p data-similar-updated aria-live="polite" class="text-sm text-muted">
@@ -277,7 +264,7 @@ const COLLAPSE_MS = 450;
                             @if (categories(); as list) {
                               <app-category-picker [categories]="list" (picked)="save(t, $event)" />
                             } @else {
-                              <p aria-live="polite">Hämtar kategorier…</p>
+                              <div aria-busy="true"><app-skeleton shape="card" /></div>
                             }
                           </div>
                         }

@@ -187,15 +187,17 @@ describe('SparandePage', () => {
   });
 
   it('lists each account, with closed ones collapsed under Avslutade', async () => {
-    const { root, text } = await render();
+    const { root, text, click } = await render();
     const open = [...root.querySelectorAll('[data-accounts] > ul [data-account-name]')].map(
       (n) => n.textContent,
     );
     expect(open).toEqual(['Sparkonto (Swedbank)', 'Avanza ISK (Avanza)']);
-    const closed = root.querySelector('[data-closed-accounts]') as HTMLDetailsElement;
-    expect(closed.open).toBe(false);
-    expect(closed.textContent).toContain('Gammal ISK');
-    expect(text('[data-closed-accounts] summary')).toContain('Avslutade');
+    const toggle = '[data-closed-accounts] [data-disclosure-toggle]';
+    expect(root.querySelector(toggle)?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-closed-accounts]')?.textContent).not.toContain('Gammal ISK');
+    expect(text(toggle)).toContain('Avslutade');
+    await click(toggle);
+    expect(root.querySelector('[data-closed-accounts]')?.textContent).toContain('Gammal ISK');
     expect(text('[data-account-row][data-key="manual-1"] [data-account-updated]')).toContain(
       '2026-12-01',
     );

@@ -16,9 +16,13 @@ import { AccountsService } from '../../accounts.service';
 import { CategoriesService } from '../../categories.service';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { Callout } from '../../callout/callout';
+import { Empty } from '../../empty/empty';
+import { Icon } from '../../icon/icon';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 import { MANUAL_LABEL } from '../../share-display';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { TransactionsService } from '../../transactions.service';
@@ -49,7 +53,18 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 @Component({
   selector: 'app-transactions-page',
-  imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe, ManualTransactionSheet, Page],
+  imports: [
+    TransactionList,
+    RouterLink,
+    FilterPanel,
+    MoneyPipe,
+    ManualTransactionSheet,
+    Page,
+    Callout,
+    Empty,
+    Icon,
+    Skeleton,
+  ],
   // The routed page is its own stacking context (see `router-outlet + *`), so while the filter
   // panel or the add form is open it must rise above the bottom tabs (z-30),
   // otherwise they would cover the panel's footer.
@@ -63,27 +78,12 @@ const SEARCH_DEBOUNCE_MS = 250;
         data-add
         class="btn btn-secondary btn-sm flex-none whitespace-nowrap"
         aria-label="Lägg till manuell transaktion"
-        ><span class="max-[359px]:hidden">+ Manuell</span
-        ><span class="min-[360px]:hidden" aria-hidden="true">+</span></a
+        ><app-icon name="plus" [size]="16" /><span class="max-[359px]:hidden">Manuell</span></a
       >
 
       <div class="flex gap-2">
         <label class="field min-w-0 flex-1">
-          <svg
-            class="field-icon"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
+          <app-icon class="field-icon" name="search" [size]="20" />
           <input
             type="search"
             data-search
@@ -102,7 +102,7 @@ const SEARCH_DEBOUNCE_MS = 250;
               class="field-icon"
               (click)="clearSearch()"
             >
-              ✕
+              <app-icon name="x" />
             </button>
           }
         </label>
@@ -168,7 +168,7 @@ const SEARCH_DEBOUNCE_MS = 250;
                   aria-hidden="true"
                 ></span>
               }
-              {{ chip.label }} <span aria-hidden="true">✕</span>
+              {{ chip.label }} <app-icon name="x" [size]="14" />
             </button>
           }
           <button type="button" data-clear-all class="btn btn-ghost btn-sm" (click)="clearAll()">
@@ -179,17 +179,19 @@ const SEARCH_DEBOUNCE_MS = 250;
 
       @switch (status()) {
         @case ('loading') {
-          <p aria-live="polite">Hämtar transaktioner…</p>
+          <div aria-busy="true"><app-skeleton [count]="8" /></div>
         }
         @case ('failed') {
-          <p role="alert">Transaktionerna kunde inte hämtas. Försök igen senare.</p>
+          <app-callout variant="danger"
+            >Transaktionerna kunde inte hämtas. Försök igen senare.</app-callout
+          >
         }
         @default {
           @if (transactions().length === 0) {
             @if (filtered()) {
-              <div data-no-results class="flex flex-col items-start gap-2">
-                <p>Inga transaktioner matchar.</p>
+              <app-empty data-no-results icon="search" text="Inga transaktioner matchar.">
                 <button
+                  empty-action
                   type="button"
                   data-clear-filters
                   class="btn btn-secondary btn-sm"
@@ -197,9 +199,13 @@ const SEARCH_DEBOUNCE_MS = 250;
                 >
                   Rensa filter
                 </button>
-              </div>
+              </app-empty>
             } @else {
-              <p>Inga transaktioner ännu.</p>
+              <app-empty icon="receipt" text="Inga transaktioner ännu.">
+                <a empty-action routerLink="/anslut-bank" class="btn btn-secondary btn-sm"
+                  >Anslut bank</a
+                >
+              </app-empty>
             }
           } @else if (filtered()) {
             <p data-result class="text-sm text-muted" aria-live="polite">
@@ -211,13 +217,13 @@ const SEARCH_DEBOUNCE_MS = 250;
           }
           <app-transaction-list [transactions]="transactions()" />
           @if (moreFailed()) {
-            <p role="alert">Fler transaktioner kunde inte hämtas.</p>
+            <app-callout variant="danger">Fler transaktioner kunde inte hämtas.</app-callout>
           }
           @if (cursor() !== null) {
             <button
               type="button"
               data-more
-              class="self-start font-medium underline"
+              class="btn btn-secondary w-full"
               [disabled]="loadingMore()"
               (click)="loadMore()"
             >

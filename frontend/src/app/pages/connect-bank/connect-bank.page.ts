@@ -6,57 +6,75 @@ import type { Bank } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { BanksService } from '../../banks.service';
 import { ConnectionsService } from '../../connections.service';
+import { Callout } from '../../callout/callout';
+import { Empty } from '../../empty/empty';
+import { Icon } from '../../icon/icon';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 import { Redirector } from '../../redirector';
 
 type Loaded = { banks: Bank[] } | { failed: true };
 
 @Component({
   selector: 'app-connect-bank-page',
-  imports: [RouterLink, Page],
+  imports: [RouterLink, Page, Callout, Empty, Icon, Skeleton],
   template: `
     <app-page width="narrow" title="Anslut bank" subtitle="Välj den bank du vill ansluta.">
       <a page-back routerLink="/banker" class="text-sm text-muted hover:underline">← Banker</a>
 
-      <label class="flex flex-col gap-1 text-sm font-medium">
-        Sök bank
+      <label class="field">
+        <app-icon class="field-icon" name="search" [size]="20" />
         <input
           type="search"
-          class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base font-normal dark:border-zinc-700 dark:bg-zinc-900"
+          data-search
+          class="field-control"
+          placeholder="Sök bank"
+          aria-label="Sök bank"
           autocomplete="off"
           [value]="query()"
           (input)="query.set($any($event.target).value)"
         />
+        @if (query() !== '') {
+          <button
+            type="button"
+            data-clear-search
+            aria-label="Rensa sökning"
+            class="field-icon"
+            (click)="query.set('')"
+          >
+            <app-icon name="x" />
+          </button>
+        }
       </label>
 
       @if (startError(); as message) {
-        <p role="alert">{{ message }}</p>
+        <app-callout variant="danger">{{ message }}</app-callout>
       }
 
       @let result = loaded();
       @if (!result) {
-        <p aria-live="polite">Hämtar banker…</p>
+        <div aria-busy="true"><app-skeleton [count]="6" /></div>
       } @else if ('failed' in result) {
-        <p role="alert">Banklistan kunde inte hämtas. Försök igen senare.</p>
+        <app-callout variant="danger"
+          >Banklistan kunde inte hämtas. Försök igen senare.</app-callout
+        >
       } @else if (result.banks.length === 0) {
-        <p>Inga banker hittades ännu. Banklistan uppdateras varje natt.</p>
+        <app-empty
+          icon="landmark"
+          text="Inga banker hittades ännu. Banklistan uppdateras varje natt."
+        />
       } @else {
         @let visible = filtered();
         @if (visible.length === 0) {
-          <p>Ingen bank matchar "{{ query() }}".</p>
+          <app-empty icon="search" [text]="'Ingen bank matchar &quot;' + query() + '&quot;.'" />
         } @else {
-          <ul
-            class="divide-y divide-zinc-200 rounded-2xl border border-zinc-200 bg-white shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900"
-          >
+          <ul class="card divide-y divide-line">
             @for (bank of visible; track bank.name) {
               <li class="flex items-center gap-3 px-4 py-3">
                 @if (bank.logoUrl) {
                   <img [src]="bank.logoUrl" alt="" class="size-8 rounded object-contain" />
                 } @else {
-                  <span
-                    class="size-8 rounded bg-zinc-200 dark:bg-zinc-800"
-                    aria-hidden="true"
-                  ></span>
+                  <span class="size-8 rounded bg-surface-3" aria-hidden="true"></span>
                 }
                 <button
                   type="button"

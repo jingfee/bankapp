@@ -5,7 +5,11 @@ import { ManualSavingsSection } from '../../manual-savings/manual-savings-sectio
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SavingsService } from '../../savings.service';
+import { Callout } from '../../callout/callout';
+import { Disclosure } from '../../disclosure/disclosure';
+import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 
 /** The chart's drawing area, in the SVG's own units. */
 const CHART_WIDTH = 300;
@@ -71,20 +75,31 @@ interface Tip {
 /** Sparande: the savings accounts, connected and manual, and how they change over time. */
 @Component({
   selector: 'app-sparande-page',
-  imports: [Page, ManualSavingsSection, MoneyPipe, NgTemplateOutlet],
+  imports: [
+    Page,
+    ManualSavingsSection,
+    MoneyPipe,
+    NgTemplateOutlet,
+    Callout,
+    Disclosure,
+    Empty,
+    Skeleton,
+  ],
   template: `
     <app-page title="Sparande">
       @if (failed()) {
-        <p role="alert" class="text-danger">Sparandet kunde inte hämtas. Försök igen senare.</p>
+        <app-callout variant="danger">Sparandet kunde inte hämtas. Försök igen senare.</app-callout>
+      } @else if (!data()) {
+        <div aria-busy="true" class="flex flex-col gap-4">
+          <app-skeleton shape="tiles" [count]="3" />
+          <app-skeleton shape="card" />
+        </div>
       }
 
       @for (reminder of data()?.reminders ?? []; track reminder.key) {
-        <p
-          data-reminder
-          class="rounded-[10px] border border-line-strong bg-surface-2 px-4 py-3 text-sm text-warning"
-        >
+        <app-callout data-reminder variant="warning">
           {{ reminder.name }} är inte uppdaterat i {{ monthName(reminder.month) }}
-        </p>
+        </app-callout>
       }
 
       @if (data(); as d) {
@@ -318,10 +333,10 @@ interface Tip {
         <section data-accounts class="card flex flex-col gap-4 p-4 sm:p-5">
           <h2 class="card-title">Konton</h2>
           @if (open().length === 0) {
-            <p class="text-sm text-muted">
-              Inga sparkonton ännu. Markera ett konto som sparkonto på Banker, eller lägg till ett
-              manuellt sparkonto nedan.
-            </p>
+            <app-empty
+              icon="piggy-bank"
+              text="Inga sparkonton ännu. Markera ett konto som sparkonto på Banker, eller lägg till ett manuellt sparkonto nedan."
+            />
           }
           <ul class="flex flex-col divide-y divide-line">
             @for (account of open(); track account.key) {
@@ -337,11 +352,8 @@ interface Tip {
             }
           </ul>
           @if (closed().length > 0) {
-            <details data-closed-accounts>
-              <summary class="cursor-pointer text-sm text-muted">
-                Avslutade ({{ closed().length }})
-              </summary>
-              <ul class="mt-3 flex flex-col divide-y divide-line">
+            <app-disclosure data-closed-accounts label="Avslutade konton" [count]="closed().length">
+              <ul class="flex flex-col divide-y divide-line">
                 @for (account of closed(); track account.key) {
                   <li
                     data-account-row
@@ -354,7 +366,7 @@ interface Tip {
                   </li>
                 }
               </ul>
-            </details>
+            </app-disclosure>
           }
         </section>
       }

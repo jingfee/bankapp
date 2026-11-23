@@ -11,6 +11,9 @@ import {
   type RecurringDayRequest,
 } from '@bankapp/shared';
 import { type Observable, type Subscription, concat, last } from 'rxjs';
+import { Callout } from '../../callout/callout';
+import { Disclosure } from '../../disclosure/disclosure';
+import { Icon } from '../../icon/icon';
 import { CategoriesService } from '../../categories.service';
 import { DateField } from '../../date-field/date-field';
 import { today } from '../../dates';
@@ -19,6 +22,7 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MortgageService } from '../../mortgage.service';
 import { Page } from '../../page/page';
+import { Skeleton } from '../../skeleton/skeleton';
 import {
   type ChartMode,
   type Range,
@@ -64,14 +68,29 @@ const PART_COLOURS = [
  */
 @Component({
   selector: 'app-bolan-page',
-  imports: [Page, DateField, MoneyPipe, NgTemplateOutlet, RouterLink],
+  imports: [
+    Page,
+    DateField,
+    MoneyPipe,
+    NgTemplateOutlet,
+    RouterLink,
+    Callout,
+    Disclosure,
+    Icon,
+    Skeleton,
+  ],
   template: `
     <app-page title="Bolån">
       @if (failed(); as message) {
-        <p role="alert" class="text-danger">{{ message }}</p>
+        <app-callout variant="danger">{{ message }}</app-callout>
       }
 
-      @if (parts().length === 0) {
+      @if (!loaded()) {
+        <div aria-busy="true" class="flex flex-col gap-4">
+          <app-skeleton shape="tiles" [count]="3" />
+          <app-skeleton shape="card" />
+        </div>
+      } @else if (parts().length === 0) {
         <section class="card flex flex-col gap-3 p-4 sm:p-5" data-intro>
           <p class="text-muted">
             Följ bolånet här: vad som är kvar att betala, vad det kostar per månad och när räntan
@@ -84,6 +103,7 @@ const PART_COLOURS = [
               class="btn btn-primary"
               (click)="startAddPart()"
             >
+              <app-icon name="plus" [size]="16" />
               Lägg till bolån
             </button>
           </div>
@@ -126,17 +146,38 @@ const PART_COLOURS = [
           </div>
         </section>
 
-        @for (month of unpaidMonths(); track month.month) {
-          <p data-no-payment class="text-sm text-muted">
-            Ingen bolånebetalning hittad i {{ month.name }}.
-            <a
-              data-no-payment-link
-              class="text-accent underline"
-              routerLink="/transaktioner"
-              [queryParams]="month.params"
-              >Visa transaktionerna</a
-            >
-          </p>
+        @if (unpaidMonths(); as unpaid) {
+          @if (unpaid.length > 0) {
+            <app-callout data-no-payment variant="warning">
+              Ingen bolånebetalning hittad i {{ unpaid.length }}
+              {{ unpaid.length === 1 ? 'månad' : 'månader' }}
+              <button
+                callout-action
+                type="button"
+                data-no-payment-toggle
+                class="btn btn-ghost btn-sm"
+                [attr.aria-expanded]="showUnpaid()"
+                (click)="showUnpaid.set(!showUnpaid())"
+              >
+                {{ showUnpaid() ? 'Dölj' : 'Visa' }}
+              </button>
+              @if (showUnpaid()) {
+                <ul class="mt-2 flex flex-col gap-1">
+                  @for (month of unpaid; track month.month) {
+                    <li>
+                      <a
+                        data-no-payment-link
+                        class="font-medium text-accent"
+                        routerLink="/transaktioner"
+                        [queryParams]="month.params"
+                        >{{ month.name }} →</a
+                      >
+                    </li>
+                  }
+                </ul>
+              }
+            </app-callout>
+          }
         }
       }
 
@@ -299,6 +340,7 @@ const PART_COLOURS = [
                 class="btn btn-sm btn-secondary"
                 (click)="startAddPart()"
               >
+                <app-icon name="plus" [size]="16" />
                 {{ parts().length === 0 ? 'Lägg till bolån' : 'Lägg till lånedel' }}
               </button>
             }
@@ -314,13 +356,14 @@ const PART_COLOURS = [
             <div class="grid gap-3 sm:grid-cols-2">
               <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
                 Namn
-                <input
-                  data-name
-                  class="input"
-                  placeholder="Del 1 – 3 mån"
-                  [value]="name()"
-                  (input)="name.set(value($event))"
-                />
+                <span class="field"
+                  ><input
+                    data-name
+                    class="field-control"
+                    placeholder="Del 1 – 3 mån"
+                    [value]="name()"
+                    (input)="name.set(value($event))"
+                /></span>
               </label>
               <label class="flex flex-col gap-1 text-sm text-muted">
                 Startdatum
@@ -498,12 +541,13 @@ const PART_COLOURS = [
                   <div class="grid gap-3 sm:grid-cols-2">
                     <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
                       Namn
-                      <input
-                        data-name
-                        class="input"
-                        [value]="name()"
-                        (input)="name.set(value($event))"
-                      />
+                      <span class="field"
+                        ><input
+                          data-name
+                          class="field-control"
+                          [value]="name()"
+                          (input)="name.set(value($event))"
+                      /></span>
                     </label>
                     <label class="flex flex-col gap-1 text-sm text-muted">
                       Ränta
@@ -594,11 +638,12 @@ const PART_COLOURS = [
         </ul>
 
         @if (endedParts().length > 0) {
-          <details data-ended-parts>
-            <summary class="cursor-pointer text-sm text-muted">
-              Avslutade lånedelar ({{ endedParts().length }})
-            </summary>
-            <ul class="mt-3 flex flex-col divide-y divide-line">
+          <app-disclosure
+            data-ended-parts
+            label="Avslutade lånedelar"
+            [count]="endedParts().length"
+          >
+            <ul class="flex flex-col divide-y divide-line">
               @for (part of endedParts(); track part.id) {
                 <li
                   class="flex flex-col gap-1 py-3 first:pt-0 last:pb-0"
@@ -611,7 +656,7 @@ const PART_COLOURS = [
                 </li>
               }
             </ul>
-          </details>
+          </app-disclosure>
         }
       </section>
 
@@ -677,7 +722,7 @@ const PART_COLOURS = [
                   <button
                     type="button"
                     data-delete-entry
-                    class="btn btn-sm btn-ghost"
+                    class="btn btn-sm btn-danger-soft"
                     [disabled]="busy()"
                     (click)="deleteEntry(entry)"
                   >
@@ -736,7 +781,7 @@ const PART_COLOURS = [
 
     <ng-template #formActions let-save="save" let-end="end">
       @if (formError(); as message) {
-        <p data-form-error role="alert" class="text-sm text-danger">{{ message }}</p>
+        <app-callout data-form-error variant="danger">{{ message }}</app-callout>
       }
       <div class="flex flex-wrap items-center gap-2">
         <button type="submit" data-save class="btn btn-primary" [disabled]="busy()">
@@ -759,6 +804,8 @@ export class BolanPage {
   private figuresRequest: Subscription | undefined;
 
   protected readonly mortgage = signal<MortgageResponse>({ parts: [], entries: [] });
+  /** The mortgage has arrived (or failed to), so the page can stop showing placeholders. */
+  protected readonly loaded = signal(false);
   protected readonly parts = computed(() => this.mortgage().parts);
   protected readonly entries = computed(() => this.mortgage().entries);
   protected readonly openParts = computed(() => this.parts().filter((part) => !part.endedOn));
@@ -797,6 +844,8 @@ export class BolanPage {
       },
     })),
   );
+
+  protected readonly showUnpaid = signal(false);
 
   protected readonly chartMonths = computed(() => inRange(this.figures().months, this.range()));
 
@@ -897,8 +946,14 @@ export class BolanPage {
 
   constructor() {
     this.service.get().subscribe({
-      next: (mortgage) => this.mortgage.set(mortgage),
-      error: () => this.failed.set('Bolånet kunde inte hämtas. Försök igen senare.'),
+      next: (mortgage) => {
+        this.mortgage.set(mortgage);
+        this.loaded.set(true);
+      },
+      error: () => {
+        this.loaded.set(true);
+        this.failed.set('Bolånet kunde inte hämtas. Försök igen senare.');
+      },
     });
     this.loadFigures();
     this.categories.subcategories().subscribe({
