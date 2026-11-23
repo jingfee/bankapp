@@ -318,10 +318,13 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                       </span>
                     </div>
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <span class="flex items-center gap-2 text-sm text-muted">
+                      <span
+                        class="flex w-full flex-col gap-1.5 text-sm text-muted min-[420px]:w-auto min-[420px]:flex-row min-[420px]:items-center min-[420px]:gap-2"
+                      >
                         Andel
                         <app-share-control
                           label="Andel"
+                          [fullWidth]="true"
                           [value]="account.share"
                           [disabled]="savingShare()"
                           (changed)="setShare(account, $event)"
@@ -561,12 +564,7 @@ export class BankerPage {
 
   private reportStatus(result: Loaded): void {
     if ('failed' in result) return;
-    this.syncStatus.report({
-      lastSyncedAt: this.lastSyncedAt(result),
-      failed:
-        !!result.lastSync && (result.lastSync.failedAccounts > 0 || result.lastSync.rateLimited),
-      expiring: result.banks.filter((group) => group.status !== 'active').length,
-    });
+    this.syncStatus.reportAccounts(result);
   }
 
   /** Starts a manual sync and follows it on the page. */

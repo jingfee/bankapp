@@ -164,7 +164,7 @@ const PART_COLOURS = [
 
         @if (unpaidMonths(); as unpaid) {
           @if (unpaid.length > 0) {
-            <app-callout data-no-payment variant="warning">
+            <app-callout data-no-payment variant="info">
               Ingen bolånebetalning hittad i {{ unpaid.length }}
               {{ unpaid.length === 1 ? 'månad' : 'månader' }}
               <button

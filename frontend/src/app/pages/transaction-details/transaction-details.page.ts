@@ -76,7 +76,6 @@ function formatOriginal({ amount, currency }: Money): string {
     Page,
     RouterLink,
     MoneyPipe,
-    DateHeadingPipe,
     TransactionCategoryBadge,
     CategoryTiles,
     ManualTransactionSheet,
@@ -361,7 +360,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         <span class="font-medium [overflow-wrap:anywhere]">{{
                           purchase.description
                         }}</span>
-                        <span class="text-sm text-muted">{{ purchase.date | dateHeading }}</span>
+                        <span class="text-sm text-muted">{{ purchase.date | shortDate }}</span>
                       </span>
                       <span class="amount shrink-0">{{
                         purchase.amount.amount | money: purchase.amount.currency
@@ -410,9 +409,7 @@ function formatOriginal({ amount, currency }: Money): string {
                               <span class="font-medium [overflow-wrap:anywhere]">{{
                                 refund.description
                               }}</span>
-                              <span class="text-sm text-muted">{{
-                                refund.date | dateHeading
-                              }}</span>
+                              <span class="text-sm text-muted">{{ refund.date | shortDate }}</span>
                             </span>
                             <span class="amount text-positive shrink-0">{{
                               refund.amount.amount | money: refund.amount.currency

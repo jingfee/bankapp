@@ -23,8 +23,8 @@ import { ChartCard, type ChartTip } from './chart-card';
 })
 class Host {
   readonly columns = [
-    { key: 'a', left: 0, width: 50 },
-    { key: 'b', left: 50, width: 50 },
+    { key: 'a', left: -10, width: 60 },
+    { key: 'b', left: 50, width: 60 },
   ];
   readonly tip = signal<ChartTip | null>(null);
   readonly hovered = signal<number | null | undefined>(undefined);
@@ -48,6 +48,15 @@ describe('ChartCard', () => {
     expect(root.querySelector('[data-x-tick]')?.textContent).toBe('nov');
     expect(root.querySelector('[data-legend]')?.textContent).toContain('A');
     expect(root.querySelector('[data-legend]')?.textContent).toContain('B');
+  });
+
+  it('clamps hover columns to the plot', () => {
+    const { root } = setup();
+    const column = (key: string) =>
+      root.querySelector<HTMLElement>(`[data-chart-column="${key}"]`)!.style;
+
+    expect([column('a').left, column('a').width]).toEqual(['0%', '50%']);
+    expect([column('b').left, column('b').width]).toEqual(['50%', '50%']);
   });
 
   it('reports the hovered column and when the pointer leaves', () => {

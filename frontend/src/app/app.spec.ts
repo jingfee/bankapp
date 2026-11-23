@@ -257,6 +257,36 @@ describe('App', () => {
     });
   });
 
+  describe('sync status on start', () => {
+    it('loads once after login, without visiting Banker', async () => {
+      const fixture = TestBed.createComponent(App);
+      const http = TestBed.inject(HttpTestingController);
+      await navigate(fixture, '/');
+
+      // Översikt asks for the accounts too; every answer carries the same status.
+      const requests = http.match('/api/accounts');
+      expect(requests.length).toBeGreaterThan(0);
+      const body = {
+        syncing: null,
+        lastSync: null,
+        banks: [
+          {
+            status: 'expired',
+            accounts: [{ lastSyncedAt: new Date().toISOString() }],
+          },
+        ],
+      };
+      requests.forEach((request) => request.flush(body));
+      await fixture.whenStable();
+
+      expect(html(fixture).querySelector('aside [data-sync-line]')?.textContent).toMatch(
+        /Uppdaterad idag \d\d:\d\d/,
+      );
+      expect(sidebar(fixture).querySelector('a[href="/banker"] [data-attention]')).not.toBeNull();
+      http.match(() => true);
+    });
+  });
+
   describe('compact tabs', () => {
     it('wrap each label in .tab-label so narrow phones can hide the inactive ones', async () => {
       const fixture = TestBed.createComponent(App);
