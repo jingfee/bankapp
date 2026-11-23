@@ -911,9 +911,9 @@ export class BolanPage {
   protected readonly failed = computed(
     () =>
       this.actionFailed() ??
-      (this.mortgageRead.failed()
+      (this.mortgageRead.error() !== undefined
         ? 'Bolånet kunde inte hämtas. Försök igen senare.'
-        : this.figuresRead.failed()
+        : this.figuresRead.error() !== undefined
           ? 'Bolånets siffror kunde inte hämtas. Försök igen senare.'
           : null),
   );
@@ -1165,6 +1165,7 @@ export class BolanPage {
     this.store.deleteEntry(entry.id).subscribe({
       next: () => {
         this.busy.set(false);
+        this.actionFailed.set(null);
         this.deletingEntry.set(null);
       },
       error: () => {
@@ -1218,6 +1219,7 @@ export class BolanPage {
 
   private submit(call: Observable<MortgageResponse>): void {
     this.formError.set(null);
+    this.actionFailed.set(null);
     this.busy.set(true);
     call.subscribe({
       next: () => {
