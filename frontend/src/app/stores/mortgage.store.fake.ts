@@ -15,6 +15,7 @@ export class FakeMortgageStore extends MortgageStore {
   private readonly recorder = new Recorder();
   readonly calls = this.recorder.calls;
   readonly responses = this.recorder.responses;
+  readonly failures = this.recorder.failures;
 
   addPart(request: AddLoanPartRequest): Observable<MortgageResponse> {
     return this.recorder.reply('addPart', request);

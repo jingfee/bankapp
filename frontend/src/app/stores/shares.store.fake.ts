@@ -7,6 +7,7 @@ export class FakeSharesStore extends SharesStore {
   private readonly recorder = new Recorder();
   readonly calls = this.recorder.calls;
   readonly responses = this.recorder.responses;
+  readonly failures = this.recorder.failures;
 
   setHouseholdRatio(entries: HouseholdRatioEntry[]): Observable<HouseholdRatioEntry[]> {
     return this.recorder.reply('setHouseholdRatio', entries);

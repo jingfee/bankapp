@@ -14,6 +14,7 @@ export class FakeTransactionsStore extends TransactionsStore {
   private readonly recorder = new Recorder();
   readonly calls = this.recorder.calls;
   readonly responses = this.recorder.responses;
+  readonly failures = this.recorder.failures;
 
   addManual(request: ManualTransactionRequest): Observable<Transaction> {
     return this.recorder.reply('addManual', request);

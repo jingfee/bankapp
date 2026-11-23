@@ -1,5 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   SHARE_OPTIONS,
@@ -10,10 +9,8 @@ import {
   type ShareOption,
   type SyncSummary,
 } from '@bankapp/shared';
-import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
-import { AccountsService } from '../../accounts.service';
 import { AccountsStore } from '../../stores/accounts.store';
-import { BanksStore, SYNC_POLL_INTERVAL_MS as POLL_MS } from '../../stores/banks.store';
+import { BanksStore } from '../../stores/banks.store';
 import { Callout } from '../../callout/callout';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
@@ -25,16 +22,6 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { ShareControl } from '../../share-control/share-control';
 import { Page } from '../../page/page';
-
-type Loaded = AccountsResponse | { failed: true };
-
-/** How often the page asks again while a sync is running. */
-export const SYNC_POLL_INTERVAL_MS = POLL_MS;
-
-const DAY_MS = 24 * 3600 * 1000;
-
-/** How long a bank connection is good for when it is made or renewed. */
-const CONNECTION_DAYS = 90;
 
 const DATE_TIME = new DateTimePipe();
 const DAY_FORMAT = new Intl.DateTimeFormat('sv-SE', { timeZone: APP_TIMEZONE });
@@ -76,7 +63,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   template: `
     <app-page title="Banker">
       @let result = loaded();
-      @if (result && !('failed' in result)) {
+      @if (result) {
         <p
           page-subtitle
           data-sync-status
@@ -106,7 +93,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </p>
       }
       <div page-actions class="flex items-center gap-2">
-        @if (result && !('failed' in result) && result.banks.length > 0) {
+        @if (result && result.banks.length > 0) {
           <button
             type="button"
             data-sync
@@ -153,13 +140,13 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </a>
       </div>
 
-      @if (!result) {
+      @if (failed()) {
+        <app-callout variant="danger">Kontona kunde inte hämtas. Försök igen senare.</app-callout>
+      } @else if (!result) {
         <div aria-busy="true" class="grid gap-4 lg:grid-cols-2">
           <app-skeleton shape="card" />
           <app-skeleton shape="card" />
         </div>
-      } @else if ('failed' in result) {
-        <app-callout variant="danger">Kontona kunde inte hämtas. Försök igen senare.</app-callout>
       } @else if (result.banks.length === 0) {
         <app-empty icon="landmark" text="Inga banker anslutna">
           <a empty-action routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
@@ -169,7 +156,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           @if (done.rateLimited) {
             <app-callout variant="warning">
               Banken tillåter inte fler uppdateringar just nu.
-              @if (lastSyncedAt(result); as at) {
+              @if (lastSyncedAt(); as at) {
                 Senast uppdaterad {{ at | dateTime }}.
               }
             </app-callout>
@@ -387,7 +374,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           }
         </div>
       }
-      @if (result && !('failed' in result) && result.removedBanks.length > 0) {
+      @if (result && result.removedBanks.length > 0) {
         <div data-removed-banks class="card p-4 sm:p-5">
           <app-disclosure
             label="Borttagna banker"
@@ -502,7 +489,6 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   `,
 })
 export class BankerPage {
-  private readonly accounts = inject(AccountsService);
   private readonly accountsStore = inject(AccountsStore);
   private readonly banks = inject(BanksStore);
   private readonly redirector = inject(Redirector);
@@ -523,51 +509,38 @@ export class BankerPage {
   protected readonly savingShare = signal(false);
   protected readonly shareFailed = signal<string | null>(null);
   protected readonly shareOptions = SHARE_OPTIONS;
-  /** Emits to start (or restart) fetching the accounts. */
-  private readonly refresh = new BehaviorSubject<void>(undefined);
-  /** What the page currently shows, kept across refreshes. */
-  private shown: Loaded | undefined;
   /** True from the owner pressing Uppdatera until the page shows that sync has finished. */
   protected readonly manualSyncPending = signal(false);
+  /** True once the sync has started on the server, so the accounts that follow are its news. */
+  private syncStarted = false;
+  /** What the accounts said about the last sync when the owner pressed Uppdatera. */
+  private lastSyncBefore: string | null = null;
+  private sawSyncing = false;
   /** How the sync the owner started went, once it has finished. */
   protected readonly summary = signal<SyncSummary | null>(null);
   protected readonly startFailed = signal(false);
-  /** Fetches the accounts, and keeps fetching while a sync is running so balances appear. */
-  protected readonly loaded = toSignal<Loaded>(
-    this.refresh.pipe(
-      switchMap(() =>
-        timer(0, SYNC_POLL_INTERVAL_MS).pipe(
-          switchMap(() =>
-            this.accounts.list().pipe(
-              map((response): Loaded => response),
-              catchError(() => of<Loaded>({ failed: true })),
-            ),
-          ),
-          tap((next) => {
-            if (this.manualSyncPending() && !('failed' in next) && !next.syncing) {
-              this.manualSyncPending.set(false);
-              this.summary.set(next.lastSync);
-            }
-          }),
-          // A failed refresh keeps what is already shown; only a failed first load is an error.
-          map((next): Loaded => (this.shown && 'failed' in next ? this.shown : next)),
-          tap((result) => (this.shown = result)),
-          tap((result) => this.reportStatus(result)),
-          takeWhile(
-            // A failed poll must not strand an owner who is waiting for their sync to finish.
-            (result) =>
-              this.manualSyncPending() || (!('failed' in result) && result.syncing !== null),
-            true,
-          ),
-        ),
-      ),
-    ),
-    { initialValue: undefined },
-  );
+  /** The accounts, kept up to date by the store, which follows a running sync. */
+  protected readonly loaded = this.accountsStore.accounts;
+  protected readonly failed = this.accountsStore.failed;
+  /** When any account was last synced, as the banks store has worked it out. */
+  protected readonly lastSyncedAt = this.banks.lastSyncedAt;
 
-  private reportStatus(result: Loaded): void {
-    if ('failed' in result) return;
-    this.banks.reportAccounts(result);
+  constructor() {
+    // A first fetch that failed is tried again when the owner comes back.
+    if (this.failed()) this.accountsStore.reload();
+    effect(() => {
+      const next = this.loaded();
+      untracked(() => {
+        if (!this.manualSyncPending() || !this.syncStarted || !next) return;
+        if (next.syncing) this.sawSyncing = true;
+        // Accounts fetched before the server showed the sync are not its result.
+        else if (this.sawSyncing || next.lastSync?.finishedAt !== this.lastSyncBefore) {
+          this.manualSyncPending.set(false);
+          this.syncStarted = false;
+          this.summary.set(next.lastSync);
+        }
+      });
+    });
   }
 
   /** Starts a manual sync and follows it on the page. */
@@ -575,8 +548,11 @@ export class BankerPage {
     this.startFailed.set(false);
     this.summary.set(null);
     this.manualSyncPending.set(true);
+    this.syncStarted = false;
+    this.sawSyncing = false;
+    this.lastSyncBefore = this.loaded()?.lastSync?.finishedAt ?? null;
     this.banks.startSync().subscribe({
-      next: () => this.refresh.next(),
+      next: () => (this.syncStarted = true),
       error: () => {
         this.manualSyncPending.set(false);
         this.startFailed.set(true);
@@ -589,10 +565,7 @@ export class BankerPage {
     this.togglingHidden.set(true);
     this.hideFailed.set(false);
     this.accountsStore.setHidden(id, hidden).subscribe({
-      next: () => {
-        this.togglingHidden.set(false);
-        this.refresh.next();
-      },
+      next: () => this.togglingHidden.set(false),
       error: () => {
         this.togglingHidden.set(false);
         this.hideFailed.set(true);
@@ -605,10 +578,7 @@ export class BankerPage {
     this.togglingHidden.set(true);
     this.hideFailed.set(false);
     this.accountsStore.setSavings(id, savings).subscribe({
-      next: () => {
-        this.togglingHidden.set(false);
-        this.refresh.next();
-      },
+      next: () => this.togglingHidden.set(false),
       error: () => {
         this.togglingHidden.set(false);
         this.hideFailed.set(true);
@@ -616,16 +586,13 @@ export class BankerPage {
     });
   }
 
-  /** Saves the share chosen for an account, then fetches the accounts again. */
+  /** Saves the share chosen for an account; the accounts follow. */
   protected setShare(account: ConnectedAccount, option: ShareOption): void {
     if (account.share === option) return;
     this.savingShare.set(true);
     this.shareFailed.set(null);
     this.accountsStore.setShare(account.id, option).subscribe({
-      next: () => {
-        this.savingShare.set(false);
-        this.refresh.next();
-      },
+      next: () => this.savingShare.set(false),
       error: (error: unknown) => {
         this.savingShare.set(false);
         this.shareFailed.set(
@@ -683,7 +650,6 @@ export class BankerPage {
       next: () => {
         this.removing.set(false);
         this.removingBank.set(null);
-        this.refresh.next();
       },
       error: () => {
         this.removing.set(false);
@@ -711,7 +677,6 @@ export class BankerPage {
       next: () => {
         this.deleting.set(false);
         this.confirmingDelete.set(null);
-        this.refresh.next();
       },
       error: () => {
         this.deleting.set(false);
@@ -728,7 +693,7 @@ export class BankerPage {
     }
     const done = this.summary();
     if (done) return `Uppdaterad nyss · ${this.newTransactionsText(done.newTransactions)}`;
-    const at = this.lastSyncedAt(result);
+    const at = this.lastSyncedAt();
     return at ? `Senast uppdaterad ${this.dayAndTime(at)}` : 'Inte uppdaterad ännu';
   }
 
@@ -763,26 +728,17 @@ export class BankerPage {
   /** How much of a full connection period is left, for the meter. */
   protected meterPercent(group: BankAccounts): number {
     if (group.status === 'expired') return 0;
-    const left = (Date.parse(group.validUntil) - Date.now()) / DAY_MS;
-    return Math.min(100, Math.max(3, (left / CONNECTION_DAYS) * 100));
+    return Math.max(3, this.banks.connectionLeft(group.validUntil) * 100);
   }
 
   protected daysLeftText(group: BankAccounts): string {
-    const days = Math.max(1, Math.ceil((Date.parse(group.validUntil) - Date.now()) / DAY_MS));
+    const days = this.banks.daysLeft(group.validUntil);
     return days === 1 ? '1 dag' : `${days} dagar`;
   }
 
   protected newTransactionsText(count: number): string {
     if (count === 0) return 'Inga nya transaktioner';
     return count === 1 ? '1 ny transaktion' : `${count} nya transaktioner`;
-  }
-
-  /** The most recent time any account was synced, i.e. how old the data shown is. */
-  protected lastSyncedAt(result: AccountsResponse): string | null {
-    const times = result.banks.flatMap((group) =>
-      group.accounts.flatMap((account) => (account.lastSyncedAt ? [account.lastSyncedAt] : [])),
-    );
-    return times.length === 0 ? null : times.reduce((a, b) => (a > b ? a : b));
   }
 
   protected typeLabel(type: AccountType): string {

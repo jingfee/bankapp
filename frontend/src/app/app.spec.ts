@@ -1,5 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import type { AccountsResponse } from '@bankapp/shared';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -8,18 +9,23 @@ import { of, throwError } from 'rxjs';
 import { App } from './app';
 import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
+import { AccountsStore } from './stores/accounts.store';
+import { FakeAccountsStore } from './stores/accounts.store.fake';
 import { BanksStore } from './stores/banks.store';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
+  let accounts: FakeAccountsStore;
   const signedIn = { check: () => of(true), logout: () => of(undefined) };
 
   beforeEach(() => {
+    accounts = new FakeAccountsStore();
     TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: AccountsStore, useValue: accounts },
         provideRouter(routes),
         // Signed in; the guard and the login page have their own tests.
         { provide: AuthService, useValue: signedIn },
@@ -264,20 +270,18 @@ describe('App', () => {
       const http = TestBed.inject(HttpTestingController);
       await navigate(fixture, '/');
 
-      // Översikt asks for the accounts too; every answer carries the same status.
-      const requests = http.match('/api/accounts');
-      expect(requests.length).toBeGreaterThan(0);
-      const body = {
+      expect(accounts.calls).toContainEqual({ method: 'activate', args: [] });
+      accounts.accounts.set({
         syncing: null,
         lastSync: null,
+        removedBanks: [],
         banks: [
           {
             status: 'expired',
             accounts: [{ lastSyncedAt: new Date().toISOString() }],
           },
         ],
-      };
-      requests.forEach((request) => request.flush(body));
+      } as unknown as AccountsResponse);
       await fixture.whenStable();
 
       expect(html(fixture).querySelector('aside [data-sync-line]')?.textContent).toMatch(
@@ -418,6 +422,7 @@ describe('App logout', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: AccountsStore, useValue: new FakeAccountsStore() },
         provideRouter(routes),
         {
           provide: AuthService,
@@ -472,6 +477,7 @@ describe('App logout failure', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: AccountsStore, useValue: new FakeAccountsStore() },
         provideRouter(routes),
         {
           provide: AuthService,
