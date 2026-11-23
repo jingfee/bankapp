@@ -14,6 +14,8 @@ interface NavItem {
   readonly label: string;
   /** Shorter label for the bottom tabs. */
   readonly tabLabel: string;
+  /** Short label under the icon of the 84 px rail; must fit without truncating. */
+  readonly railLabel: string;
   readonly exact: boolean;
   /** Path data of the 24×24 stroke icon. */
   readonly icon: readonly string[];
@@ -27,6 +29,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     path: '/',
     label: 'Översikt',
     tabLabel: 'Översikt',
+    railLabel: 'Översikt',
     exact: true,
     icon: ['M4 4h7v7H4z', 'M13 4h7v4h-7z', 'M13 10h7v10h-7z', 'M4 13h7v7H4z'],
   },
@@ -34,6 +37,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     path: '/transaktioner',
     label: 'Transaktioner',
     tabLabel: 'Transaktioner',
+    railLabel: 'Transaktioner',
     exact: false,
     icon: ['M8 6h13M8 12h13M8 18h13', 'M3 6h.01M3 12h.01M3 18h.01'],
   },
@@ -41,6 +45,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     path: '/granska',
     label: 'Att granska',
     tabLabel: 'Granska',
+    railLabel: 'Granska',
     exact: false,
     icon: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'm8 12.5 2.8 2.8L16 9.5'],
     reviewCount: true,
@@ -49,6 +54,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     path: '/delat',
     label: 'Delat',
     tabLabel: 'Delat',
+    railLabel: 'Delat',
     exact: false,
     icon: ['M8 3 4 7l4 4', 'M4 7h16', 'm16 21 4-4-4-4', 'M20 17H4'],
   },
@@ -57,6 +63,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     more: true,
     label: 'Sparande',
     tabLabel: 'Sparande',
+    railLabel: 'Sparande',
     exact: false,
     icon: ['M4 19h16', 'M6 16v-5M10 16V8M14 16v-3M18 16V6'],
   },
@@ -65,6 +72,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     more: true,
     label: 'Bolån',
     tabLabel: 'Bolån',
+    railLabel: 'Bolån',
     exact: false,
     icon: ['M3 11 12 4l9 7', 'M5 10v10h14V10', 'M10 20v-6h4v6'],
   },
@@ -73,6 +81,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     more: true,
     label: 'Banker',
     tabLabel: 'Banker',
+    railLabel: 'Banker',
     exact: false,
     icon: ['M3 10 12 4l9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 21h18'],
   },
@@ -108,7 +117,7 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
 
     @if (!onLoginPage()) {
       <aside
-        class="fixed inset-y-0 left-0 z-20 hidden w-[236px] flex-col border-r border-line bg-sidebar px-3 py-5 sm:flex"
+        class="fixed inset-y-0 left-0 z-20 hidden w-[236px] flex-col border-r border-line bg-sidebar px-3 py-5 lg:flex"
       >
         <a routerLink="/" class="mb-6 px-3 font-display text-xl font-bold tracking-tight"
           >Bankapp</a
@@ -151,6 +160,79 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
         </div>
       </aside>
 
+      <aside
+        data-rail
+        class="fixed inset-y-0 left-0 z-20 hidden w-[84px] flex-col items-center border-r border-line bg-sidebar py-4 sm:flex lg:hidden"
+      >
+        <button
+          type="button"
+          data-rail-logo
+          class="mb-5 grid size-10 place-content-center rounded-xl bg-accent font-display text-lg font-bold text-on-accent"
+          aria-label="Meny"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="railMenuOpen()"
+          (click)="railMenuOpen.set(!railMenuOpen())"
+        >
+          B
+        </button>
+        @if (railMenuOpen()) {
+          <button
+            type="button"
+            data-rail-backdrop
+            tabindex="-1"
+            aria-label="Stäng"
+            class="fixed inset-0 z-30 cursor-default"
+            (click)="railMenuOpen.set(false)"
+          ></button>
+          <div
+            data-rail-menu
+            role="menu"
+            class="absolute top-16 left-3 z-40 flex w-44 flex-col gap-1 rounded-xl border border-line-strong bg-surface-2 p-2"
+          >
+            <span class="px-3 py-2 text-sm text-muted">Ägare</span>
+            <button
+              type="button"
+              role="menuitem"
+              class="nav-link border-t border-line"
+              aria-label="Logga ut"
+              (click)="logout()"
+            >
+              <ng-container
+                *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }"
+              />
+              <span class="flex-1 text-left">Logga ut</span>
+            </button>
+          </div>
+        }
+        <nav aria-label="Huvudmeny" class="flex flex-1 flex-col items-center gap-1">
+          @for (item of items; track item.path) {
+            <a
+              [routerLink]="item.path"
+              routerLinkActive="active"
+              ariaCurrentWhenActive="page"
+              [routerLinkActiveOptions]="{ exact: item.exact }"
+              [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
+              class="rail-link"
+            >
+              <span class="rail-pill relative">
+                <ng-container
+                  *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 24 }"
+                />
+                @if (item.reviewCount && reviewCount() > 0) {
+                  <span
+                    data-review-badge
+                    aria-hidden="true"
+                    class="nav-badge absolute -top-1 left-5 h-4 min-w-4 px-1 text-[10px]"
+                    >{{ reviewBadge() }}</span
+                  >
+                }
+              </span>
+              <span>{{ item.railLabel }}</span>
+            </a>
+          }
+        </nav>
+      </aside>
+
       <header
         class="sticky top-0 z-20 flex items-center border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
       >
@@ -160,7 +242,9 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
 
     <div
       [class]="
-        onLoginPage() ? '' : 'pb-[calc(76px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[236px]'
+        onLoginPage()
+          ? ''
+          : 'pb-[calc(76px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[84px] lg:pl-[236px]'
       "
     >
       <router-outlet />
@@ -256,6 +340,7 @@ export class App {
   @HostListener('document:keydown.escape')
   protected closeMore(): void {
     this.moreOpen.set(false);
+    this.railMenuOpen.set(false);
   }
 
   private readonly transactions = inject(TransactionsService);
@@ -270,6 +355,7 @@ export class App {
   protected readonly moreItems = NAV_ITEMS.filter((item) => item.more);
   protected readonly moreIcon = MORE_ICON;
   protected readonly moreOpen = signal(false);
+  protected readonly railMenuOpen = signal(false);
   /** The current page is one of those in the Mer sheet. */
   protected readonly moreActive = signal(false);
   protected readonly logoutIcon = LOGOUT_ICON;
@@ -291,6 +377,7 @@ export class App {
       .subscribe((event) => {
         this.onLoginPage.set(event.urlAfterRedirects.startsWith('/logga-in'));
         this.moreOpen.set(false);
+        this.railMenuOpen.set(false);
         this.moreActive.set(
           this.moreItems.some((item) => event.urlAfterRedirects.startsWith(item.path)),
         );
@@ -300,6 +387,7 @@ export class App {
 
   protected logout(): void {
     this.moreOpen.set(false);
+    this.railMenuOpen.set(false);
     this.auth.logout().subscribe({
       next: () => {
         this.transactions.reviewCount.set(0);

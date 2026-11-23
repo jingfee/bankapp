@@ -29,6 +29,8 @@ describe('App', () => {
   const html = (fixture: { nativeElement: unknown }) => fixture.nativeElement as HTMLElement;
   const sidebar = (fixture: { nativeElement: unknown }) =>
     html(fixture).querySelector('aside nav') as HTMLElement;
+  const rail = (fixture: { nativeElement: unknown }) =>
+    html(fixture).querySelector('[data-rail] nav') as HTMLElement;
   const tabs = (fixture: { nativeElement: unknown }) =>
     html(fixture).querySelector('[data-tabs]') as HTMLElement;
 
@@ -78,6 +80,38 @@ describe('App', () => {
         'Mer',
       ]);
     }
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  it('has all seven destinations in the rail, with a short label under each icon', async () => {
+    const fixture = TestBed.createComponent(App);
+    await navigate(fixture, '/');
+    const links = [...rail(fixture).querySelectorAll('a')];
+    expect(links.map((a) => a.textContent?.trim())).toEqual([
+      'Översikt',
+      'Transaktioner',
+      'Granska',
+      'Delat',
+      'Sparande',
+      'Bolån',
+      'Banker',
+    ]);
+    expect(html(fixture).querySelector('[data-rail] [data-more]')).toBeNull();
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  it('opens Ägare and Logga ut from the logo of the rail', async () => {
+    const fixture = TestBed.createComponent(App);
+    await navigate(fixture, '/');
+    const menu = () => html(fixture).querySelector('[data-rail-menu]');
+    expect(menu()).toBeNull();
+    (html(fixture).querySelector('[data-rail-logo]') as HTMLElement).click();
+    await fixture.whenStable();
+    expect(menu()?.textContent).toContain('Ägare');
+    expect(menu()?.querySelector('button[aria-label="Logga ut"]')).not.toBeNull();
+    (html(fixture).querySelector('[data-rail-backdrop]') as HTMLElement).click();
+    await fixture.whenStable();
+    expect(menu()).toBeNull();
     TestBed.inject(HttpTestingController).match(() => true);
   });
 
@@ -155,7 +189,9 @@ describe('App', () => {
       await navigate(fixture, url);
       // Bolån and Banker have no tab; the Mer tab covers them (tested under Mer).
       const inMore = active === 'Bolån' || active === 'Banker';
-      for (const nav of inMore ? [sidebar(fixture)] : [sidebar(fixture), tabs(fixture)]) {
+      for (const nav of inMore
+        ? [sidebar(fixture)]
+        : [sidebar(fixture), rail(fixture), tabs(fixture)]) {
         const current = [...nav.querySelectorAll('a.active')];
         expect(current).toHaveLength(1);
         expect(current[0].textContent).toContain(active);
@@ -170,7 +206,7 @@ describe('App', () => {
       const fixture = TestBed.createComponent(App);
       for (const url of ['/', '/banker', '/anslut-bank']) {
         await navigate(fixture, url, 3);
-        for (const nav of [sidebar(fixture), tabs(fixture)]) {
+        for (const nav of [sidebar(fixture), rail(fixture), tabs(fixture)]) {
           const link = nav.querySelector('a[href="/granska"]');
           expect(link?.getAttribute('aria-label')).toBe('Granska, 3 att granska');
           expect(link?.querySelector('[data-review-badge]')?.textContent?.trim()).toBe('3');
@@ -192,7 +228,7 @@ describe('App', () => {
       const fixture = TestBed.createComponent(App);
       await navigate(fixture, '/banker', 0);
 
-      for (const nav of [sidebar(fixture), tabs(fixture)]) {
+      for (const nav of [sidebar(fixture), rail(fixture), tabs(fixture)]) {
         const link = nav.querySelector('a[href="/granska"]');
         expect(link?.getAttribute('aria-label')).toBe('Granska');
         expect(link?.querySelector('[data-review-badge]')).toBeNull();
@@ -269,7 +305,7 @@ describe('App logout', () => {
     });
   });
 
-  it.each(['aside', '[data-more-sheet]'])(
+  it.each(['aside', '[data-rail-menu]', '[data-more-sheet]'])(
     'signs out from the %s button and shows the login page',
     async (where) => {
       const fixture = TestBed.createComponent(App);
@@ -280,7 +316,10 @@ describe('App logout', () => {
         .forEach((r) => r.flush({ count: 0 }));
       await fixture.whenStable();
       const html = fixture.nativeElement as HTMLElement;
-      if (where !== 'aside') {
+      if (where === '[data-rail-menu]') {
+        (html.querySelector('[data-rail-logo]') as HTMLButtonElement).click();
+        await fixture.whenStable();
+      } else if (where !== 'aside') {
         (html.querySelector('[data-more]') as HTMLButtonElement).click();
         await fixture.whenStable();
       }
