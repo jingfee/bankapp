@@ -11,7 +11,7 @@ import { CategoriesService } from '../../categories.service';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
-import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
+import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { accountLabel } from '../../share-display';
 import { TransactionsService } from '../../transactions.service';
@@ -33,7 +33,7 @@ const COLLAPSE_MS = 450;
   selector: 'app-review-page',
   imports: [
     RouterLink,
-    DateHeadingPipe,
+    ShortDatePipe,
     MoneyPipe,
     TransactionCategoryBadge,
     CategoryIconComponent,
@@ -124,7 +124,7 @@ const COLLAPSE_MS = 450;
                                 t.description
                               }}</span>
                               <span data-meta class="truncate text-sm text-muted"
-                                >{{ t.date | dateHeading }} · {{ accountLabel(t) }}</span
+                                >{{ t.date | shortDate }} · {{ accountLabel(t) }}</span
                               >
                             </span>
                             <span data-amount class="amount shrink-0">{{
@@ -201,7 +201,7 @@ const COLLAPSE_MS = 450;
                                 t.description
                               }}</span>
                               <span data-meta class="text-sm text-muted"
-                                >{{ t.date | dateHeading }} · {{ accountLabel(t) }}</span
+                                >{{ t.date | shortDate }} · {{ accountLabel(t) }}</span
                               >
                               @if (t.category; as c) {
                                 <span

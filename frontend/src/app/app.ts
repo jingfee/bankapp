@@ -6,7 +6,7 @@ import { filter } from 'rxjs';
 import { AuthService } from './auth/auth.service';
 import { Toast } from './toast/toast';
 import { ToastService } from './toast/toast.service';
-import { APP_TIMEZONE } from './formatting/date-time.pipe';
+import { dateTime } from './formatting/date-time.pipe';
 import { CategoriesService } from './categories.service';
 import { SyncStatusService } from './sync-status.service';
 import { TransactionsService } from './transactions.service';
@@ -91,14 +91,6 @@ const NAV_ITEMS: readonly NavItem[] = [
     icon: ['M3 10 12 4l9 6', 'M5 10v8M9.5 10v8M14.5 10v8M19 10v8', 'M3 21h18'],
   },
 ];
-
-const DAY_FORMAT = new Intl.DateTimeFormat('sv-SE', { timeZone: APP_TIMEZONE });
-const TIME_FORMAT = new Intl.DateTimeFormat('sv-SE', {
-  timeZone: APP_TIMEZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
 
 const MORE_ICON = ['M5 12h.01M12 12h.01M19 12h.01'];
 
@@ -440,15 +432,11 @@ export class App {
       ? 'En bankkoppling går ut'
       : `${this.syncStatus.expiringCount()} bankkopplingar går ut`,
   );
-  /** "Uppdaterad idag 11:00", from what Banker last fetched. */
+  /** "Uppdaterad idag 11:00", from the status loaded at start and refreshed by Banker. */
   protected readonly syncText = computed(() => {
     const at = this.syncStatus.lastSyncedAt();
     if (!at) return null;
-    const date = new Date(at);
-    const day = (value: Date) => DAY_FORMAT.format(value);
-    return day(date) === day(new Date())
-      ? `Uppdaterad idag ${TIME_FORMAT.format(date)}`
-      : `Uppdaterad ${DAY_FORMAT.format(date)} ${TIME_FORMAT.format(date)}`;
+    return `Uppdaterad ${dateTime(at)}`;
   });
   protected readonly logoutIcon = LOGOUT_ICON;
   protected readonly reviewBadge = computed(() =>
@@ -472,7 +460,10 @@ export class App {
         this.railMenuOpen.set(false);
         this.url.set(event.urlAfterRedirects);
         if (this.onLoginPage()) this.syncStatus.reset();
-        if (!this.onLoginPage()) this.transactions.refreshReviewCount();
+        if (!this.onLoginPage()) {
+          this.transactions.refreshReviewCount();
+          this.syncStatus.loadOnce();
+        }
       });
   }
 

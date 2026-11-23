@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 export interface ChartTick {
   label: string;
@@ -120,7 +120,7 @@ export interface ChartTip {
             </div>
           }
 
-          @for (column of columns(); track column.key; let i = $index) {
+          @for (column of plotColumns(); track column.key; let i = $index) {
             <div
               class="absolute inset-y-0"
               [attr.data-chart-column]="column.key"
@@ -172,6 +172,14 @@ export class ChartCard {
   readonly yTicks = input<ChartTick[]>([]);
   readonly xTicks = input<ChartTick[]>([]);
   readonly columns = input<ChartColumn[]>([]);
+  /** The columns clamped to the plot, so the first and last never stick out past its edges. */
+  protected readonly plotColumns = computed(() =>
+    this.columns().map((column) => {
+      const left = Math.min(Math.max(column.left, 0), 100);
+      const right = Math.min(Math.max(column.left + column.width, 0), 100);
+      return { ...column, left, width: right - left };
+    }),
+  );
   readonly tip = input<ChartTip | null>(null);
   readonly legend = input<ChartLegendItem[]>([]);
 
@@ -183,7 +191,7 @@ export class ChartCard {
    * so the columns never see it enter; the column nearest its x position is the hovered one.
    */
   protected touch(event: PointerEvent): void {
-    const columns = this.columns();
+    const columns = this.plotColumns();
     if (event.pointerType !== 'touch' || columns.length === 0) return;
     const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
     if (box.width <= 0) return;

@@ -179,14 +179,14 @@ describe('BankerPage', () => {
         '−1\u00a0234,50\u00a0kr',
       );
       expect(first?.querySelector('[data-synced]')?.textContent?.trim()).toBe(
-        'Uppdaterad 10 nov. 13:00',
+        'Uppdaterad 10 nov 13:00',
       );
       expect(second?.querySelector('[data-balance]')?.textContent?.trim()).toBe('–');
       expect(second?.querySelector('[data-synced]')?.textContent?.trim()).toBe(
         'Inte uppdaterad ännu',
       );
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
-        'Senast uppdaterad 10 nov. 13:00',
+        'Senast uppdaterad 10 nov 13:00',
       );
     });
 
@@ -381,7 +381,7 @@ describe('BankerPage', () => {
 
       const alert = page.querySelector('[role=alert]')?.textContent;
       expect(alert).toContain('Banken tillåter inte fler uppdateringar just nu');
-      expect(alert).toContain('Senast uppdaterad 10 nov. 09:30');
+      expect(alert).toContain('Senast uppdaterad 10 nov 09:30');
       expect(page.querySelector('[data-balance]')).not.toBeNull();
     });
 
