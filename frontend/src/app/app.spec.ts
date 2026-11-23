@@ -11,6 +11,10 @@ import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
 import { AccountsStore } from './stores/accounts.store';
 import { FakeAccountsStore } from './stores/accounts.store.fake';
+import { SettlementStore } from './stores/settlement.store';
+import { FakeSettlementStore } from './stores/settlement.store.fake';
+import { SharesStore } from './stores/shares.store';
+import { FakeSharesStore } from './stores/shares.store.fake';
 import { BanksStore } from './stores/banks.store';
 import { ToastService } from './toast/toast.service';
 
@@ -26,6 +30,8 @@ describe('App', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AccountsStore, useValue: accounts },
+        { provide: SettlementStore, useValue: new FakeSettlementStore() },
+        { provide: SharesStore, useValue: new FakeSharesStore() },
         provideRouter(routes),
         // Signed in; the guard and the login page have their own tests.
         { provide: AuthService, useValue: signedIn },

@@ -1,11 +1,31 @@
-import { HttpClient } from '@angular/common/http';
-import { Injectable, forwardRef, inject } from '@angular/core';
-import type { HouseholdRatioEntry, HouseholdRatioResponse, ShareOption } from '@bankapp/shared';
+import { HttpClient, httpResource } from '@angular/common/http';
+import { Injectable, type Signal, computed, forwardRef, inject, signal } from '@angular/core';
+import type {
+  HouseholdRatioEntry,
+  HouseholdRatioResponse,
+  ShareOption,
+  SubcategoryShare,
+  SubcategorySharesResponse,
+} from '@bankapp/shared';
 import { type Observable, map, tap } from 'rxjs';
 import { Invalidation } from './invalidation';
+import { keptValue } from './kept';
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpSharesStore) })
 export abstract class SharesStore {
+  /** The household ratio, earliest entry first; undefined until it has been fetched. */
+  abstract readonly householdRatio: Signal<HouseholdRatioEntry[] | undefined>;
+  /** The subcategories whose share is not Jag; undefined until they have been fetched. */
+  abstract readonly subcategoryShares: Signal<SubcategoryShare[] | undefined>;
+  /** True while either is being fetched for the first time. */
+  abstract readonly loading: Signal<boolean>;
+  /** True when either could not be fetched and there is nothing older to show for it. */
+  abstract readonly failed: Signal<boolean>;
+  /** Starts fetching the ratio and the shares, for as long as a page shows them. */
+  abstract activate(): void;
+  /** Stops fetching and forgets them. */
+  abstract deactivate(): void;
+
   /** Replaces the whole household ratio list. */
   abstract setHouseholdRatio(entries: HouseholdRatioEntry[]): Observable<HouseholdRatioEntry[]>;
   /** Sets a subcategory's share option. */
@@ -16,6 +36,45 @@ export abstract class SharesStore {
 export class HttpSharesStore extends SharesStore {
   private readonly http = inject(HttpClient);
   private readonly invalidation = inject(Invalidation);
+
+  private readonly active = signal(false);
+  private readonly ratioResource = httpResource<HouseholdRatioResponse>(() =>
+    this.active() ? '/api/household-ratio' : undefined,
+  );
+  private readonly sharesResource = httpResource<SubcategorySharesResponse>(() =>
+    this.active() ? '/api/subcategory-shares' : undefined,
+  );
+  private readonly ratioResponse = keptValue(this.ratioResource, this.active);
+  private readonly sharesResponse = keptValue(this.sharesResource, this.active);
+
+  readonly householdRatio = computed(() => this.ratioResponse()?.entries);
+  readonly subcategoryShares = computed(() => this.sharesResponse()?.shares);
+  readonly loading = computed(
+    () =>
+      (this.ratioResource.isLoading() && this.ratioResponse() === undefined) ||
+      (this.sharesResource.isLoading() && this.sharesResponse() === undefined),
+  );
+  readonly failed = computed(
+    () =>
+      (this.ratioResource.status() === 'error' && this.ratioResponse() === undefined) ||
+      (this.sharesResource.status() === 'error' && this.sharesResponse() === undefined),
+  );
+
+  constructor() {
+    super();
+    this.invalidation.onRead('shares', () => {
+      this.ratioResource.reload();
+      this.sharesResource.reload();
+    });
+  }
+
+  activate(): void {
+    this.active.set(true);
+  }
+
+  deactivate(): void {
+    this.active.set(false);
+  }
 
   setHouseholdRatio(entries: HouseholdRatioEntry[]): Observable<HouseholdRatioEntry[]> {
     return this.http.put<HouseholdRatioResponse>('/api/household-ratio', { entries }).pipe(

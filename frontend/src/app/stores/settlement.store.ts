@@ -1,5 +1,5 @@
-import { HttpClient } from '@angular/common/http';
-import { Injectable, forwardRef, inject } from '@angular/core';
+import { HttpClient, httpResource } from '@angular/common/http';
+import { Injectable, type Signal, computed, forwardRef, inject, signal } from '@angular/core';
 import type {
   CloseMonthRequest,
   SetBalanceSettingRequest,
@@ -8,9 +8,24 @@ import type {
 } from '@bankapp/shared';
 import { type Observable, tap } from 'rxjs';
 import { Invalidation } from './invalidation';
+import { keptValue } from './kept';
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpSettlementStore) })
 export abstract class SettlementStore {
+  /**
+   * The balance, its settlement periods and the balance settings. A refresh that fails keeps
+   * what was fetched before; undefined until the first fetch succeeds.
+   */
+  abstract readonly settlement: Signal<SettlementResponse | undefined>;
+  /** True while the first fetch is under way. */
+  abstract readonly loading: Signal<boolean>;
+  /** True when the settlement could not be fetched and there is nothing older to show. */
+  abstract readonly failed: Signal<boolean>;
+  /** Starts fetching the settlement, for as long as a page shows it. */
+  abstract activate(): void;
+  /** Stops fetching and forgets the settlement. */
+  abstract deactivate(): void;
+
   /** States the balance as of a day (today when left out). */
   abstract setBalance(request: SetBalanceSettingRequest): Observable<SettlementResponse>;
   /** Closes the open period and opens the next month. */
@@ -27,6 +42,30 @@ export abstract class SettlementStore {
 export class HttpSettlementStore extends SettlementStore {
   private readonly http = inject(HttpClient);
   private readonly invalidation = inject(Invalidation);
+
+  private readonly active = signal(false);
+  private readonly resource = httpResource<SettlementResponse>(() =>
+    this.active() ? '/api/settlement' : undefined,
+  );
+
+  readonly settlement = keptValue(this.resource, this.active);
+  readonly loading = computed(() => this.resource.isLoading() && this.settlement() === undefined);
+  readonly failed = computed(
+    () => this.resource.status() === 'error' && this.settlement() === undefined,
+  );
+
+  constructor() {
+    super();
+    this.invalidation.onRead('settlement', () => this.resource.reload());
+  }
+
+  activate(): void {
+    this.active.set(true);
+  }
+
+  deactivate(): void {
+    this.active.set(false);
+  }
 
   private changed(call: Observable<SettlementResponse>): Observable<SettlementResponse> {
     return call.pipe(tap(() => this.invalidation.fire('settlement')));

@@ -16,7 +16,7 @@ So every frontend read and mutation goes through a store, one per domain: `Accou
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `transactions` | transaction list and the list kept for the way back, review and its count, transaction details, overview, settlement, mortgage figures |
 | `accounts`     | accounts, savings, and everything `transactions` refreshes                                                                             |
-| `shares`       | transaction list and the list kept for the way back, transaction details, overview, settlement                                         |
+| `shares`       | household ratio and subcategory shares, transaction list and the list kept for the way back, transaction details, overview, settlement |
 | `banks`        | everything                                                                                                                             |
 | `settlement`   | settlement, overview                                                                                                                   |
 | `mortgage`     | mortgage, mortgage figures                                                                                                             |

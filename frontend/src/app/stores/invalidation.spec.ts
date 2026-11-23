@@ -15,7 +15,10 @@ const TRANSACTIONS: Read[] = [
 const table: [Fact, Read[]][] = [
   ['transactions', TRANSACTIONS],
   ['accounts', ['accounts', 'savings', ...TRANSACTIONS]],
-  ['shares', ['transactionList', 'listed', 'transactionDetails', 'overview', 'settlement']],
+  [
+    'shares',
+    ['shares', 'transactionList', 'listed', 'transactionDetails', 'overview', 'settlement'],
+  ],
   ['banks', [...ALL_READS]],
   ['settlement', ['settlement', 'overview']],
   ['mortgage', ['mortgage', 'mortgageFigures']],
