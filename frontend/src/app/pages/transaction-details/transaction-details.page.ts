@@ -20,15 +20,10 @@ import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-tr
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
+import { ShareControl } from '../../share-control/share-control';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesService } from '../../shares.service';
-import {
-  MANUAL_LABEL,
-  SHARE_LABELS,
-  SHARE_OPTION_ORDER,
-  householdPercentLabel,
-  shareLabel,
-} from '../../share-display';
+import { MANUAL_LABEL, SHARE_LABELS, householdPercentLabel } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsService } from '../../transactions.service';
 import { Page } from '../../page/page';
@@ -77,6 +72,7 @@ function formatOriginal({ amount, currency }: Money): string {
     TransactionCategoryBadge,
     CategoryTiles,
     ManualTransactionSheet,
+    ShareControl,
   ],
   // The routed page is its own stacking context, so while the form is open it must rise above
   // the bottom tabs (z-30).
@@ -312,30 +308,13 @@ function formatOriginal({ amount, currency }: Money): string {
                       {{ purchase.description }}
                     </a>
                   } @else {
-                    <div
-                      role="group"
-                      aria-label="Välj andel"
-                      class="segmented grid w-full grid-cols-4"
-                    >
-                      @for (choice of shareChoices(); track choice.option) {
-                        <button
-                          type="button"
-                          [attr.data-share-option]="choice.option"
-                          [attr.aria-pressed]="choice.current"
-                          [attr.title]="choice.title"
-                          [disabled]="saving() || choice.disabled"
-                          class="px-1 disabled:opacity-40"
-                          (click)="setShare(choice.option)"
-                        >
-                          {{ choice.label }}
-                        </button>
-                      }
-                    </div>
-                    @if (ratio() !== null && ratio()!.length === 0) {
-                      <p class="text-sm text-muted">
-                        Hushåll kan väljas först när en hushållsandel har ställts in.
-                      </p>
-                    }
+                    <app-share-control
+                      [value]="t.share.option"
+                      [disabled]="saving()"
+                      [fullWidth]="true"
+                      [householdDisabled]="ratio() !== null && ratio()!.length === 0"
+                      (changed)="setShare($event)"
+                    />
                   }
                   <div
                     class="flex h-2 overflow-hidden rounded-full bg-surface-3"
@@ -355,7 +334,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       }}</span>
                     </span>
                     <span class="flex flex-col items-end">
-                      <span class="text-muted">Partnern</span>
+                      <span class="text-muted">Partnerns del</span>
                       <span data-share-partner-part class="amount">{{
                         partnerPart() | money: t.amount.currency
                       }}</span>
@@ -721,20 +700,6 @@ export class TransactionDetailsPage {
   protected readonly partnerPart = computed(() => {
     const t = this.details();
     return t === null ? 0 : Math.round((t.amount.amount - this.ownerPart()) * 100) / 100 + 0;
-  });
-
-  protected readonly shareChoices = computed(() => {
-    const t = this.details();
-    const entries = this.ratio();
-    const ratio = { entries, date: t?.transactionDate ?? null };
-    return SHARE_OPTION_ORDER.map((option) => ({
-      option,
-      current: t?.share.option === option,
-      label: SHARE_LABELS[option],
-      title: shareLabel(option, ratio),
-      // Unknown (not fetched) leaves it enabled; the server refuses it and the error says so.
-      disabled: option === 'household' && entries !== null && entries.length === 0,
-    }));
   });
 
   /** The ratio decides whether Hushåll can be chosen, so it is fetched once the page is shown. */

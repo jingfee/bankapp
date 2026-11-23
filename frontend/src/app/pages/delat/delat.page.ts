@@ -23,7 +23,8 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
 import { today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
-import { SHARE_LABELS, SHARE_OPTION_ORDER, householdRatioOn } from '../../share-display';
+import { ShareControl } from '../../share-control/share-control';
+import { SHARE_LABELS, householdRatioOn } from '../../share-display';
 import { SharesService } from '../../shares.service';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
@@ -45,11 +46,6 @@ interface SharedRow {
   share: ShareOption;
 }
 
-/** The shares a subcategory can be set to from here; Jag is the × button. */
-const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_OPTION_ORDER.filter(
-  (option) => option !== 'me',
-).map((option) => ({ option, label: SHARE_LABELS[option] }));
-
 /**
  * Everything shared with the partner on one page: the settlement balance and its periods, the
  * household ratio and the subcategories shared by default (ADRs 0008 and 0011).
@@ -65,6 +61,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
     CategoryTiles,
     DateField,
     MonthField,
+    ShareControl,
   ],
   template: `
     <app-page title="Delat" subtitle="Avräkning, hushållsandel och delade underkategorier.">
@@ -325,7 +322,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                       <dd data-carried-in class="text-right amount">
                         {{ period.carriedIn | money }}
                       </dd>
-                      <dt class="text-muted">Partnerns andel</dt>
+                      <dt class="text-muted">Partnerns del</dt>
                       <dd data-period-part class="text-right amount">
                         {{ partnerPartSum(period) | money }}
                       </dd>
@@ -543,33 +540,14 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                       }}</span>
                       <span class="text-xs text-muted">{{ row.category.name }}</span>
                     </span>
-                    <span
-                      class="segmented order-last w-full sm:order-none sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none"
-                      role="group"
-                      [attr.aria-label]="'Andel för ' + row.subcategory.name"
-                    >
-                      @for (choice of choices; track choice.option) {
-                        <button
-                          type="button"
-                          [attr.data-share]="choice.option"
-                          [attr.aria-pressed]="row.share === choice.option"
-                          [disabled]="saving()"
-                          (click)="setShare(row.subcategory, choice.option)"
-                        >
-                          {{ choice.label }}
-                        </button>
-                      }
-                    </span>
-                    <button
-                      type="button"
-                      data-remove-shared
-                      class="btn btn-ghost btn-sm"
-                      [attr.aria-label]="'Sätt ' + row.subcategory.name + ' till Jag'"
+                    <app-share-control
+                      class="order-last w-full sm:order-none sm:w-auto"
+                      [label]="'Andel för ' + row.subcategory.name"
+                      [value]="row.share"
                       [disabled]="saving()"
-                      (click)="removeShare(row.subcategory)"
-                    >
-                      ×
-                    </button>
+                      [householdDisabled]="ratio().length === 0"
+                      (changed)="setShare(row.subcategory, $event)"
+                    />
                   </li>
                 }
               </ul>
@@ -618,7 +596,6 @@ export class DelatPage {
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly choices = SHARE_CHOICES;
   protected readonly fallbackIcon: CategoryIcon = 'arrow-left-right';
   protected readonly fallbackColour: CategoryColour = 'gray';
   protected todayText(): string {
@@ -938,14 +915,15 @@ export class DelatPage {
     this.saveShare(subcategoryId, 'half', () => this.picking.set(false));
   }
 
+  /** Choosing Jag removes the row: Jag is what every unlisted subcategory already is. */
   protected setShare(subcategory: Subcategory, option: ShareOption): void {
-    if (this.subcategoryShares().get(subcategory.id) === option) return;
-    this.saveShare(subcategory.id, option);
-  }
-
-  protected removeShare(subcategory: Subcategory): void {
-    this.saveShare(subcategory.id, 'me', () =>
-      this.toast.show(`${subcategory.name} räknas som Jag igen`),
+    if ((this.subcategoryShares().get(subcategory.id) ?? 'me') === option) return;
+    this.saveShare(
+      subcategory.id,
+      option,
+      option === 'me'
+        ? () => this.toast.show(`${subcategory.name} räknas som Jag igen`)
+        : undefined,
     );
   }
 

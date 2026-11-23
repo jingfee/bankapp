@@ -97,7 +97,7 @@ interface DayGroup {
                   </span>
                   @if (showOwnShare() && badge(transaction)) {
                     <span data-own-share class="text-sm text-muted tabular-nums"
-                      >din andel {{ ownShare(transaction) }}</span
+                      >din del {{ ownShare(transaction) }}</span
                     >
                   }
                 </span>
@@ -113,7 +113,7 @@ export class TransactionList {
   readonly transactions = input.required<Transaction[]>();
   /** For a list nested inside another card: its day cards sit on a lighter surface, not a second card. */
   readonly compact = input(false);
-  /** Adds *din andel* under the real amount of shared transactions (Min andel). */
+  /** Adds *din del* under the real amount of shared transactions (Min andel). */
   readonly showOwnShare = input(false);
 
   protected badge(transaction: Transaction): string | null {

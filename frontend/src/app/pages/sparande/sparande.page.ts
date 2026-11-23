@@ -144,13 +144,10 @@ interface Tip {
                     </option>
                   }
                 </select>
-                <div class="flex gap-1" role="group" aria-label="Period">
+                <div class="segmented" role="group" aria-label="Period">
                   <button
                     type="button"
                     data-range="year"
-                    class="btn btn-sm"
-                    [class.btn-primary]="range() === 'year'"
-                    [class.btn-secondary]="range() !== 'year'"
                     [attr.aria-pressed]="range() === 'year'"
                     (click)="range.set('year')"
                   >
@@ -159,9 +156,6 @@ interface Tip {
                   <button
                     type="button"
                     data-range="all"
-                    class="btn btn-sm"
-                    [class.btn-primary]="range() === 'all'"
-                    [class.btn-secondary]="range() !== 'all'"
                     [attr.aria-pressed]="range() === 'all'"
                     (click)="range.set('all')"
                   >

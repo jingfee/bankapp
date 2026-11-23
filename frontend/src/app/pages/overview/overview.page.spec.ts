@@ -558,7 +558,7 @@ describe('OverviewPage', () => {
       await fixture.whenStable();
     });
 
-    it('shows din andel on shared drill-down rows in Min andel, with real amounts', async () => {
+    it('shows din del on shared drill-down rows in Min andel, with real amounts', async () => {
       const { fixture, page, http } = await render(body());
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
       await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
@@ -578,11 +578,11 @@ describe('OverviewPage', () => {
 
       const rows = page.querySelectorAll('li[data-transaction]');
       expect(text(rows[0]?.querySelector('[data-amount]'))).toBe('−200,00\u00a0kr');
-      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('din andel −100,00\u00a0kr');
+      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('din del −100,00\u00a0kr');
       expect(rows[1]?.querySelector('[data-own-share]')).toBeNull();
     });
 
-    it('leaves out din andel in Hela beloppet', async () => {
+    it('leaves out din del in Hela beloppet', async () => {
       localStorage.setItem('overview-view', 'full');
       const fixture = TestBed.createComponent(OverviewPage);
       await fixture.whenStable();

@@ -26,18 +26,13 @@ import { CategoryTiles } from '../category-tiles/category-tiles';
 import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
 import { lockPageScroll } from '../scroll-lock';
-import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
+import { ShareControl } from '../share-control/share-control';
 import { SharesService } from '../shares.service';
 import { TransactionsService } from '../transactions.service';
 
 type Status = 'loading' | 'ready' | 'failed' | 'gone';
 
 const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
-
-const SHARE_CHOICES: { value: ShareOption; label: string }[] = SHARE_OPTION_ORDER.map((value) => ({
-  value,
-  label: SHARE_LABELS[value],
-}));
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -47,7 +42,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
  */
 @Component({
   selector: 'app-manual-transaction-sheet',
-  imports: [CategoryTiles, DateField],
+  imports: [CategoryTiles, DateField, ShareControl],
   host: { '(document:keydown.escape)': 'dismiss()' },
   template: `
     <button
@@ -196,18 +191,11 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
 
               <section class="flex flex-col gap-2">
                 <h3 class="text-sm text-muted">Andel</h3>
-                <div class="segmented self-start" role="group" aria-label="Andel">
-                  @for (choice of shareChoices; track choice.value) {
-                    <button
-                      type="button"
-                      [attr.data-share]="choice.value"
-                      [attr.aria-pressed]="shownShare() === choice.value"
-                      (click)="share.set(choice.value)"
-                    >
-                      {{ choice.label }}
-                    </button>
-                  }
-                </div>
+                <app-share-control
+                  label="Andel"
+                  [value]="shownShare()"
+                  (changed)="share.set($event)"
+                />
               </section>
 
               <section class="flex flex-col gap-2">
@@ -270,7 +258,6 @@ export class ManualTransactionSheet implements OnInit {
   private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 
-  protected readonly shareChoices = SHARE_CHOICES;
   protected readonly entered = signal(false);
   protected readonly status = signal<Status>('loading');
   private readonly categories = signal<Category[]>([]);

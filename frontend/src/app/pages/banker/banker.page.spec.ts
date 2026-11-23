@@ -611,27 +611,28 @@ describe('BankerPage', () => {
       syncing: null,
       lastSync: null,
     });
-    const select = (page: HTMLElement) => page.querySelector<HTMLSelectElement>('[data-share]');
+    const pressed = (page: HTMLElement) =>
+      page.querySelector('[aria-pressed=true][data-share]')?.getAttribute('data-share');
+    const choose = (page: HTMLElement, option: string) =>
+      page.querySelector<HTMLButtonElement>(`button[data-share=${option}]`)!.click();
 
     it('shows the options with the account’s share selected', async () => {
       const page = await render((request) => request.flush(response('half')));
 
-      const options = [...(select(page)?.options ?? [])];
+      const options = [...page.querySelectorAll('button[data-share]')];
       expect(options.map((o) => o.textContent?.trim())).toEqual([
         'Jag',
         '50/50',
         'Hushåll',
         'Partner',
       ]);
-      expect(select(page)?.value).toBe('half');
+      expect(pressed(page)).toBe('half');
     });
 
     it('saves a chosen share and fetches the accounts again', async () => {
       const page = await render((request) => request.flush(response('me')));
-      const control = select(page)!;
 
-      control.value = 'partner';
-      control.dispatchEvent(new Event('change'));
+      choose(page, 'partner');
       const http = TestBed.inject(HttpTestingController);
       const put = http.expectOne('/api/accounts/7/share');
       expect(put.request.method).toBe('PUT');
@@ -641,15 +642,13 @@ describe('BankerPage', () => {
       http.expectOne('/api/accounts').flush(response('partner'));
       await TestBed.inject(ApplicationRef).whenStable();
 
-      expect(select(page)?.value).toBe('partner');
+      expect(pressed(page)).toBe('partner');
     });
 
     it('says so when Hushåll cannot be chosen yet', async () => {
       const page = await render((request) => request.flush(response('me')));
-      const control = select(page)!;
 
-      control.value = 'household';
-      control.dispatchEvent(new Event('change'));
+      choose(page, 'household');
       const http = TestBed.inject(HttpTestingController);
       http
         .expectOne('/api/accounts/7/share')
@@ -657,7 +656,7 @@ describe('BankerPage', () => {
       await TestBed.inject(ApplicationRef).whenStable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('Hushåll');
-      expect(select(page)?.value).toBe('me');
+      expect(pressed(page)).toBe('me');
     });
   });
 
