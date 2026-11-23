@@ -698,6 +698,14 @@
   .tab-link.active {
     color: var(--color-ink);
   }
+  /* Narrow phones: only the active tab names itself; the others keep the space so icons stay put. */
+  @media (max-width: 359.98px) {
+    /* Not visibility:hidden, which would also remove the name from screen readers. */
+    .tab-link:not(.active) .tab-label {
+      color: transparent;
+      user-select: none;
+    }
+  }
   .tab-link.active .nav-icon {
     color: var(--color-accent);
   }

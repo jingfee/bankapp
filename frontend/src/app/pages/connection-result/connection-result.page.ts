@@ -10,10 +10,10 @@ import { Page } from '../../page/page';
     <app-page width="narrow" [title]="heading">
       @if (status === 'ok') {
         <p>{{ bank }} är nu ansluten.</p>
-        <a routerLink="/banker" class="font-medium underline">Till översikten</a>
+        <a routerLink="/banker" class="font-medium underline">Till Banker</a>
       } @else if (status === 'redan') {
         <p>{{ bank }} är redan ansluten. Ingen ny koppling skapades.</p>
-        <a routerLink="/banker" class="font-medium underline">Till översikten</a>
+        <a routerLink="/banker" class="font-medium underline">Till Banker</a>
       } @else {
         <p role="alert">BankID-inloggningen avbröts eller misslyckades. Ingen koppling skapades.</p>
         <a routerLink="/anslut-bank" class="font-medium underline">Försök igen</a>

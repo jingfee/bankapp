@@ -8,6 +8,7 @@ import { of, throwError } from 'rxjs';
 import { App } from './app';
 import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
+import { SyncStatusService } from './sync-status.service';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
@@ -72,12 +73,13 @@ describe('App', () => {
         '/banker',
       ]);
       const bar = tabs(fixture);
+      // The fifth tab names the Mer page that is open, otherwise "Mer".
       expect([...bar.querySelectorAll('a, button')].map(label)).toEqual([
         'Översikt',
         'Transaktioner',
         'Granska',
         'Delat',
-        'Mer',
+        url === '/' ? 'Mer' : 'Banker',
       ]);
     }
     TestBed.inject(HttpTestingController).match(() => true);
@@ -135,6 +137,47 @@ describe('App', () => {
       TestBed.inject(HttpTestingController).match(() => true);
     });
 
+    it('is a card above the tab bar with a handle, a title and the account row', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      more(fixture).click();
+      await fixture.whenStable();
+      const card = sheet(fixture) as HTMLElement;
+      expect(card.querySelector('[data-more-handle]')).not.toBeNull();
+      expect(card.textContent).toContain('Mer');
+      expect(card.textContent).toContain('Ägare');
+      expect(card.querySelector('button[aria-label="Logga ut"]')).not.toBeNull();
+      // Logga ut is not in the list of pages.
+      expect(card.querySelectorAll('a')).toHaveLength(3);
+      expect(card.className).toContain('rounded-2xl');
+      expect(card.className).not.toContain('bottom-0 ');
+      expect(html(fixture).querySelector('[data-more-backdrop]')?.className).toContain(
+        'bg-black/60',
+      );
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('shows "1 går ut" on Banker when a connection is expiring', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      TestBed.inject(SyncStatusService).report({ lastSyncedAt: null, failed: false, expiring: 1 });
+      more(fixture).click();
+      await fixture.whenStable();
+      expect(sheet(fixture)?.querySelector('[data-status-pill]')?.textContent).toBe('1 går ut');
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('closes on Escape', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      more(fixture).click();
+      await fixture.whenStable();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await fixture.whenStable();
+      expect(sheet(fixture)).toBeNull();
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
     it('closes from the backdrop', async () => {
       const fixture = TestBed.createComponent(App);
       await navigate(fixture, '/');
@@ -163,17 +206,71 @@ describe('App', () => {
     });
   });
 
-  it('shows the brand and a logout button in the sidebar, and the brand in a mobile header', async () => {
+  it('shows the brand and a logout button in the sidebar, and no global top bar', async () => {
     const fixture = TestBed.createComponent(App);
     await navigate(fixture, '/banker');
 
     expect(html(fixture).querySelector('aside')?.textContent).toContain('Bankapp');
     expect(html(fixture).querySelector('aside button[aria-label="Logga ut"]')).not.toBeNull();
-    const header = html(fixture).querySelector('header') as HTMLElement;
-    expect(header.textContent).toContain('Bankapp');
-    // On mobile, signing out lives in the Mer sheet.
-    expect(header.querySelector('button')).toBeNull();
+    // Phones have the page's own sticky header instead.
+    expect(html(fixture).querySelector('header:not([data-page-header])')).toBeNull();
     TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  it('highlights Banker on Anslut bank and its result, in every navigation', async () => {
+    const fixture = TestBed.createComponent(App);
+    for (const url of ['/anslut-bank', '/anslut-bank/resultat?status=ok&bank=SEB']) {
+      await navigate(fixture, url);
+      for (const nav of [sidebar(fixture), rail(fixture)]) {
+        const current = [...nav.querySelectorAll('a.active')];
+        expect(current).toHaveLength(1);
+        expect(current[0].textContent).toContain('Banker');
+      }
+      expect(tabs(fixture).querySelector('[data-more]')?.textContent).toContain('Banker');
+      expect(tabs(fixture).querySelectorAll('a.active')).toHaveLength(0);
+    }
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  describe('sync status', () => {
+    it('shows the last sync in the sidebar footer, amber when it failed, and Banker flagged', async () => {
+      const fixture = TestBed.createComponent(App);
+      const status = TestBed.inject(SyncStatusService);
+      await navigate(fixture, '/');
+      expect(html(fixture).querySelector('[data-sync-line]')).toBeNull();
+      expect(html(fixture).querySelector('[data-attention]')).toBeNull();
+
+      status.report({ lastSyncedAt: new Date().toISOString(), failed: false, expiring: 1 });
+      await fixture.whenStable();
+      const line = html(fixture).querySelector('aside [data-sync-line]');
+      expect(line?.textContent).toMatch(/Uppdaterad idag \d\d:\d\d/);
+      expect(line?.querySelector('[data-sync-dot]')?.classList.contains('bg-positive')).toBe(true);
+      expect(sidebar(fixture).querySelector('a[href="/banker"] [data-attention]')).not.toBeNull();
+      expect(rail(fixture).querySelector('a[href="/banker"] [data-attention]')).not.toBeNull();
+
+      status.report({ lastSyncedAt: new Date().toISOString(), failed: true, expiring: 0 });
+      await fixture.whenStable();
+      const dot = html(fixture).querySelector('aside [data-sync-dot]');
+      expect(dot?.classList.contains('bg-warning')).toBe(true);
+      expect(html(fixture).querySelector('[data-attention]')).toBeNull();
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+  });
+
+  describe('compact tabs', () => {
+    it('wrap each label in .tab-label so narrow phones can hide the inactive ones', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/transaktioner');
+      const labels = [...tabs(fixture).querySelectorAll('.tab-label')];
+      expect(labels.map((l) => l.textContent?.trim())).toEqual([
+        'Översikt',
+        'Transaktioner',
+        'Granska',
+        'Delat',
+        'Mer',
+      ]);
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
   });
 
   it('marks the item of the current route as active, in both navigations', async () => {

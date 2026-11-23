@@ -25,7 +25,7 @@ describe('ConnectionResultPage', () => {
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Banken är ansluten');
     expect(page.textContent).toContain('Swedbank är nu ansluten.');
     expect(page.querySelector('[role=alert]')).toBeNull();
-    expect(page.querySelector('a[href="/banker"]')?.textContent?.trim()).toBe('Till översikten');
+    expect(page.querySelector('a[href="/banker"]')?.textContent?.trim()).toBe('Till Banker');
   });
 
   it('reports a cancelled or failed login as an error and offers to try again', () => {

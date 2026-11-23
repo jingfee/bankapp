@@ -19,6 +19,7 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { SHARE_LABELS } from '../../share-display';
 import { SyncService } from '../../sync.service';
+import { SyncStatusService } from '../../sync-status.service';
 import { Page } from '../../page/page';
 
 type Loaded = AccountsResponse | { failed: true };
@@ -96,14 +97,47 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           <button
             type="button"
             data-sync
-            class="btn btn-secondary"
+            class="btn btn-secondary max-sm:w-11 max-sm:px-0"
             [disabled]="result.syncing || manualSyncPending()"
             (click)="updateNow()"
           >
-            Uppdatera
+            <svg
+              aria-hidden="true"
+              class="size-5 sm:hidden"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+            <span class="max-sm:sr-only">Uppdatera</span>
           </button>
         }
-        <a routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
+        <a
+          routerLink="/anslut-bank"
+          class="btn btn-primary max-sm:w-11 max-sm:px-0"
+          aria-label="Anslut bank"
+        >
+          <svg
+            aria-hidden="true"
+            class="size-5 sm:hidden"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span class="max-sm:sr-only">Anslut bank</span>
+        </a>
       </div>
 
       @if (!result) {
@@ -517,6 +551,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export class BankerPage {
   private readonly accounts = inject(AccountsService);
   private readonly sync = inject(SyncService);
+  private readonly syncStatus = inject(SyncStatusService);
   private readonly connections = inject(ConnectionsService);
   private readonly redirector = inject(Redirector);
   protected readonly menuOpen = signal<string | null>(null);
@@ -562,6 +597,7 @@ export class BankerPage {
           // A failed refresh keeps what is already shown; only a failed first load is an error.
           map((next): Loaded => (this.shown && 'failed' in next ? this.shown : next)),
           tap((result) => (this.shown = result)),
+          tap((result) => this.reportStatus(result)),
           takeWhile(
             // A failed poll must not strand an owner who is waiting for their sync to finish.
             (result) =>
@@ -573,6 +609,16 @@ export class BankerPage {
     ),
     { initialValue: undefined },
   );
+
+  private reportStatus(result: Loaded): void {
+    if ('failed' in result) return;
+    this.syncStatus.report({
+      lastSyncedAt: this.lastSyncedAt(result),
+      failed:
+        !!result.lastSync && (result.lastSync.failedAccounts > 0 || result.lastSync.rateLimited),
+      expiring: result.banks.filter((group) => group.status !== 'active').length,
+    });
+  }
 
   /** Starts a manual sync and follows it on the page. */
   protected updateNow(): void {

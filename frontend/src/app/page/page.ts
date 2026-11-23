@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
  * The shell every routed page sits in: the `<main>` with its width, padding and vertical rhythm,
- * and the page header (back link, title, subtitle, actions).
+ * and the page header (back link, title, subtitle, actions). On phones the header sticks to the
+ * top, translucent, since the app has no global top bar there.
  *
  * Slots (all optional):
  * - `[page-back]`: a back link above the title;
@@ -21,7 +22,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       [class.max-w-2xl]="width() === 'narrow'"
       [class.max-w-5xl]="width() === 'wide'"
     >
-      <header data-page-header class="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
+      <header
+        data-page-header
+        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 max-sm:sticky max-sm:top-[env(safe-area-inset-top)] max-sm:z-10 max-sm:-mx-4 max-sm:-mt-6 max-sm:bg-bg/85 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur-md"
+      >
         <div class="flex min-w-0 flex-col items-start gap-1">
           <ng-content select="[page-back]" />
           @if (title(); as heading) {

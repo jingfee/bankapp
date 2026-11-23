@@ -1,12 +1,14 @@
 import { Location, NgTemplateOutlet } from '@angular/common';
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthService } from './auth/auth.service';
 import { Toast } from './toast/toast';
 import { ToastService } from './toast/toast.service';
+import { APP_TIMEZONE } from './formatting/date-time.pipe';
 import { CategoriesService } from './categories.service';
+import { SyncStatusService } from './sync-status.service';
 import { TransactionsService } from './transactions.service';
 
 interface NavItem {
@@ -17,6 +19,8 @@ interface NavItem {
   /** Short label under the icon of the 84 px rail; must fit without truncating. */
   readonly railLabel: string;
   readonly exact: boolean;
+  /** Other routes that belong to this item and highlight it (Anslut bank belongs to Banker). */
+  readonly alsoPaths?: readonly string[];
   /** Path data of the 24×24 stroke icon. */
   readonly icon: readonly string[];
   readonly reviewCount?: true;
@@ -78,6 +82,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     path: '/banker',
+    alsoPaths: ['/anslut-bank'],
     more: true,
     label: 'Banker',
     tabLabel: 'Banker',
@@ -87,13 +92,21 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
 ];
 
+const DAY_FORMAT = new Intl.DateTimeFormat('sv-SE', { timeZone: APP_TIMEZONE });
+const TIME_FORMAT = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: APP_TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
 const MORE_ICON = ['M5 12h.01M12 12h.01M19 12h.01'];
 
 const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9'];
 
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, RouterLink, RouterLinkActive, RouterOutlet, Toast],
+  imports: [NgTemplateOutlet, RouterLink, RouterOutlet, Toast],
   template: `
     <ng-template #icon let-paths let-size="size">
       <svg
@@ -115,6 +128,21 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
       </svg>
     </ng-template>
 
+    <ng-template #syncLine>
+      @if (syncText(); as text) {
+        <p data-sync-line class="mb-3 flex items-center gap-2 px-3 text-xs text-muted">
+          <span
+            data-sync-dot
+            class="size-2 shrink-0 rounded-full"
+            [class.bg-positive]="!syncStatus.lastFailed()"
+            [class.bg-warning]="syncStatus.lastFailed()"
+            aria-hidden="true"
+          ></span>
+          <span>{{ text }}</span>
+        </p>
+      }
+    </ng-template>
+
     @if (!onLoginPage()) {
       <aside
         class="fixed inset-y-0 left-0 z-20 hidden w-[236px] flex-col border-r border-line bg-sidebar px-3 py-5 lg:flex"
@@ -126,9 +154,8 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
           @for (item of items; track item.path) {
             <a
               [routerLink]="item.path"
-              routerLinkActive="active"
-              ariaCurrentWhenActive="page"
-              [routerLinkActiveOptions]="{ exact: item.exact }"
+              [class.active]="isActive(item)"
+              [attr.aria-current]="isActive(item) ? 'page' : null"
               [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
               class="nav-link"
             >
@@ -139,9 +166,18 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
                   reviewBadge()
                 }}</span>
               }
+              @if (item.path === '/banker' && attention()) {
+                <span
+                  data-attention
+                  class="size-2 rounded-full bg-warning"
+                  role="img"
+                  [attr.aria-label]="expiryLabel()"
+                ></span>
+              }
             </a>
           }
         </nav>
+        <ng-container *ngTemplateOutlet="syncLine" />
         <div class="flex items-center gap-3 border-t border-line px-3 pt-4">
           <span
             class="grid size-8 place-content-center rounded-full bg-surface-3 text-sm font-semibold"
@@ -190,6 +226,7 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
             class="absolute top-16 left-3 z-40 flex w-44 flex-col gap-1 rounded-xl border border-line-strong bg-surface-2 p-2"
           >
             <span class="px-3 py-2 text-sm text-muted">Ägare</span>
+            <ng-container *ngTemplateOutlet="syncLine" />
             <button
               type="button"
               role="menuitem"
@@ -208,9 +245,8 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
           @for (item of items; track item.path) {
             <a
               [routerLink]="item.path"
-              routerLinkActive="active"
-              ariaCurrentWhenActive="page"
-              [routerLinkActiveOptions]="{ exact: item.exact }"
+              [class.active]="isActive(item)"
+              [attr.aria-current]="isActive(item) ? 'page' : null"
               [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
               class="rail-link"
             >
@@ -226,25 +262,27 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
                     >{{ reviewBadge() }}</span
                   >
                 }
+                @if (item.path === '/banker' && attention()) {
+                  <span
+                    data-attention
+                    class="absolute top-0 left-7 size-2 rounded-full bg-warning"
+                    role="img"
+                    [attr.aria-label]="expiryLabel()"
+                  ></span>
+                }
               </span>
               <span>{{ item.railLabel }}</span>
             </a>
           }
         </nav>
       </aside>
-
-      <header
-        class="sticky top-0 z-20 flex items-center border-b border-line bg-bg/90 px-4 py-3 backdrop-blur sm:hidden"
-      >
-        <a routerLink="/" class="font-display text-lg font-bold tracking-tight">Bankapp</a>
-      </header>
     }
 
     <div
       [class]="
         onLoginPage()
           ? ''
-          : 'pb-[calc(76px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[84px] lg:pl-[236px]'
+          : 'pb-[calc(64px+env(safe-area-inset-bottom))] sm:pb-0 sm:pl-[84px] lg:pl-[236px]'
       "
     >
       <router-outlet />
@@ -254,14 +292,13 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
       <nav
         data-tabs
         aria-label="Flikar"
-        class="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
+        class="fixed inset-x-0 bottom-0 z-30 flex h-[calc(64px+env(safe-area-inset-bottom))] border-t border-line bg-sidebar pb-[env(safe-area-inset-bottom)] sm:hidden"
       >
         @for (item of tabItems; track item.path) {
           <a
             [routerLink]="item.path"
-            routerLinkActive="active"
-            ariaCurrentWhenActive="page"
-            [routerLinkActiveOptions]="{ exact: item.exact }"
+            [class.active]="isActive(item)"
+            [attr.aria-current]="isActive(item) ? 'page' : null"
             [attr.aria-label]="item.reviewCount ? reviewLabel() : null"
             class="tab-link"
           >
@@ -276,20 +313,34 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
                 >
               }
             </span>
-            <span>{{ item.tabLabel }}</span>
+            <span class="tab-label">{{ item.tabLabel }}</span>
           </a>
         }
         <button
           type="button"
           data-more
           class="tab-link"
-          [class.active]="moreOpen() || moreActive()"
+          [class.active]="moreOpen() || moreCurrent() !== null"
           aria-haspopup="dialog"
           [attr.aria-expanded]="moreOpen()"
           (click)="moreOpen.set(!moreOpen())"
         >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: moreIcon, size: 24 }" />
-          <span>Mer</span>
+          <span class="relative">
+            <ng-container
+              *ngTemplateOutlet="
+                icon;
+                context: { $implicit: moreCurrent()?.icon ?? moreIcon, size: 24 }
+              "
+            />
+            @if (attention()) {
+              <span
+                data-attention
+                class="absolute -top-0.5 -right-1 size-2 rounded-full bg-warning"
+                aria-hidden="true"
+              ></span>
+            }
+          </span>
+          <span class="tab-label">{{ moreCurrent()?.tabLabel ?? 'Mer' }}</span>
         </button>
       </nav>
     }
@@ -300,36 +351,56 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
         data-more-backdrop
         tabindex="-1"
         aria-label="Stäng"
-        class="sheet-backdrop fixed inset-0 z-20 cursor-default bg-black/50 sm:hidden"
+        class="sheet-backdrop fixed inset-0 z-20 cursor-default bg-black/60 sm:hidden"
         (click)="moreOpen.set(false)"
       ></button>
       <div
         data-more-sheet
         role="dialog"
         aria-label="Mer"
-        class="sheet fixed inset-x-0 bottom-0 z-[25] flex flex-col gap-1 rounded-t-2xl border border-b-0 border-line-strong bg-surface-2 px-3 pt-3 pb-[calc(76px+env(safe-area-inset-bottom))] sm:hidden"
+        class="sheet fixed inset-x-2 bottom-[calc(64px+env(safe-area-inset-bottom)+8px)] z-[25] flex flex-col gap-1 rounded-2xl border border-line-strong bg-surface-2 px-3 pt-2 pb-3 sm:hidden"
       >
+        <span
+          data-more-handle
+          class="mx-auto mb-1 h-1 w-9 rounded-full bg-line-strong"
+          aria-hidden="true"
+        ></span>
+        <span class="px-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Mer</span>
         @for (item of moreItems; track item.path) {
           <a
             [routerLink]="item.path"
-            routerLinkActive="active"
-            ariaCurrentWhenActive="page"
-            [routerLinkActiveOptions]="{ exact: item.exact }"
+            [class.active]="isActive(item)"
+            [attr.aria-current]="isActive(item) ? 'page' : null"
             class="nav-link"
           >
             <ng-container *ngTemplateOutlet="icon; context: { $implicit: item.icon, size: 20 }" />
             <span class="flex-1">{{ item.label }}</span>
+            @if (item.path === '/banker' && attention()) {
+              <span data-status-pill class="pill pill-guess">{{ expiryPill() }}</span>
+            }
           </a>
         }
-        <button
-          type="button"
-          class="nav-link border-t border-line"
-          aria-label="Logga ut"
-          (click)="logout()"
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: logoutIcon, size: 20 }" />
-          <span class="flex-1 text-left">Logga ut</span>
-        </button>
+        <div class="mt-1 flex items-center gap-3 border-t border-line px-3 pt-3">
+          <span
+            class="grid size-8 place-content-center rounded-full bg-surface-3 text-sm font-semibold"
+            aria-hidden="true"
+            >Ä</span
+          >
+          <span class="flex flex-1 flex-col">
+            <span class="text-sm">Ägare</span>
+            @if (syncText(); as text) {
+              <span class="text-xs text-muted">{{ text }}</span>
+            }
+          </span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            aria-label="Logga ut"
+            (click)="logout()"
+          >
+            Logga ut
+          </button>
+        </div>
       </div>
     }
 
@@ -355,9 +426,30 @@ export class App {
   protected readonly moreItems = NAV_ITEMS.filter((item) => item.more);
   protected readonly moreIcon = MORE_ICON;
   protected readonly moreOpen = signal(false);
+  protected readonly syncStatus = inject(SyncStatusService);
+  private readonly url = signal(this.router.url);
   protected readonly railMenuOpen = signal(false);
-  /** The current page is one of those in the Mer sheet. */
-  protected readonly moreActive = signal(false);
+  /** The item of the current page when it lives in the Mer sheet; shown on the fifth tab. */
+  protected readonly moreCurrent = computed(
+    () => this.moreItems.find((item) => this.isActive(item)) ?? null,
+  );
+  protected readonly attention = computed(() => this.syncStatus.expiringCount() > 0);
+  protected readonly expiryPill = computed(() => `${this.syncStatus.expiringCount()} går ut`);
+  protected readonly expiryLabel = computed(() =>
+    this.syncStatus.expiringCount() === 1
+      ? 'En bankkoppling går ut'
+      : `${this.syncStatus.expiringCount()} bankkopplingar går ut`,
+  );
+  /** "Uppdaterad idag 11:00", from what Banker last fetched. */
+  protected readonly syncText = computed(() => {
+    const at = this.syncStatus.lastSyncedAt();
+    if (!at) return null;
+    const date = new Date(at);
+    const day = (value: Date) => DAY_FORMAT.format(value);
+    return day(date) === day(new Date())
+      ? `Uppdaterad idag ${TIME_FORMAT.format(date)}`
+      : `Uppdaterad ${DAY_FORMAT.format(date)} ${TIME_FORMAT.format(date)}`;
+  });
   protected readonly logoutIcon = LOGOUT_ICON;
   protected readonly reviewBadge = computed(() =>
     this.reviewCount() > 99 ? '99+' : String(this.reviewCount()),
@@ -378,11 +470,19 @@ export class App {
         this.onLoginPage.set(event.urlAfterRedirects.startsWith('/logga-in'));
         this.moreOpen.set(false);
         this.railMenuOpen.set(false);
-        this.moreActive.set(
-          this.moreItems.some((item) => event.urlAfterRedirects.startsWith(item.path)),
-        );
+        this.url.set(event.urlAfterRedirects);
+        if (this.onLoginPage()) this.syncStatus.reset();
         if (!this.onLoginPage()) this.transactions.refreshReviewCount();
       });
+  }
+
+  protected isActive(item: NavItem): boolean {
+    const path = this.url().split(/[?#]/)[0];
+    const matches = (base: string) =>
+      item.exact && base === item.path
+        ? path === base
+        : path === base || path.startsWith(base + '/');
+    return matches(item.path) || (item.alsoPaths ?? []).some(matches);
   }
 
   protected logout(): void {
@@ -391,6 +491,7 @@ export class App {
     this.auth.logout().subscribe({
       next: () => {
         this.transactions.reviewCount.set(0);
+        this.syncStatus.reset();
         this.categories.reset();
         void this.router.navigateByUrl('/logga-in');
       },
