@@ -126,7 +126,7 @@ describe('SparandePage', () => {
     expect(text('[data-total-balance]')).toContain('4 000');
     expect(text('[data-total-deposits]')).toContain('2 800');
     expect(text('[data-total-growth]')).toContain('1 200');
-    expect(text('[data-total-growth]')).toContain('42,9 %');
+    expect(text('[data-total-growth-percent]')).toContain('42,9 %');
   });
 
   it('marks approximate totals with ≈', async () => {

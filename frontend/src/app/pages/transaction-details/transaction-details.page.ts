@@ -102,7 +102,7 @@ function formatOriginal({ amount, currency }: Money): string {
             @let pending = t.status === 'pending';
             <div class="stagger grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
               <div class="flex min-w-0 flex-col gap-5">
-                <section data-summary class="card flex flex-col gap-5 p-5 sm:p-7">
+                <section data-summary class="card flex flex-col gap-5 p-5 sm:p-6">
                   <div class="flex items-start gap-4">
                     <app-transaction-category-badge
                       class="shrink-0"
@@ -206,8 +206,8 @@ function formatOriginal({ amount, currency }: Money): string {
               </div>
 
               <div class="flex min-w-0 flex-col gap-5">
-                <section data-category class="card flex flex-col gap-4 p-5">
-                  <h2 class="text-sm font-medium tracking-wide text-muted uppercase">Kategori</h2>
+                <section data-category class="card flex flex-col gap-4 p-4 sm:p-5">
+                  <h2 class="card-title">Kategori</h2>
                   <div class="flex items-center gap-3">
                     <app-transaction-category-badge
                       [category]="t.category"
@@ -297,9 +297,9 @@ function formatOriginal({ amount, currency }: Money): string {
                   }
                 </section>
 
-                <section data-share class="card flex flex-col gap-4 p-5">
+                <section data-share class="card flex flex-col gap-4 p-4 sm:p-5">
                   <div class="flex items-baseline justify-between gap-3">
-                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">Andel</h2>
+                    <h2 class="card-title">Andel</h2>
                     <span data-share-source class="text-sm text-muted">{{ shareSource() }}</span>
                   </div>
                   <span data-share-name class="sr-only">{{ shareName() }}</span>
@@ -378,10 +378,8 @@ function formatOriginal({ amount, currency }: Money): string {
                 </section>
 
                 @if (t.offsets; as purchase) {
-                  <section data-offsets class="card flex flex-col gap-3 p-5">
-                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
-                      Kvittad mot
-                    </h2>
+                  <section data-offsets class="card flex flex-col gap-3 p-4 sm:p-5">
+                    <h2 class="card-title">Kvittad mot</h2>
                     <a
                       data-offsets-purchase
                       [routerLink]="['/transaktioner', purchase.id]"
@@ -411,10 +409,8 @@ function formatOriginal({ amount, currency }: Money): string {
                     </button>
                   </section>
                 } @else if (t.amount.amount > 0 && t.status === 'booked') {
-                  <section data-offset-picker class="card flex flex-col gap-3 p-5">
-                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
-                      Återbetalning?
-                    </h2>
+                  <section data-offset-picker class="card flex flex-col gap-3 p-4 sm:p-5">
+                    <h2 class="card-title">Återbetalning?</h2>
                     <button
                       type="button"
                       data-offset-toggle
@@ -475,10 +471,8 @@ function formatOriginal({ amount, currency }: Money): string {
                 }
 
                 @if (t.refunds.length > 0 && t.netAmount; as net) {
-                  <section data-refunds class="card flex flex-col gap-3 p-5">
-                    <h2 class="text-sm font-medium tracking-wide text-muted uppercase">
-                      Kvitterat av
-                    </h2>
+                  <section data-refunds class="card flex flex-col gap-3 p-4 sm:p-5">
+                    <h2 class="card-title">Kvitterat av</h2>
                     <ul class="flex flex-col gap-1">
                       @for (refund of t.refunds; track refund.id) {
                         <li>
@@ -513,7 +507,7 @@ function formatOriginal({ amount, currency }: Money): string {
               </div>
             </div>
             @if (t.account !== null) {
-              <details data-raw class="card p-5">
+              <details data-raw class="card p-4 sm:p-5">
                 <summary class="cursor-pointer font-medium">Rådata</summary>
                 <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
                   rawJson()

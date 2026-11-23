@@ -479,7 +479,7 @@ describe('OverviewPage', () => {
       );
 
       const tile = page.querySelector('[data-total="savings"]');
-      expect(text(tile?.querySelector('.uppercase'))).toBe('Sparande');
+      expect(text(tile?.querySelector('.eyebrow'))).toBe('Sparande');
       expect(text(tile?.querySelector('[data-amount]'))?.replace(/\s/g, ' ')).toBe('3 500,00 kr');
       expect(text(tile?.querySelector('[data-change]'))?.replace(/\s/g, ' ')).toContain(
         '+500,00 kr',

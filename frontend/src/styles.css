@@ -131,6 +131,22 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Card title: every section/card heading */
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  /* Eyebrow: small label directly above a featured number */
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
   /* Buttons */
   .btn {
     display: inline-flex;

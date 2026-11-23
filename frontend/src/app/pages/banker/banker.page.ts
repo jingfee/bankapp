@@ -145,7 +145,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
       } @else if ('failed' in result) {
         <p role="alert">Kontona kunde inte hämtas. Försök igen senare.</p>
       } @else if (result.banks.length === 0) {
-        <section class="card p-6">
+        <section class="card p-4 sm:p-5">
           <p>Inga banker är anslutna ännu.</p>
         </section>
       } @else {
@@ -193,7 +193,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         }
         <div class="stagger grid items-start gap-4 lg:grid-cols-2">
           @for (group of result.banks; track group.bank) {
-            <section [attr.data-bank]="group.bank" class="card flex flex-col gap-4 p-5">
+            <section [attr.data-bank]="group.bank" class="card flex flex-col gap-4 p-4 sm:p-5">
               <div class="flex items-center gap-3">
                 <span
                   aria-hidden="true"
@@ -201,7 +201,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   >{{ monogram(group.bank) }}</span
                 >
                 <div class="min-w-0 flex-1">
-                  <h2 class="truncate font-display text-lg font-semibold">{{ group.bank }}</h2>
+                  <h2 class="card-title truncate">{{ group.bank }}</h2>
                   <p data-account-count class="text-sm text-muted">
                     {{ accountCountText(group.accounts.length) }}
                   </p>
@@ -434,7 +434,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
               </ul>
               @if (group.closedAccounts.length > 0) {
                 <div data-closed-accounts>
-                  <h3 class="text-sm font-semibold text-muted">Avslutade konton</h3>
+                  <h3 class="card-title">Avslutade konton</h3>
                   <ul class="mt-2 flex flex-col divide-y divide-line">
                     @for (account of group.closedAccounts; track account.id) {
                       <li class="flex items-center justify-between gap-3 py-2">
@@ -453,10 +453,8 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </div>
       }
       @if (result && !('failed' in result) && result.removedBanks.length > 0) {
-        <details data-removed-banks class="card p-5">
-          <summary class="cursor-pointer font-display text-lg font-semibold">
-            Borttagna banker
-          </summary>
+        <details data-removed-banks class="card p-4 sm:p-5">
+          <summary class="card-title cursor-pointer">Borttagna banker</summary>
           <div class="mt-4 flex flex-col gap-5">
             @if (deleteFailed()) {
               <p role="alert" class="text-sm text-danger">

@@ -92,43 +92,43 @@ interface Tip {
           data-totals
           class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3"
         >
-          <div class="card min-w-0 p-4">
-            <div class="text-[11px] tracking-wider text-muted uppercase">Saldo</div>
-            <div data-total-balance class="amount text-lg break-words sm:text-xl">
-              {{ d.totals.balance | money }}
-            </div>
+          <div class="stat-tile">
+            <span class="eyebrow">Saldo</span>
+            <span data-total-balance class="amount text-[17px] break-words sm:text-[21px]">{{
+              d.totals.balance | money
+            }}</span>
           </div>
-          <div class="card min-w-0 p-4">
-            <div class="text-[11px] tracking-wider text-muted uppercase">Insatt</div>
-            <div data-total-deposits class="amount text-lg break-words sm:text-xl">
+          <div class="stat-tile">
+            <span class="eyebrow">Insatt</span>
+            <span data-total-deposits class="amount text-[17px] break-words sm:text-[21px]">
               @if (d.totals.netDeposits !== null) {
                 {{ approx(d.totals.approximate) }}{{ d.totals.netDeposits | money }}
               } @else {
                 –
               }
-            </div>
+            </span>
           </div>
-          <div class="card min-w-0 p-4">
-            <div class="text-[11px] tracking-wider text-muted uppercase">Utveckling</div>
-            <div data-total-growth class="amount text-lg break-words sm:text-xl">
+          <div class="stat-tile">
+            <span class="eyebrow">Utveckling</span>
+            <span data-total-growth class="amount text-[17px] break-words sm:text-[21px]">
               @if (d.totals.growth !== null) {
                 {{ approx(d.totals.approximate) }}{{ d.totals.growth | money }}
-                @if (d.totals.growthPercent !== null) {
-                  <span class="block text-sm text-muted"
-                    >({{ approx(d.totals.approximate) }}{{ percent(d.totals.growthPercent) }})</span
-                  >
-                }
               } @else {
                 –
               }
-            </div>
+            </span>
+            @if (d.totals.growth !== null && d.totals.growthPercent !== null) {
+              <span data-total-growth-percent class="text-xs leading-snug text-muted"
+                >{{ approx(d.totals.approximate) }}{{ percent(d.totals.growthPercent) }}</span
+              >
+            }
           </div>
         </section>
 
         @if (d.months.length > 0) {
           <section data-chart-section class="card p-4 sm:p-5">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-lg font-semibold">Saldo över tid</h2>
+              <h2 class="card-title">Saldo över tid</h2>
               <div class="flex flex-wrap gap-2">
                 <select
                   data-account-select
@@ -322,7 +322,7 @@ interface Tip {
         }
 
         <section data-accounts class="card flex flex-col gap-4 p-4 sm:p-5">
-          <h2 class="text-lg font-semibold">Konton</h2>
+          <h2 class="card-title">Konton</h2>
           @if (open().length === 0) {
             <p class="text-sm text-muted">
               Inga sparkonton ännu. Markera ett konto som sparkonto på Banker, eller lägg till ett
@@ -376,7 +376,7 @@ interface Tip {
       <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         @if (account.netDeposits !== null) {
           <div data-account-deposits>
-            <dt class="text-[11px] tracking-wider text-muted uppercase">Insatt</dt>
+            <dt class="eyebrow">Insatt</dt>
             <dd class="amount">
               {{ approx(account.approximate) }}{{ account.netDeposits | money }}
             </dd>
@@ -384,7 +384,7 @@ interface Tip {
         }
         @if (account.growth !== null) {
           <div data-account-growth>
-            <dt class="text-[11px] tracking-wider text-muted uppercase">Utveckling</dt>
+            <dt class="eyebrow">Utveckling</dt>
             <dd class="amount">
               {{ approx(account.approximate) }}{{ account.growth | money }}
               @if (account.growthPercent !== null) {
@@ -395,12 +395,12 @@ interface Tip {
         }
         @if (account.closedOn) {
           <div>
-            <dt class="text-[11px] tracking-wider text-muted uppercase">Avslutat</dt>
+            <dt class="eyebrow">Avslutat</dt>
             <dd>{{ account.closedOn }}</dd>
           </div>
         }
         <div data-account-updated>
-          <dt class="text-[11px] tracking-wider text-muted uppercase">Senast uppdaterad</dt>
+          <dt class="eyebrow">Senast uppdaterad</dt>
           <dd>{{ account.lastUpdated ?? 'aldrig' }}</dd>
         </div>
       </dl>
