@@ -326,8 +326,10 @@ export class ManualSavingsSection {
     () => this.read.value()?.accounts ?? [],
   );
   private readonly actionFailed = signal<string | null>(null);
-  protected readonly failed = computed(() =>
-    this.read.failed() ? 'Sparkontona kunde inte hämtas. Försök igen senare.' : this.actionFailed(),
+  protected readonly failed = computed(
+    () =>
+      this.actionFailed() ??
+      (this.read.failed() ? 'Sparkontona kunde inte hämtas. Försök igen senare.' : null),
   );
   protected readonly busy = signal(false);
 
