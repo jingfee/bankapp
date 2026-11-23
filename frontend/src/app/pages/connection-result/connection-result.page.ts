@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Icon } from '../../icon/icon';
 import { Page } from '../../page/page';
+import { BanksStore } from '../../stores/banks.store';
 
 /** Where the backend sends the owner after BankID: `?status=ok|redan|fel&bank=<name>`. */
 @Component({
@@ -45,4 +46,8 @@ export class ConnectionResultPage {
         ? 'Banken är redan ansluten'
         : 'Anslutningen misslyckades';
   protected readonly bank = this.query.get('bank') ?? 'Banken';
+
+  constructor() {
+    inject(BanksStore).connectionResult();
+  }
 }

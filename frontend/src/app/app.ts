@@ -8,7 +8,7 @@ import { Toast } from './toast/toast';
 import { ToastService } from './toast/toast.service';
 import { dateTime } from './formatting/date-time.pipe';
 import { CategoriesService } from './categories.service';
-import { SyncStatusService } from './sync-status.service';
+import { BanksStore } from './stores/banks.store';
 import { TransactionsService } from './transactions.service';
 
 interface NavItem {
@@ -418,7 +418,7 @@ export class App {
   protected readonly moreItems = NAV_ITEMS.filter((item) => item.more);
   protected readonly moreIcon = MORE_ICON;
   protected readonly moreOpen = signal(false);
-  protected readonly syncStatus = inject(SyncStatusService);
+  protected readonly syncStatus = inject(BanksStore);
   private readonly url = signal(this.router.url);
   protected readonly railMenuOpen = signal(false);
   /** The item of the current page when it lives in the Mer sheet; shown on the fifth tab. */

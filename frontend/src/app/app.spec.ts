@@ -8,7 +8,7 @@ import { of, throwError } from 'rxjs';
 import { App } from './app';
 import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
-import { SyncStatusService } from './sync-status.service';
+import { BanksStore } from './stores/banks.store';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
@@ -44,6 +44,7 @@ describe('App', () => {
     const http = TestBed.inject(HttpTestingController);
     http
       .match('/api/transactions/review/count')
+      .filter((r) => !r.cancelled)
       .forEach((r) => r.flush({ count: reviewCount ?? 0 }));
     await fixture.whenStable();
   }
@@ -160,7 +161,7 @@ describe('App', () => {
     it('shows "1 går ut" on Banker when a connection is expiring', async () => {
       const fixture = TestBed.createComponent(App);
       await navigate(fixture, '/');
-      TestBed.inject(SyncStatusService).report({ lastSyncedAt: null, failed: false, expiring: 1 });
+      TestBed.inject(BanksStore).report({ lastSyncedAt: null, failed: false, expiring: 1 });
       more(fixture).click();
       await fixture.whenStable();
       expect(sheet(fixture)?.querySelector('[data-status-pill]')?.textContent).toBe('1 går ut');
@@ -235,7 +236,7 @@ describe('App', () => {
   describe('sync status', () => {
     it('shows the last sync in the sidebar footer, amber when it failed, and Banker flagged', async () => {
       const fixture = TestBed.createComponent(App);
-      const status = TestBed.inject(SyncStatusService);
+      const status = TestBed.inject(BanksStore);
       await navigate(fixture, '/');
       expect(html(fixture).querySelector('[data-sync-line]')).toBeNull();
       expect(html(fixture).querySelector('[data-attention]')).toBeNull();

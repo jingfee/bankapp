@@ -14,6 +14,7 @@ import { TransactionCategoryBadge } from '../../category-icon/transaction-catego
 import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { accountLabel } from '../../share-display';
+import { TransactionsStore } from '../../stores/transactions.store';
 import { TransactionsService } from '../../transactions.service';
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Callout } from '../../callout/callout';
@@ -297,6 +298,7 @@ const COLLAPSE_MS = 450;
 })
 export class ReviewPage {
   private readonly service = inject(TransactionsService);
+  private readonly store = inject(TransactionsStore);
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
 
@@ -416,7 +418,7 @@ export class ReviewPage {
     this.deciding.set(pair.bank.id);
     this.error.set(null);
     const request = { manualId: pair.manual.id, bankId: pair.bank.id };
-    this.service[choice](request).subscribe({
+    this.store[choice](request).subscribe({
       next: () => {
         this.collapse(this.leavingPairs, pair.bank.id, () =>
           this.replacements.update((shown) => shown.filter((p) => p.bank.id !== pair.bank.id)),
@@ -457,7 +459,7 @@ export class ReviewPage {
     this.refreshes += 1; // outdates any refresh still on its way
     this.error.set(null);
     this.similarNote.set(null);
-    this.service.setCategory(transaction.id, subcategoryId).subscribe({
+    this.store.setCategory(transaction.id, subcategoryId).subscribe({
       next: ({ updatedSimilar }) => {
         this.collapse(this.leaving, transaction.id, () =>
           this.transactions.update((shown) => shown.filter((t) => t.id !== transaction.id)),

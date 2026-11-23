@@ -12,25 +12,24 @@ import {
 } from '@bankapp/shared';
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
+import { AccountsStore } from '../../stores/accounts.store';
+import { BanksStore, SYNC_POLL_INTERVAL_MS as POLL_MS } from '../../stores/banks.store';
 import { Callout } from '../../callout/callout';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Empty } from '../../empty/empty';
 import { Skeleton } from '../../skeleton/skeleton';
-import { ConnectionsService } from '../../connections.service';
 import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { ShareControl } from '../../share-control/share-control';
-import { SyncService } from '../../sync.service';
-import { SyncStatusService } from '../../sync-status.service';
 import { Page } from '../../page/page';
 
 type Loaded = AccountsResponse | { failed: true };
 
 /** How often the page asks again while a sync is running. */
-export const SYNC_POLL_INTERVAL_MS = 2000;
+export const SYNC_POLL_INTERVAL_MS = POLL_MS;
 
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -504,9 +503,8 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 })
 export class BankerPage {
   private readonly accounts = inject(AccountsService);
-  private readonly sync = inject(SyncService);
-  private readonly syncStatus = inject(SyncStatusService);
-  private readonly connections = inject(ConnectionsService);
+  private readonly accountsStore = inject(AccountsStore);
+  private readonly banks = inject(BanksStore);
   private readonly redirector = inject(Redirector);
   /** The bank the owner is removing, awaiting confirmation. */
   protected readonly removingBank = signal<BankAccounts | null>(null);
@@ -569,7 +567,7 @@ export class BankerPage {
 
   private reportStatus(result: Loaded): void {
     if ('failed' in result) return;
-    this.syncStatus.reportAccounts(result);
+    this.banks.reportAccounts(result);
   }
 
   /** Starts a manual sync and follows it on the page. */
@@ -577,7 +575,7 @@ export class BankerPage {
     this.startFailed.set(false);
     this.summary.set(null);
     this.manualSyncPending.set(true);
-    this.sync.start().subscribe({
+    this.banks.startSync().subscribe({
       next: () => this.refresh.next(),
       error: () => {
         this.manualSyncPending.set(false);
@@ -590,7 +588,7 @@ export class BankerPage {
   protected setHidden(id: number, hidden: boolean): void {
     this.togglingHidden.set(true);
     this.hideFailed.set(false);
-    this.accounts.setHidden(id, hidden).subscribe({
+    this.accountsStore.setHidden(id, hidden).subscribe({
       next: () => {
         this.togglingHidden.set(false);
         this.refresh.next();
@@ -606,7 +604,7 @@ export class BankerPage {
   protected setSavings(id: number, savings: boolean): void {
     this.togglingHidden.set(true);
     this.hideFailed.set(false);
-    this.accounts.setSavings(id, savings).subscribe({
+    this.accountsStore.setSavings(id, savings).subscribe({
       next: () => {
         this.togglingHidden.set(false);
         this.refresh.next();
@@ -623,7 +621,7 @@ export class BankerPage {
     if (account.share === option) return;
     this.savingShare.set(true);
     this.shareFailed.set(null);
-    this.accounts.setShare(account.id, option).subscribe({
+    this.accountsStore.setShare(account.id, option).subscribe({
       next: () => {
         this.savingShare.set(false);
         this.refresh.next();
@@ -643,7 +641,7 @@ export class BankerPage {
   protected renew(bank: string, stillActive = false): void {
     this.renewing.set(true);
     this.renewFailed.set(false);
-    this.connections.start(bank, stillActive).subscribe({
+    this.banks.startConnection(bank, stillActive).subscribe({
       next: (url) => this.redirector.goTo(url),
       error: () => {
         this.renewing.set(false);
@@ -681,7 +679,7 @@ export class BankerPage {
       .map((account) => account.id);
     this.removing.set(true);
     this.removeFailed.set(false);
-    this.connections.remove(group.bank, continueManually).subscribe({
+    this.banks.remove(group.bank, continueManually).subscribe({
       next: () => {
         this.removing.set(false);
         this.removingBank.set(null);
@@ -709,7 +707,7 @@ export class BankerPage {
     if (this.typedName().trim() !== bank) return;
     this.deleting.set(true);
     this.deleteFailed.set(false);
-    this.connections.deleteForGood(bank).subscribe({
+    this.banks.deleteForGood(bank).subscribe({
       next: () => {
         this.deleting.set(false);
         this.confirmingDelete.set(null);

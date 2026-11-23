@@ -2,7 +2,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { Observable } from 'rxjs';
-import { TransactionsService } from './transactions.service';
+import { TransactionsService } from '../transactions.service';
+import { TransactionsStore } from './transactions.store';
 
 const manual = {
   description: 'x',
@@ -13,8 +14,9 @@ const manual = {
   share: 'me',
 } as never;
 
-describe('TransactionsService mutations', () => {
+describe('TransactionsStore mutations', () => {
   let service: TransactionsService;
+  let store: TransactionsStore;
   let http: HttpTestingController;
 
   beforeEach(() => {
@@ -22,6 +24,7 @@ describe('TransactionsService mutations', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(TransactionsService);
+    store = TestBed.inject(TransactionsStore);
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -31,7 +34,7 @@ describe('TransactionsService mutations', () => {
     string,
     string,
     string,
-    (s: TransactionsService) => Observable<unknown>,
+    (s: TransactionsStore) => Observable<unknown>,
     object | null,
   ][] = [
     ['addManual', 'POST', '/api/transactions', (s) => s.addManual(manual), {}],
@@ -53,7 +56,7 @@ describe('TransactionsService mutations', () => {
   for (const [name, method, url, call, response] of mutations) {
     it(`${name} refreshes the review count and drops the kept list`, () => {
       service.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
-      call(service).subscribe();
+      call(store).subscribe();
       http.expectOne({ method, url }).flush(response);
       http.expectOne('/api/transactions/review/count').flush({ count: 3 });
       expect(service.reviewCount()).toBe(3);
@@ -73,7 +76,7 @@ describe('TransactionsService mutations', () => {
     };
     service.listed = listed;
 
-    service.setCategory(1, 2).subscribe();
+    store.setCategory(1, 2).subscribe();
     http.expectOne('/api/transactions/1/category').flush({
       category: category('Mat'),
       updatedSimilar: 1,

@@ -29,6 +29,7 @@ import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
 import { ShareControl } from '../share-control/share-control';
 import { SharesService } from '../shares.service';
+import { TransactionsStore } from '../stores/transactions.store';
 import { TransactionsService } from '../transactions.service';
 
 type Status = 'loading' | 'ready' | 'failed' | 'gone';
@@ -212,6 +213,7 @@ export class ManualTransactionSheet implements OnInit {
   readonly closed = output<void>();
 
   private readonly transactions = inject(TransactionsService);
+  private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryService = inject(CategoriesService);
   private readonly shares = inject(SharesService);
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
@@ -332,8 +334,8 @@ export class ManualTransactionSheet implements OnInit {
     this.saving.set(true);
     this.error.set(null);
     (id === null
-      ? this.transactions.addManual(request)
-      : this.transactions.editManual(id, request)
+      ? this.transactionsStore.addManual(request)
+      : this.transactionsStore.editManual(id, request)
     ).subscribe({
       next: (saved) => this.saved.emit(saved),
       error: (error: unknown) => {

@@ -1,16 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type {
-  ManualTransactionRequest,
   Money,
   OffsetCandidatesResponse,
-  ReplacementRequest,
-  SetTransactionCategoryRequest,
-  SetTransactionOffsetRequest,
-  SetTransactionShareRequest,
-  ShareOption,
   Transaction,
-  TransactionCategoryResponse,
   TransactionDetails,
   TransactionReviewCountResponse,
   TransactionReviewResponse,
@@ -22,6 +15,7 @@ import {
   filtersToParams,
 } from './pages/transactions/transaction-filters';
 import { type Observable, type Subscription, tap } from 'rxjs';
+import { Invalidation } from './stores/invalidation';
 
 /** The part of the list the owner has loaded, kept so going back to it finds it as it was left. */
 export interface ListedTransactions {
@@ -36,6 +30,14 @@ export interface ListedTransactions {
 @Injectable({ providedIn: 'root' })
 export class TransactionsService {
   private readonly http = inject(HttpClient);
+
+  constructor() {
+    // What changed may affect what waits for review, and the list kept for the way back shows
+    // transactions and their shares.
+    const invalidation = inject(Invalidation);
+    invalidation.onRead('listed', () => (this.listed = null));
+    invalidation.onRead('review', () => this.refreshReviewCount());
+  }
 
   /** Set by the list page; read when the owner comes back to it with the browser's back button. */
   listed: ListedTransactions | null = null;
@@ -81,85 +83,9 @@ export class TransactionsService {
       });
   }
 
-  /**
-   * Every mutation ends here: what changed may affect what waits for review, so the count is
-   * fetched again, and the list kept for the way back is dropped, or replaced by `keep` when the
-   * caller has already brought it up to date.
-   */
-  private changed(keep: ListedTransactions | null = null): void {
-    this.listed = keep;
-    this.refreshReviewCount();
-  }
-
-  /** Adds a manual transaction. The list kept for the way back is dropped: it has a new row. */
-  addManual(request: ManualTransactionRequest): Observable<Transaction> {
-    return this.http
-      .post<Transaction>('/api/transactions', request)
-      .pipe(tap(() => this.changed()));
-  }
-
-  /** Replaces what the owner entered for a manual transaction. */
-  editManual(id: number, request: ManualTransactionRequest): Observable<Transaction> {
-    return this.http
-      .put<Transaction>(`/api/transactions/${id}`, request)
-      .pipe(tap(() => this.changed()));
-  }
-
-  /** Deletes a manual transaction. */
-  deleteManual(id: number): Observable<void> {
-    return this.http.delete<void>(`/api/transactions/${id}`).pipe(tap(() => this.changed()));
-  }
-
-  /**
-   * The bank transaction replaces the manual transaction it is the purchase of; the manual one
-   * is hidden from then on, so the list kept for the way back is dropped.
-   */
-  replace(request: ReplacementRequest): Observable<void> {
-    return this.http
-      .post<void>('/api/transactions/replace', request)
-      .pipe(tap(() => this.changed()));
-  }
-
-  /** Says the two are not the same purchase, so they are not suggested again. */
-  notSame(request: ReplacementRequest): Observable<void> {
-    return this.http
-      .post<void>('/api/transactions/not-same', request)
-      .pipe(tap(() => this.changed()));
-  }
-
   /** One transaction in full; errors with a 404 when it no longer exists. */
   get(id: string): Observable<TransactionDetails> {
     return this.http.get<TransactionDetails>(`/api/transactions/${encodeURIComponent(id)}`);
-  }
-
-  /**
-   * Sets the owner's chosen subcategory as confirmed, or removes it with null. The list kept for
-   * the way back is updated in place, so it keeps its pages and does not show the old category:
-   * the row itself, the similar rows that were re-guessed and the refunds that follow it. A row
-   * that no longer matches an active category filter stays until the list is next loaded afresh.
-   */
-  setCategory(id: number, subcategoryId: number | null): Observable<TransactionCategoryResponse> {
-    const body: SetTransactionCategoryRequest = { subcategoryId };
-    return this.http
-      .put<TransactionCategoryResponse>(`/api/transactions/${id}/category`, body)
-      .pipe(
-        tap(({ category, others }) => {
-          if (this.listed === null) {
-            this.changed();
-            return;
-          }
-          const categories = new Map(others.map((o) => [o.id, o.category]));
-          categories.set(id, category);
-          // Only the rows' categories change here. With a category filter active, `count` and
-          // `sum` and the rows' membership stay as loaded until the next fresh load.
-          this.changed({
-            ...this.listed,
-            transactions: this.listed.transactions.map((t) =>
-              categories.has(t.id) ? { ...t, category: categories.get(t.id)! } : t,
-            ),
-          });
-        }),
-      );
   }
 
   /** Purchases a money-in transaction could be offset against: likely ones, or those matching `search`. */
@@ -167,27 +93,5 @@ export class TransactionsService {
     return this.http.get<OffsetCandidatesResponse>(`/api/transactions/${id}/offset-candidates`, {
       params: search.trim() === '' ? {} : { q: search.trim() },
     });
-  }
-
-  /**
-   * Offsets (kvittar) a refund against a purchase, or removes the link with null. The refund's
-   * category and what waits for review change with it, so the list kept for the way back is dropped.
-   */
-  setOffset(id: number, purchaseId: number | null): Observable<TransactionDetails> {
-    const body: SetTransactionOffsetRequest = { purchaseId };
-    return this.http
-      .put<TransactionDetails>(`/api/transactions/${id}/offset`, body)
-      .pipe(tap(() => this.changed()));
-  }
-
-  /**
-   * Sets the transaction's own share, or removes it with null so the inherited one applies. The
-   * list kept for the way back shows shares, so it is dropped.
-   */
-  setShare(id: number, share: ShareOption | null): Observable<TransactionDetails> {
-    const body: SetTransactionShareRequest = { share };
-    return this.http
-      .put<TransactionDetails>(`/api/transactions/${id}/share`, body)
-      .pipe(tap(() => this.changed()));
   }
 }
