@@ -100,6 +100,7 @@ describe('the manual transaction form over its page', () => {
   function openedForm() {
     http.expectOne('/api/categories').flush(categories);
     http.expectOne('/api/subcategory-shares').flush({ shares: [] });
+    http.match('/api/household-ratio').forEach((r) => r.flush({ entries: [] }));
   }
 
   it('adds a transaction without leaving the list, which then updates', async () => {

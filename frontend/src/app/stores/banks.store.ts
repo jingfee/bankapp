@@ -1,8 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, httpResource } from '@angular/common/http';
 import {
   DestroyRef,
   Injectable,
   type Signal,
+  computed,
   effect,
   forwardRef,
   inject,
@@ -11,6 +12,8 @@ import {
 } from '@angular/core';
 import type {
   AccountsResponse,
+  Bank,
+  BanksResponse,
   StartConnectionRequest,
   StartConnectionResponse,
   StartSyncResponse,
@@ -18,6 +21,7 @@ import type {
 import { type Observable, map, tap } from 'rxjs';
 import { AccountsStore } from './accounts.store';
 import { Invalidation } from './invalidation';
+import { keptValue } from './kept';
 
 /** How often the accounts are asked for again while a sync is running. */
 export const SYNC_POLL_INTERVAL_MS = 2000;
@@ -41,6 +45,17 @@ export abstract class BanksStore {
   abstract readonly lastFailed: Signal<boolean>;
   /** How many connections are expiring or expired. */
   abstract readonly expiringCount: Signal<number>;
+
+  /** The banks that can be connected; undefined until they have been fetched. */
+  abstract readonly available: Signal<Bank[] | undefined>;
+  /** True while the list of banks is being fetched for the first time. */
+  abstract readonly availableLoading: Signal<boolean>;
+  /** True when the list of banks could not be fetched and there is nothing older to show. */
+  abstract readonly availableFailed: Signal<boolean>;
+  /** Starts fetching the list of banks, for as long as a page shows it; every call needs its own `deactivateAvailable`. */
+  abstract activateAvailable(): void;
+  /** Stops fetching the list of banks and forgets it. */
+  abstract deactivateAvailable(): void;
 
   abstract report(status: { lastSyncedAt: string | null; failed: boolean; expiring: number }): void;
   /** Starts following the accounts once the owner is logged in. */
@@ -90,6 +105,20 @@ export class HttpBanksStore extends BanksStore {
   readonly lastFailed = this.failed.asReadonly();
   readonly expiringCount = this.expiring.asReadonly();
 
+  private readonly availableUsers = signal(0);
+  private readonly availableActive = computed(() => this.availableUsers() > 0);
+  private readonly availableResource = httpResource<BanksResponse>(() =>
+    this.availableActive() ? '/api/banks' : undefined,
+  );
+  private readonly availableResponse = keptValue(this.availableResource, this.availableActive);
+  readonly available = computed(() => this.availableResponse()?.banks);
+  readonly availableLoading = computed(
+    () => this.availableResource.isLoading() && this.availableResponse() === undefined,
+  );
+  readonly availableFailed = computed(
+    () => this.availableResource.status() === 'error' && this.availableResponse() === undefined,
+  );
+
   private syncRunning = false;
   /** Polls left to wait for a sync the owner started to show up as running. */
   private awaitingStart = 0;
@@ -98,10 +127,19 @@ export class HttpBanksStore extends BanksStore {
   constructor() {
     super();
     inject(DestroyRef).onDestroy(() => clearTimeout(this.pollTimer));
+    this.invalidation.onRead('banks', () => this.availableResource.reload());
     effect(() => {
       const result = this.accounts.accounts();
       if (result) untracked(() => this.reportAccounts(result));
     });
+  }
+
+  activateAvailable(): void {
+    this.availableUsers.update((n) => n + 1);
+  }
+
+  deactivateAvailable(): void {
+    this.availableUsers.update((n) => Math.max(0, n - 1));
   }
 
   report(status: { lastSyncedAt: string | null; failed: boolean; expiring: number }): void {

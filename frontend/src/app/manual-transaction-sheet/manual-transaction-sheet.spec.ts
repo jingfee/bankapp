@@ -1,8 +1,13 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { CategoriesResponse, Transaction, TransactionDetails } from '@bankapp/shared';
+import { of } from 'rxjs';
+import { CategoriesService } from '../categories.service';
+import { FakeSharesStore } from '../stores/shares.store.fake';
+import { FakeTransactionsStore } from '../stores/transactions.store.fake';
+import { SharesStore } from '../stores/shares.store';
+import { TransactionsStore } from '../stores/transactions.store';
 import { ManualTransactionSheet } from './manual-transaction-sheet';
 
 const categories = {
@@ -47,9 +52,25 @@ class Host {
 }
 
 describe('ManualTransactionSheet', () => {
+  let transactionsStore: FakeTransactionsStore;
+  let sharesStore: FakeSharesStore;
+
+  beforeEach(() => {
+    transactionsStore = new FakeTransactionsStore();
+    sharesStore = new FakeSharesStore();
+    sharesStore.subcategoryShares.set([{ subcategoryId: 11, share: 'half' }]);
+  });
+
+  /** What the fake transactions store was asked to do, by method. */
+  const called = (method: string) => transactionsStore.calls.filter((c) => c.method === method);
+
   async function render(id: string | null = null, focusOpener = true) {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        { provide: TransactionsStore, useValue: transactionsStore },
+        { provide: SharesStore, useValue: sharesStore },
+        { provide: CategoriesService, useValue: { list: () => of(categories.categories) } },
+      ],
     });
     const fixture = TestBed.createComponent(Host);
     fixture.componentInstance.id.set(id);
@@ -57,27 +78,16 @@ describe('ManualTransactionSheet', () => {
     document.body.append(fixture.nativeElement);
     if (focusOpener) opener.focus();
     fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/categories').flush(categories);
-    http
-      .expectOne('/api/subcategory-shares')
-      .flush({ shares: [{ subcategoryId: 11, share: 'half' }] });
     await fixture.whenStable();
     return {
       fixture,
       host: fixture.componentInstance,
       page: document.body,
-      http,
       opener,
     };
   }
 
   afterEach(() => {
-    // A saved transaction makes the service fetch the review count again.
-    TestBed.inject(HttpTestingController)
-      .match('/api/transactions/review/count')
-      .forEach((r) => (r.cancelled ? undefined : r.flush({ count: 0 })));
-    TestBed.inject(HttpTestingController).verify();
     document.body.replaceChildren();
   });
 
@@ -92,7 +102,8 @@ describe('ManualTransactionSheet', () => {
   }
 
   it('adds an expense as a negative amount, dated today and inheriting the subcategory share', async () => {
-    const { fixture, host, page, http } = await render();
+    transactionsStore.responses['addManual'] = { id: 9 };
+    const { fixture, host, page } = await render();
     expect(page.querySelector('[data-date] [data-date-text]')!.textContent!.trim()).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
@@ -107,31 +118,30 @@ describe('ManualTransactionSheet', () => {
     expect(page.querySelector('[data-share="half"]')?.getAttribute('aria-pressed')).toBe('true');
     click(page, '[data-save]');
 
-    const request = http.expectOne('/api/transactions');
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toMatchObject({
+    expect(called('addManual')).toHaveLength(1);
+    expect(called('addManual')[0]!.args[0]).toMatchObject({
       description: 'ICA Maxi',
       amount: -300.5,
       subcategoryId: 11,
       share: null,
       paidBy: 'owner',
     });
-    request.flush({ id: 9 });
     expect(host.saved).toEqual([{ id: 9 }]);
   });
 
   it('shows the validation message until amount, description and subcategory are filled in', async () => {
-    const { fixture, page, http } = await render();
+    const { fixture, page } = await render();
     click(page, '[data-save]');
     await fixture.whenStable();
     expect(page.querySelector('[role="alert"]')?.textContent).toContain(
       'Fyll i belopp, beskrivning och underkategori.',
     );
-    http.expectNone('/api/transactions');
+    expect(called('addManual')).toEqual([]);
   });
 
   it('adds income as a positive amount from the income category, paid by the partner', async () => {
-    const { fixture, page, http } = await render();
+    transactionsStore.responses['addManual'] = { id: 9 };
+    const { fixture, page } = await render();
     expect(page.querySelector('[data-category-tile="2"]')).toBeNull();
     click(page, '[data-kind="in"]');
     await fixture.whenStable();
@@ -145,19 +155,16 @@ describe('ManualTransactionSheet', () => {
     click(page, '[data-paid-by="partner"]');
     await fixture.whenStable();
     click(page, '[data-save]');
-    const request = http.expectOne('/api/transactions');
-    expect(request.request.body).toMatchObject({
+    expect(called('addManual')[0]!.args[0]).toMatchObject({
       amount: 100,
       subcategoryId: 21,
       share: 'partner',
       paidBy: 'partner',
     });
-    request.flush({ id: 9 });
   });
 
   it('edits a manual transaction, starting from what it has', async () => {
-    const { fixture, host, page, http } = await render('5');
-    http.expectOne('/api/transactions/5').flush({
+    transactionsStore.responses['get'] = {
       id: 5,
       description: 'ICA Maxi',
       amount: { amount: -300.5, currency: 'SEK' },
@@ -166,8 +173,9 @@ describe('ManualTransactionSheet', () => {
       category: { subcategory: { id: 11 }, category: { id: 1 }, confirmed: true },
       share: { option: 'partner', percent: 100, source: 'transaction' },
       paidBy: 'partner',
-    } as unknown as TransactionDetails);
-    await fixture.whenStable();
+    } as unknown as TransactionDetails;
+    transactionsStore.responses['editManual'] = { id: 5 };
+    const { host, page } = await render('5');
 
     expect((page.querySelector('[data-description]') as HTMLInputElement).value).toBe('ICA Maxi');
     expect((page.querySelector('[data-amount]') as HTMLInputElement).value).toBe('300,5');
@@ -177,15 +185,14 @@ describe('ManualTransactionSheet', () => {
     fill(page, '[data-amount]', '350');
     click(page, '[data-save]');
 
-    const request = http.expectOne('/api/transactions/5');
-    expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toMatchObject({
+    expect(called('get')[0]!.args).toEqual(['5']);
+    expect(called('editManual')[0]!.args[0]).toBe(5);
+    expect(called('editManual')[0]!.args[1]).toMatchObject({
       amount: -350,
       subcategoryId: 11,
       share: 'partner',
       paidBy: 'partner',
     });
-    request.flush({ id: 5 });
     expect(host.saved.length).toBe(1);
   });
 
@@ -200,13 +207,26 @@ describe('ManualTransactionSheet', () => {
     expect(save.disabled).toBe(false);
   });
 
+  it('shows nothing to save when the transaction cannot be found', async () => {
+    transactionsStore.failures['get'] = new HttpErrorResponse({ status: 404 });
+    const { page } = await render('5');
+    expect(page.querySelector('[data-save]')).toBeNull();
+  });
+
+  it('shows the shares for as long as the sheet is open', async () => {
+    const { fixture, host } = await render();
+    expect(sharesStore.calls.map((c) => c.method)).toEqual(['activate']);
+    host.open.set(false);
+    fixture.detectChanges();
+    expect(sharesStore.calls.map((c) => c.method)).toEqual(['activate', 'deactivate']);
+  });
+
   it('does not edit a bank transaction', async () => {
-    const { fixture, page, http } = await render('5');
-    http.expectOne('/api/transactions/5').flush({
+    transactionsStore.responses['get'] = {
       id: 5,
       account: { id: 1, name: 'x', bank: 'y', type: 'payment' },
-    } as unknown as TransactionDetails);
-    await fixture.whenStable();
+    } as unknown as TransactionDetails;
+    const { page } = await render('5');
     expect(page.querySelector('[data-save]')).toBeNull();
   });
 

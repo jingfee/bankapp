@@ -1,6 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import type { AccountsResponse } from '@bankapp/shared';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -22,12 +21,14 @@ import { FakeSettlementStore } from './stores/settlement.store.fake';
 import { SharesStore } from './stores/shares.store';
 import { FakeSharesStore } from './stores/shares.store.fake';
 import { BanksStore } from './stores/banks.store';
+import { FakeBanksStore } from './stores/banks.store.fake';
 import { TransactionsStore } from './stores/transactions.store';
 import { FakeTransactionsStore } from './stores/transactions.store.fake';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
   let accounts: FakeAccountsStore;
+  let banks: FakeBanksStore;
   const signedIn = { check: () => of(true), logout: () => of(undefined) };
 
   let overview: FakeOverviewStore;
@@ -35,6 +36,7 @@ describe('App', () => {
 
   beforeEach(() => {
     accounts = new FakeAccountsStore();
+    banks = new FakeBanksStore();
     overview = new FakeOverviewStore();
     transactions = new FakeTransactionsStore();
     TestBed.configureTestingModule({
@@ -43,6 +45,7 @@ describe('App', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AccountsStore, useValue: accounts },
+        { provide: BanksStore, useValue: banks },
         { provide: MortgageStore, useValue: new FakeMortgageStore() },
         { provide: OverviewStore, useValue: overview },
         { provide: SavingsStore, useValue: new FakeSavingsStore() },
@@ -289,18 +292,8 @@ describe('App', () => {
       const http = TestBed.inject(HttpTestingController);
       await navigate(fixture, '/');
 
-      expect(accounts.calls).toContainEqual({ method: 'activate', args: [] });
-      accounts.accounts.set({
-        syncing: null,
-        lastSync: null,
-        removedBanks: [],
-        banks: [
-          {
-            status: 'expired',
-            accounts: [{ lastSyncedAt: new Date().toISOString() }],
-          },
-        ],
-      } as unknown as AccountsResponse);
+      expect(banks.calls).toContainEqual({ method: 'loadOnce', args: [] });
+      banks.report({ lastSyncedAt: new Date().toISOString(), failed: false, expiring: 1 });
       await fixture.whenStable();
 
       expect(html(fixture).querySelector('aside [data-sync-line]')?.textContent).toMatch(
