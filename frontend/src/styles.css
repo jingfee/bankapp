@@ -615,6 +615,46 @@
   .nav-link.active .nav-icon {
     color: var(--color-accent);
   }
+  /* The sidebar (not the Mer sheet) marks the active row with an accent edge. */
+  aside .nav-link.active::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--color-accent);
+  }
+  .rail-link {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 0;
+    color: var(--color-muted);
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .rail-pill {
+    display: grid;
+    place-content: center;
+    width: 48px;
+    height: 32px;
+    border-radius: 16px;
+    transition: background-color 0.15s ease;
+  }
+  .rail-link.active {
+    color: var(--color-ink);
+  }
+  .rail-link.active .rail-pill {
+    background: var(--color-surface-3);
+  }
+  .rail-link.active .nav-icon {
+    color: var(--color-accent);
+  }
   .nav-badge {
     display: inline-flex;
     align-items: center;
