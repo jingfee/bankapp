@@ -55,9 +55,9 @@ import {
           <ng-content select="[page-actions]" />
         </div>
         @if (subtitle(); as text) {
-          <p data-page-subtitle class="text-muted max-sm:-mt-3">{{ text }}</p>
+          <p data-page-subtitle class="text-muted max-sm:-mt-5">{{ text }}</p>
         }
-        <ng-content select="[page-subtitle]" />
+        <div class="contents max-sm:[&>*]:-mt-5"><ng-content select="[page-subtitle]" /></div>
       </header>
       <ng-content />
     </main>

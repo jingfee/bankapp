@@ -382,6 +382,22 @@ describe('TransactionsPage', () => {
       expect(pills.classList.contains('shrink-0')).toBe(true);
     });
 
+    it('lets the pill group move under the account on phones, with no separator to strand', async () => {
+      const { page } = await render(
+        response([
+          guessed({
+            status: 'pending',
+            share: { option: 'half', percent: 50, source: 'transaction' },
+          }),
+        ]),
+      );
+
+      const pills = page.querySelector('[data-pills]') as HTMLElement;
+      const line = pills.parentElement as HTMLElement;
+      expect(line.classList.contains('flex-wrap')).toBe(true);
+      expect(line.textContent).not.toContain('·');
+    });
+
     it('makes a pending transaction recognisable: light-blue amount, dashed ring and pill', async () => {
       const { page } = await render(
         response([
