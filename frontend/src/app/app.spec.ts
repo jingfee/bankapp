@@ -11,6 +11,8 @@ import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
 import { AccountsStore } from './stores/accounts.store';
 import { FakeAccountsStore } from './stores/accounts.store.fake';
+import { OverviewStore } from './stores/overview.store';
+import { FakeOverviewStore } from './stores/overview.store.fake';
 import { SettlementStore } from './stores/settlement.store';
 import { FakeSettlementStore } from './stores/settlement.store.fake';
 import { SharesStore } from './stores/shares.store';
@@ -22,14 +24,18 @@ describe('App', () => {
   let accounts: FakeAccountsStore;
   const signedIn = { check: () => of(true), logout: () => of(undefined) };
 
+  let overview: FakeOverviewStore;
+
   beforeEach(() => {
     accounts = new FakeAccountsStore();
+    overview = new FakeOverviewStore();
     TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AccountsStore, useValue: accounts },
+        { provide: OverviewStore, useValue: overview },
         { provide: SettlementStore, useValue: new FakeSettlementStore() },
         { provide: SharesStore, useValue: new FakeSharesStore() },
         provideRouter(routes),
@@ -405,7 +411,7 @@ describe('App', () => {
     const title = TestBed.inject(Title);
 
     await harness.navigateByUrl('/');
-    expect(http.match((r) => r.url === '/api/overview').length).toBeGreaterThan(0);
+    expect(overview.requested.overview.length).toBeGreaterThan(0);
     expect(title.getTitle()).toBe('Bankapp');
     http.match(() => true);
 

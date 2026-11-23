@@ -6,8 +6,7 @@ import {
 } from '../../chart-card/chart-card';
 import { shortDate } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CATEGORY_PALETTE,
@@ -17,23 +16,21 @@ import {
   type OverviewResponse,
   type OverviewTotals,
   type OverviewView,
-  type Transaction,
 } from '@bankapp/shared';
-import { type Subscription, catchError, of } from 'rxjs';
-import { AccountsService } from '../../accounts.service';
 import { dayOf, monthOf, shiftMonth } from '../../dates';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
-import { OverviewService } from '../../overview.service';
-import { SettlementService } from '../../settlement.service';
+import { AccountsStore } from '../../stores/accounts.store';
+import { BanksStore } from '../../stores/banks.store';
+import { OverviewStore } from '../../stores/overview.store';
+import { SettlementStore } from '../../stores/settlement.store';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 
-type Status = 'loading' | 'ready' | 'failed';
 type TotalKind = keyof OverviewTotals;
 
 interface Bar<T> {
@@ -55,8 +52,6 @@ const ACCOUNT_TYPES: Record<AccountType, string> = {
   savings: 'Sparkonto',
   card: 'Kortkonto',
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The donut: radius and circumference of its ring, in the SVG's own units. */
 const RADIUS = 48;
@@ -509,22 +504,14 @@ function bars<T extends { id: number; name: string; total: number }>(
   `,
 })
 export class OverviewPage {
-  private readonly service = inject(OverviewService);
-  /** Fetched once; the strip is a convenience, so a failure just leaves it out. */
-  private readonly accounts = toSignal(
-    inject(AccountsService)
-      .list()
-      .pipe(catchError(() => of(undefined))),
-    { initialValue: undefined },
-  );
+  private readonly overviewStore = inject(OverviewStore);
+  private readonly banks = inject(BanksStore);
+  /** Followed by `BanksStore` from login on; the strip is a convenience, so a failure leaves it out. */
+  private readonly accounts = inject(AccountsStore).accounts;
 
-  /** Fetched once; the card is a convenience, so a failure just leaves it out. */
-  private readonly settlement = toSignal(
-    inject(SettlementService)
-      .get()
-      .pipe(catchError(() => of(undefined))),
-    { initialValue: undefined },
-  );
+  private readonly settlementStore = inject(SettlementStore);
+  /** The card is a convenience, so a failure just leaves it out. */
+  private readonly settlement = this.settlementStore.settlement;
 
   /** Each open account with its bank. */
   protected readonly accountRows = computed<AccountRow[] | null>(() => {
@@ -541,7 +528,7 @@ export class OverviewPage {
     const group = lapsed.find((g) => g.status === 'expired') ?? lapsed[0];
     if (!group) return null;
     if (group.status === 'expired') return `Kopplingen till ${group.bank} har gått ut.`;
-    const days = Math.max(1, Math.ceil((Date.parse(group.validUntil) - Date.now()) / DAY_MS));
+    const days = this.banks.daysLeft(group.validUntil);
     return `Kopplingen till ${group.bank} går ut om ${days === 1 ? '1 dag' : `${days} dagar`}.`;
   });
 
@@ -550,15 +537,27 @@ export class OverviewPage {
   protected readonly views = VIEWS;
   /** Min andel by default; remembered per device. */
   protected readonly view = signal<OverviewView>(storedView());
-  protected readonly status = signal<Status>('loading');
-  protected readonly overview = signal<OverviewResponse | null>(null);
+  private readonly overviewRead = this.overviewStore.overview(
+    computed(() => ({ month: this.month(), view: this.view() })),
+  );
+  protected readonly status = computed<'loading' | 'ready' | 'failed'>(() =>
+    this.overviewRead.loading() ? 'loading' : this.overviewRead.failed() ? 'failed' : 'ready',
+  );
+  protected readonly overview = computed<OverviewResponse | null>(
+    () => this.overviewRead.value() ?? null,
+  );
   protected readonly openCategory = signal<number | null>(null);
   protected readonly openSubcategory = signal<number | null>(null);
-  protected readonly subStatus = signal<Status>('loading');
-  protected readonly subTransactions = signal<Transaction[]>([]);
-
-  private overviewRequest: Subscription | undefined;
-  private subRequest: Subscription | undefined;
+  private readonly subRead = this.overviewStore.subcategoryTransactions(
+    computed(() => {
+      const subcategoryId = this.openSubcategory();
+      return subcategoryId === null ? undefined : { month: this.month(), subcategoryId };
+    }),
+  );
+  protected readonly subStatus = computed<'loading' | 'ready' | 'failed'>(() =>
+    this.subRead.loading() ? 'loading' : this.subRead.failed() ? 'failed' : 'ready',
+  );
+  protected readonly subTransactions = computed(() => this.subRead.value()?.transactions ?? []);
 
   protected readonly canGoForward = computed(() => this.month() < this.currentMonth);
 
@@ -800,7 +799,8 @@ export class OverviewPage {
   }
 
   constructor() {
-    this.load();
+    this.settlementStore.activate();
+    inject(DestroyRef).onDestroy(() => this.settlementStore.deactivate());
   }
 
   /** A category's subcategories as bars, sharing out the category's own total. */
@@ -816,14 +816,14 @@ export class OverviewPage {
     } catch {
       // Not remembered, but the choice still applies to this visit.
     }
-    this.load();
+    this.reset();
   }
 
   protected go(by: number): void {
     const next = shiftMonth(this.month(), by);
     if (next > this.currentMonth) return;
     this.month.set(next);
-    this.load();
+    this.reset();
   }
 
   protected toggleCategory(id: number): void {
@@ -836,36 +836,18 @@ export class OverviewPage {
       this.closeSubcategory();
       return;
     }
-    this.subRequest?.unsubscribe();
     this.openSubcategory.set(id);
-    this.subStatus.set('loading');
-    this.subRequest = this.service.transactions(this.month(), id).subscribe({
-      next: (response) => {
-        this.subTransactions.set(response.transactions);
-        this.subStatus.set('ready');
-      },
-      error: () => this.subStatus.set('failed'),
-    });
   }
 
   private closeSubcategory(): void {
-    this.subRequest?.unsubscribe();
     this.openSubcategory.set(null);
   }
 
-  private load(): void {
-    this.overviewRequest?.unsubscribe();
+  /** What was open or hovered belongs to the month and view that were showing. */
+  private reset(): void {
     this.closeSubcategory();
     this.openCategory.set(null);
     this.hoveredDay.set(null);
-    this.status.set('loading');
-    this.overviewRequest = this.service.get(this.month(), this.view()).subscribe({
-      next: (overview) => {
-        this.overview.set(overview);
-        this.status.set('ready');
-      },
-      error: () => this.status.set('failed'),
-    });
   }
 
   private changeText(change: number): string {
