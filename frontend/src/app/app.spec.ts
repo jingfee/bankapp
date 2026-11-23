@@ -11,6 +11,8 @@ import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
 import { AccountsStore } from './stores/accounts.store';
 import { FakeAccountsStore } from './stores/accounts.store.fake';
+import { MortgageStore } from './stores/mortgage.store';
+import { FakeMortgageStore } from './stores/mortgage.store.fake';
 import { OverviewStore } from './stores/overview.store';
 import { FakeOverviewStore } from './stores/overview.store.fake';
 import { SettlementStore } from './stores/settlement.store';
@@ -39,6 +41,7 @@ describe('App', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AccountsStore, useValue: accounts },
+        { provide: MortgageStore, useValue: new FakeMortgageStore() },
         { provide: OverviewStore, useValue: overview },
         { provide: SettlementStore, useValue: new FakeSettlementStore() },
         { provide: SharesStore, useValue: new FakeSharesStore() },
