@@ -135,11 +135,11 @@ const PART_COLOURS = [
       @if (chartMonths().length > 0) {
         <section class="card p-4 sm:p-5" data-chart-card>
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 class="font-display text-lg font-semibold">
+            <h2 class="w-full font-display sm:w-auto text-lg font-semibold">
               {{ mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt' }}
             </h2>
             <div class="flex flex-wrap gap-2">
-              <div class="flex gap-1" role="group" aria-label="Diagram">
+              <div class="flex flex-wrap gap-1" role="group" aria-label="Diagram">
                 <button
                   type="button"
                   data-mode="debt"
@@ -159,7 +159,7 @@ const PART_COLOURS = [
                   Beräknat vs Betalt
                 </button>
               </div>
-              <div class="flex gap-1" role="group" aria-label="Period">
+              <div class="flex flex-wrap gap-1" role="group" aria-label="Period">
                 @for (option of ranges; track option.id) {
                   <button
                     type="button"

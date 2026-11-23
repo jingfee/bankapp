@@ -81,8 +81,8 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
       } @else if ('failed' in result) {
         <p role="alert">Det delade kunde inte hämtas. Försök igen senare.</p>
       } @else {
-        <div class="grid items-start gap-4 lg:grid-cols-2">
-          <div class="flex flex-col gap-4">
+        <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
+          <div class="flex min-w-0 flex-col gap-4">
             <section data-balance-card class="card glow-violet flex flex-col gap-4 p-6">
               <h2 class="text-sm font-medium text-muted">Avräkningssaldo</h2>
               @if (settlement().balance === null) {
@@ -396,7 +396,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
             }
           </div>
 
-          <div class="flex flex-col gap-4">
+          <div class="flex min-w-0 flex-col gap-4">
             <section data-ratio-card class="card flex flex-col gap-4 p-6">
               <h2 class="text-sm font-medium text-muted">Hushållsandel</h2>
               @if (current()) {
@@ -512,9 +512,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
 
             <section data-shared-card class="card flex flex-col gap-4 p-6">
               <div class="flex items-center justify-between gap-3">
-                <h2 class="whitespace-nowrap text-sm font-medium text-muted">
-                  Delade underkategorier
-                </h2>
+                <h2 class="min-w-0 text-sm font-medium text-muted">Delade underkategorier</h2>
                 <button
                   type="button"
                   data-add-shared

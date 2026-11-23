@@ -173,7 +173,7 @@ function bars<T extends { id: number; name: string; total: number }>(
     </ng-template>
 
     <main class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:py-10">
-      <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-1">
           <button
             type="button"
@@ -186,7 +186,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           </button>
           <h1
             data-month
-            class="min-w-44 text-center text-2xl font-semibold tracking-tight capitalize sm:text-3xl"
+            class="text-center text-2xl font-semibold tracking-tight whitespace-nowrap capitalize sm:text-3xl"
           >
             {{ monthTitle() }}
           </h1>
@@ -291,17 +291,17 @@ function bars<T extends { id: number; name: string; total: number }>(
             }
 
             <div
-              class="grid gap-4 sm:gap-5 xl:items-start"
+              class="grid grid-cols-[minmax(0,1fr)] gap-4 sm:gap-5 xl:items-start"
               [class.xl:grid-cols-[minmax(0,1fr)_320px]]="accountRows()"
             >
               <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
                 @if (chart(); as c) {
-                  <section data-spending-chart class="card p-4 sm:p-5">
+                  <section data-spending-chart class="card min-w-0 p-4 sm:p-5">
                     <h2 class="mb-1 text-lg font-semibold">Utgifter jämfört med förra månaden</h2>
                     <p data-spending-chart-summary class="mb-4 text-sm text-muted">
                       {{ c.summary }}
                     </p>
-                    <div class="flex gap-2">
+                    <div class="flex min-w-0 gap-2">
                       <div class="relative h-36 w-14 shrink-0" aria-hidden="true">
                         @for (tick of c.yTicks; track tick.pct) {
                           <span

@@ -54,6 +54,10 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 @Component({
   selector: 'app-banker-page',
   imports: [RouterLink, DateTimePipe, MoneyPipe],
+  host: {
+    '(document:keydown.escape)': 'menuOpen.set(null)',
+    '(document:click)': 'closeMenuOnOutsideClick($event)',
+  },
   template: `
     <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
       @let result = loaded();
@@ -171,26 +175,69 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     {{ accountCountText(group.accounts.length) }}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  data-renew
-                  class="btn btn-sm"
-                  [class.btn-secondary]="group.status === 'active'"
-                  [class.btn-primary]="group.status !== 'active'"
-                  [disabled]="renewing()"
-                  (click)="renew(group.bank, group.status === 'active')"
-                >
-                  Förnya
-                </button>
-                <button
-                  type="button"
-                  data-remove-bank
-                  class="btn btn-sm btn-secondary"
-                  [disabled]="removing()"
-                  (click)="removeBank(group)"
-                >
-                  Ta bort bank
-                </button>
+                @if (group.status !== 'active') {
+                  <button
+                    type="button"
+                    data-renew
+                    class="btn btn-sm btn-primary flex-none"
+                    [disabled]="renewing()"
+                    (click)="renew(group.bank, false)"
+                  >
+                    Förnya
+                  </button>
+                }
+                <div class="relative flex-none" data-bank-menu-wrap>
+                  <button
+                    type="button"
+                    data-bank-menu
+                    class="btn btn-sm btn-secondary"
+                    aria-haspopup="menu"
+                    [attr.aria-expanded]="menuOpen() === group.bank"
+                    [attr.aria-label]="'Fler val för ' + group.bank"
+                    (click)="toggleMenu(group.bank)"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <circle cx="5" cy="12" r="1.8" />
+                      <circle cx="12" cy="12" r="1.8" />
+                      <circle cx="19" cy="12" r="1.8" />
+                    </svg>
+                  </button>
+                  @if (menuOpen() === group.bank) {
+                    <div
+                      role="menu"
+                      class="card absolute right-0 top-full z-20 mt-1 flex min-w-40 flex-col p-1 shadow-lg"
+                    >
+                      @if (group.status === 'active') {
+                        <button
+                          type="button"
+                          role="menuitem"
+                          data-renew
+                          class="rounded-lg px-3 py-2 text-left text-sm hover:bg-accent/10"
+                          [disabled]="renewing()"
+                          (click)="menuOpen.set(null); renew(group.bank, true)"
+                        >
+                          Förnya
+                        </button>
+                      }
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-remove-bank
+                        class="rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-accent/10"
+                        [disabled]="removing()"
+                        (click)="menuOpen.set(null); removeBank(group)"
+                      >
+                        Ta bort bank
+                      </button>
+                    </div>
+                  }
+                </div>
               </div>
 
               <div data-validity [attr.data-status]="group.status">
@@ -475,6 +522,7 @@ export class BankerPage {
   private readonly sync = inject(SyncService);
   private readonly connections = inject(ConnectionsService);
   private readonly redirector = inject(Redirector);
+  protected readonly menuOpen = signal<string | null>(null);
   protected readonly renewing = signal(false);
   protected readonly renewFailed = signal(false);
   protected readonly removing = signal(false);
@@ -600,6 +648,16 @@ export class BankerPage {
 
   protected shareLabel(option: ShareOption): string {
     return SHARE_LABELS[option];
+  }
+
+  protected closeMenuOnOutsideClick(event: Event): void {
+    if (this.menuOpen() === null) return;
+    const target = event.target as Element | null;
+    if (!target?.closest('[data-bank-menu-wrap]')) this.menuOpen.set(null);
+  }
+
+  protected toggleMenu(bank: string): void {
+    this.menuOpen.update((open) => (open === bank ? null : bank));
   }
 
   /** Sends the owner to BankID to renew the bank's connection. */
