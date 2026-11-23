@@ -17,7 +17,7 @@ import { ConnectionsService } from '../../connections.service';
 import { APP_TIMEZONE, DateTimePipe } from '../../formatting/date-time.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
-import { SHARE_LABELS } from '../../share-display';
+import { ShareControl } from '../../share-control/share-control';
 import { SyncService } from '../../sync.service';
 import { SyncStatusService } from '../../sync-status.service';
 import { Page } from '../../page/page';
@@ -55,7 +55,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 @Component({
   selector: 'app-banker-page',
-  imports: [RouterLink, DateTimePipe, MoneyPipe, Page],
+  imports: [RouterLink, DateTimePipe, MoneyPipe, Page, ShareControl],
   host: {
     '(document:keydown.escape)': 'menuOpen.set(null)',
     '(document:click)': 'closeMenuOnOutsideClick($event)',
@@ -330,22 +330,15 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                       </span>
                     </div>
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <label class="flex items-center gap-2 text-sm text-muted">
+                      <span class="flex items-center gap-2 text-sm text-muted">
                         Andel
-                        <select
-                          data-share
-                          class="input h-9 w-auto text-sm text-ink"
+                        <app-share-control
+                          label="Andel"
                           [value]="account.share"
                           [disabled]="savingShare()"
-                          (change)="setShare(account, $event)"
-                        >
-                          @for (option of shareOptions; track option) {
-                            <option [value]="option" [selected]="option === account.share">
-                              {{ shareLabel(option) }}
-                            </option>
-                          }
-                        </select>
-                      </label>
+                          (changed)="setShare(account, $event)"
+                        />
+                      </span>
                       <div class="flex items-center gap-2">
                         <button
                           type="button"
@@ -665,11 +658,11 @@ export class BankerPage {
   }
 
   /** Saves the share chosen for an account, then fetches the accounts again. */
-  protected setShare(account: ConnectedAccount, event: Event): void {
-    const select = event.target as HTMLSelectElement;
+  protected setShare(account: ConnectedAccount, option: ShareOption): void {
+    if (account.share === option) return;
     this.savingShare.set(true);
     this.shareFailed.set(null);
-    this.accounts.setShare(account.id, select.value as ShareOption).subscribe({
+    this.accounts.setShare(account.id, option).subscribe({
       next: () => {
         this.savingShare.set(false);
         this.refresh.next();
@@ -681,14 +674,8 @@ export class BankerPage {
             ? 'Hushåll kan väljas först när en hushållsandel har ställts in.'
             : 'Andelen kunde inte sparas. Försök igen senare.',
         );
-        // Put the control back on what is stored.
-        select.value = account.share;
       },
     });
-  }
-
-  protected shareLabel(option: ShareOption): string {
-    return SHARE_LABELS[option];
   }
 
   protected closeMenuOnOutsideClick(event: Event): void {

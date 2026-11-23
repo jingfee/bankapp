@@ -182,14 +182,14 @@ describe('TransactionDetailsPage', () => {
     }
 
     const optionButtons = (page: HTMLElement) =>
-      Array.from(page.querySelectorAll<HTMLButtonElement>('[data-share-option]'));
+      Array.from(page.querySelectorAll<HTMLButtonElement>('button[data-share]'));
 
     it('offers the four options, marking the current one', async () => {
       const { page } = await openChoices(
         details({ share: { option: 'half', percent: 50, source: 'account' } }),
       );
 
-      expect(optionButtons(page).map((b) => [b.dataset['shareOption'], text(b)])).toEqual([
+      expect(optionButtons(page).map((b) => [b.dataset['share'], text(b)])).toEqual([
         ['me', 'Jag'],
         ['half', '50/50'],
         ['household', 'Hushåll'],
@@ -246,7 +246,7 @@ describe('TransactionDetailsPage', () => {
       const rendered = await render(details(), []);
 
       const household = optionButtons(rendered.page).find(
-        (b) => b.dataset['shareOption'] === 'household',
+        (b) => b.dataset['share'] === 'household',
       );
       expect(household?.disabled).toBe(true);
     });

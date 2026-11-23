@@ -689,12 +689,12 @@ describe('DelatPage', () => {
       );
     });
 
-    it('offers 50/50, Hushåll and Partner', async () => {
+    it('offers Jag, 50/50, Hushåll and Partner', async () => {
       const { page } = await render();
 
       expect(
         [...rows(page)[0]!.querySelectorAll('button[data-share]')].map((b) => text(b)),
-      ).toEqual(['50/50', 'Hushåll', 'Partner']);
+      ).toEqual(['Jag', '50/50', 'Hushåll', 'Partner']);
     });
 
     it('adds a subcategory at 50/50 from the picker, changes it and removes it', async () => {
@@ -725,7 +725,7 @@ describe('DelatPage', () => {
       await fixture.whenStable();
       expect(pressed(rows(page)[1]!)).toBe('household');
 
-      rows(page)[1]!.querySelector<HTMLButtonElement>('[data-remove-shared]')!.click();
+      rows(page)[1]!.querySelector<HTMLButtonElement>('[data-share=me]')!.click();
       put = http.expectOne('/api/subcategories/20/share');
       expect(put.request.body).toEqual({ share: 'me' });
       put.flush(null);

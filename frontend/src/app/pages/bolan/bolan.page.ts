@@ -147,11 +147,10 @@ const PART_COLOURS = [
               {{ mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt' }}
             </h2>
             <div class="flex flex-wrap gap-2">
-              <div class="flex flex-wrap gap-1" role="group" aria-label="Diagram">
+              <div class="segmented" role="group" aria-label="Diagram">
                 <button
                   type="button"
                   data-mode="debt"
-                  class="chip"
                   [attr.aria-pressed]="mode() === 'debt'"
                   (click)="mode.set('debt'); hovered.set(null)"
                 >
@@ -160,19 +159,17 @@ const PART_COLOURS = [
                 <button
                   type="button"
                   data-mode="paid"
-                  class="chip"
                   [attr.aria-pressed]="mode() === 'paid'"
                   (click)="mode.set('paid'); hovered.set(null)"
                 >
                   Beräknat vs Betalt
                 </button>
               </div>
-              <div class="flex flex-wrap gap-1" role="group" aria-label="Period">
+              <div class="segmented" role="group" aria-label="Period">
                 @for (option of ranges; track option.id) {
                   <button
                     type="button"
                     [attr.data-range]="option.id"
-                    class="chip"
                     [attr.aria-pressed]="range() === option.id"
                     (click)="range.set(option.id); hovered.set(null)"
                   >
