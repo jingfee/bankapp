@@ -88,12 +88,17 @@ const RESPONSE: SavingsResponse = {
 
 describe('SparandePage', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     TestBed.configureTestingModule({
       imports: [SparandePage],
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
   });
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.inject(HttpTestingController).verify();
+  });
 
   async function render(response: SavingsResponse = RESPONSE) {
     const fixture = TestBed.createComponent(SparandePage);
@@ -199,7 +204,7 @@ describe('SparandePage', () => {
     await click(toggle);
     expect(root.querySelector('[data-closed-accounts]')?.textContent).toContain('Gammal ISK');
     expect(text('[data-account-row][data-key="manual-1"] [data-account-updated]')).toContain(
-      '2026-12-01',
+      '1 dec',
     );
     expect(text('[data-account-row][data-key="manual-1"]')).toContain('Utveckling');
   });

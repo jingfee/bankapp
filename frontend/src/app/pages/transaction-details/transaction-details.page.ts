@@ -500,7 +500,7 @@ function formatOriginal({ amount, currency }: Money): string {
                 >
                   <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
                     <span class="font-medium">{{ candidate.description }}</span>
-                    <span class="text-sm text-muted">{{ candidate.date | dateShort }}</span>
+                    <span class="text-sm text-muted">{{ candidate.date | shortDate }}</span>
                   </span>
                   <span class="amount shrink-0">{{
                     candidate.amount.amount | money: candidate.amount.currency

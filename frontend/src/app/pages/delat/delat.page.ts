@@ -1,3 +1,4 @@
+import { ShortDatePipe, shortDate } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -60,6 +61,7 @@ interface SharedRow {
 @Component({
   selector: 'app-delat-page',
   imports: [
+    ShortDatePipe,
     Page,
     NgTemplateOutlet,
     RouterLink,
@@ -306,7 +308,7 @@ interface SharedRow {
                   <ul class="flex flex-col gap-1 border-t border-line pt-3 text-sm">
                     @for (payment of period.payments; track payment.transactionId) {
                       <li data-payment class="flex justify-between">
-                        <span class="text-muted">Betalt {{ payment.date }}</span>
+                        <span class="text-muted">Betalt {{ payment.date | shortDate }}</span>
                         <span class="amount">{{ payment.amount | money }}</span>
                       </li>
                     }
@@ -336,7 +338,7 @@ interface SharedRow {
                       <h2 class="card-title">
                         <span data-period-title>{{ monthName(period.month) }}</span>
                         <span class="text-sm font-normal text-muted">
-                          · avslutad, t.o.m. {{ period.closedThrough }}
+                          · avslutad, t.o.m. {{ period.closedThrough | shortDate }}
                         </span>
                       </h2>
                       <dl class="grid grid-cols-2 gap-y-1 text-sm">
@@ -349,7 +351,7 @@ interface SharedRow {
                           {{ partnerPartSum(period) | money }}
                         </dd>
                         @for (payment of period.payments; track payment.transactionId) {
-                          <dt class="text-muted">Betalt {{ payment.date }}</dt>
+                          <dt class="text-muted">Betalt {{ payment.date | shortDate }}</dt>
                           <dd data-payment class="text-right amount">
                             {{ payment.amount | money }}
                           </dd>
@@ -456,9 +458,11 @@ interface SharedRow {
                   >
                     <span class="text-sm">
                       <span class="font-medium">{{ entry.percent }}/{{ 100 - entry.percent }}</span>
-                      <span class="text-muted"> · från {{ entry.from }}</span>
+                      <span class="text-muted"> · från {{ entry.from | shortDate }}</span>
                     </span>
-                    <app-menu label="Åtgärder för hushållsandelen från {{ entry.from }}">
+                    <app-menu
+                      label="Åtgärder för hushållsandelen från {{ entry.from | shortDate }}"
+                    >
                       <button
                         appMenuItem
                         type="button"
@@ -552,7 +556,8 @@ interface SharedRow {
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm">{{ item.description }}</span>
                   <span class="text-xs text-muted">
-                    {{ item.date }} · {{ item.amount | money }} · {{ shareName(item.share) }}
+                    {{ item.date | shortDate }} · {{ item.amount | money }} ·
+                    {{ shareName(item.share) }}
                   </span>
                 </span>
                 <span
@@ -729,7 +734,7 @@ export class DelatPage {
       ...periods.flatMap((p) => p.payments.map((payment) => payment.date)),
     ];
     const date = dates.sort().at(-1);
-    return date ? ` · sedan avräkningen ${date}` : '';
+    return date ? ` · sedan avräkningen ${shortDate(date)}` : '';
   });
   protected readonly open = computed(() =>
     this.settlement().periods.find((p) => p.closedThrough === null),

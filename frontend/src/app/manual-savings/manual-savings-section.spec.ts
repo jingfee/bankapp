@@ -21,11 +21,16 @@ const ISK: ManualSavingsAccount = {
 
 describe('ManualSavingsSection', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
   });
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.inject(HttpTestingController).verify();
+  });
 
   async function render(accounts: ManualSavingsAccount[] = [ISK]) {
     const fixture = TestBed.createComponent(ManualSavingsSection);
@@ -54,7 +59,7 @@ describe('ManualSavingsSection', () => {
     expect(root.querySelector('[data-manual-name]')?.textContent).toContain('Avanza ISK');
     expect(root.querySelector('[data-growth]')).toBeNull();
     const days = Array.from(root.querySelectorAll('[data-entry-day]')).map((d) => d.textContent);
-    expect(days).toEqual(['2025-11-27', '2025-10-28']);
+    expect(days).toEqual(['27 nov 2025', '28 okt 2025']);
   });
 
   it('sends a new entry with Swedish-format amounts and leaves blank net deposits null', async () => {

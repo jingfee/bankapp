@@ -122,8 +122,8 @@ describe('BolanPage', () => {
     expect(first.querySelector('[data-part-rate]')?.textContent).toContain('3,85');
     expect(first.querySelector('[data-part-debt]')?.textContent).toContain('990');
     expect(first.querySelector('[data-part-interest]')?.textContent).toContain('3');
-    expect(first.querySelector('[data-rate-day]')?.textContent).toBe('2027-02-20');
-    expect(first.querySelector('[data-terms-day]')?.textContent).toBe('2027-03-01');
+    expect(first.querySelector('[data-rate-day]')?.textContent).toBe('20 feb 2027');
+    expect(first.querySelector('[data-terms-day]')?.textContent).toBe('1 mars 2027');
   });
 
   it('offers setup before there is a mortgage', async () => {
@@ -277,7 +277,7 @@ describe('BolanPage', () => {
       const { root } = await render(withDays('2026-11-29', '2026-12-01'));
       expect(root.querySelector('[data-rate-soon]')?.textContent).toBe('om 14 dagar');
       expect(root.querySelector('[data-terms-soon]')).toBeNull();
-      expect(root.querySelector('[data-terms-day]')?.textContent).toBe('2026-12-01');
+      expect(root.querySelector('[data-terms-day]')?.textContent).toBe('1 dec');
       expect(root.querySelector('[data-rate-day]')?.classList).toContain('text-accent');
       expect(root.querySelector('[data-terms-day]')?.classList).not.toContain('text-accent');
     });

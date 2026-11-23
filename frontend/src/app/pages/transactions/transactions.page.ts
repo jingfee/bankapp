@@ -16,6 +16,7 @@ import { AccountsService } from '../../accounts.service';
 import { CategoriesService } from '../../categories.service';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { shortDate } from '../../formatting/short-date.pipe';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
 import { Icon } from '../../icon/icon';
@@ -551,8 +552,8 @@ export class TransactionsPage {
   private periodLabel(f: TransactionFilters): string {
     if (samePeriod(this.presets.last7, f)) return 'Senaste 7 dagarna';
     if (samePeriod(this.presets.month, f)) return this.monthLabel;
-    if (f.from !== '' && f.to !== '') return `${f.from} – ${f.to}`;
-    return f.from !== '' ? `Från ${f.from}` : `Till ${f.to}`;
+    if (f.from !== '' && f.to !== '') return `${shortDate(f.from)} – ${shortDate(f.to)}`;
+    return f.from !== '' ? `Från ${shortDate(f.from)}` : `Till ${shortDate(f.to)}`;
   }
 
   private amountLabel(f: TransactionFilters): string {

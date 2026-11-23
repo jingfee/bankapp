@@ -1,3 +1,4 @@
+import { ShortDatePipe } from '../formatting/short-date.pipe';
 import { Component, computed, inject, output, signal } from '@angular/core';
 import type { BalanceEntry, ManualSavingsAccount } from '@bankapp/shared';
 import { type Observable, catchError, map, of } from 'rxjs';
@@ -16,7 +17,18 @@ import { ManualSavingsService } from '../manual-savings.service';
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
 @Component({
   selector: 'app-manual-savings-section',
-  imports: [DateField, MoneyPipe, Callout, Confirm, Empty, Icon, Menu, MenuItem, Sheet],
+  imports: [
+    ShortDatePipe,
+    DateField,
+    MoneyPipe,
+    Callout,
+    Confirm,
+    Empty,
+    Icon,
+    Menu,
+    MenuItem,
+    Sheet,
+  ],
   template: `
     <section data-manual-savings class="card flex flex-col gap-4 p-4 sm:p-5">
       <div class="flex items-center justify-between gap-3">
@@ -55,7 +67,7 @@ import { ManualSavingsService } from '../manual-savings.service';
                 <span class="text-sm text-muted">
                   {{ account.institution ?? 'Sparkonto' }}
                   @if (account.closedOn) {
-                    · <span data-closed>Avslutat {{ account.closedOn }}</span>
+                    · <span data-closed>Avslutat {{ account.closedOn | shortDate }}</span>
                   } @else if (account.balance === null) {
                     · <span>Ingen saldonotering ännu</span>
                   }
@@ -106,7 +118,7 @@ import { ManualSavingsService } from '../manual-savings.service';
                 @for (entry of account.entries; track entry.id) {
                   <li class="flex items-center justify-between gap-3 py-2" data-entry>
                     <span class="flex flex-wrap gap-x-3">
-                      <span data-entry-day>{{ entry.date }}</span>
+                      <span data-entry-day>{{ entry.date | shortDate }}</span>
                       <span class="amount">{{ entry.balance | money }}</span>
                       <span class="text-muted">
                         {{ entry.netDeposits === null ? 'Insatt –' : 'Insatt ' }}
@@ -115,7 +127,7 @@ import { ManualSavingsService } from '../manual-savings.service';
                         }
                       </span>
                     </span>
-                    <app-menu [label]="'Åtgärder för saldonoteringen ' + entry.date">
+                    <app-menu [label]="'Åtgärder för saldonoteringen ' + (entry.date | shortDate)">
                       <button
                         appMenuItem
                         type="button"
@@ -290,7 +302,11 @@ import { ManualSavingsService } from '../manual-savings.service';
       <app-confirm
         heading="Ta bort saldonoteringen?"
         [message]="
-          'Saldonoteringen ' + pending.entry.date + ' på ' + pending.account.name + ' tas bort.'
+          'Saldonoteringen ' +
+          (pending.entry.date | shortDate) +
+          ' på ' +
+          pending.account.name +
+          ' tas bort.'
         "
         confirmLabel="Ta bort"
         [busy]="busy()"
