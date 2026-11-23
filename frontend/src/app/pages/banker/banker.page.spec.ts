@@ -1,9 +1,3 @@
-import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  type TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -15,36 +9,47 @@ import type {
   SyncTrigger,
 } from '@bankapp/shared';
 import { Redirector } from '../../redirector';
-import { BankerPage, SYNC_POLL_INTERVAL_MS } from './banker.page';
+import { AccountsStore } from '../../stores/accounts.store';
+import { FakeAccountsStore } from '../../stores/accounts.store.fake';
+import { BanksStore } from '../../stores/banks.store';
+import { FakeBanksStore } from '../../stores/banks.store.fake';
+import { BankerPage } from './banker.page';
 
 describe('BankerPage', () => {
   let redirects: string[];
+  let accountsStore: FakeAccountsStore;
+  let banksStore: FakeBanksStore;
 
   beforeEach(() => {
     redirects = [];
+    accountsStore = new FakeAccountsStore();
+    banksStore = new FakeBanksStore();
     TestBed.configureTestingModule({
       imports: [BankerPage],
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
         provideRouter([]),
+        { provide: AccountsStore, useValue: accountsStore },
+        { provide: BanksStore, useValue: banksStore },
         { provide: Redirector, useValue: { goTo: (url: string) => redirects.push(url) } },
       ],
     });
   });
 
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  const stable = () => TestBed.inject(ApplicationRef).whenStable();
 
-  type Respond = (request: ReturnType<HttpTestingController['expectOne']>) => void;
-
-  /** Renders the page and answers its accounts request. */
-  async function render(respondToAccounts: Respond = noAccounts): Promise<HTMLElement> {
+  /** Renders the page with what the accounts store holds, or with its failure. */
+  async function render(accounts: AccountsResponse | 'failed' = noAccounts): Promise<HTMLElement> {
+    if (accounts === 'failed') accountsStore.failed.set(true);
+    else accountsStore.accounts.set(accounts);
     const fixture = TestBed.createComponent(BankerPage);
     await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    respondToAccounts(http.expectOne('/api/accounts'));
-    await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
+  }
+
+  /** The store has fetched the accounts again. */
+  async function fetched(accounts: AccountsResponse): Promise<void> {
+    accountsStore.accounts.set(accounts);
+    await stable();
   }
 
   const account = (name: string, type: ConnectedAccount['type'], id = 1): ConnectedAccount => ({
@@ -72,14 +77,12 @@ describe('BankerPage', () => {
     ...overrides,
   });
 
-  const failed: Respond = (request) => request.error(new ProgressEvent('error'));
-  const noAccounts: Respond = (request) =>
-    request.flush({
-      banks: [],
-      removedBanks: [],
-      syncing: null,
-      lastSync: null,
-    } satisfies AccountsResponse);
+  const noAccounts: AccountsResponse = {
+    banks: [],
+    removedBanks: [],
+    syncing: null,
+    lastSync: null,
+  };
 
   it('has an empty state with a way to connect a bank', async () => {
     const page = await render();
@@ -91,17 +94,15 @@ describe('BankerPage', () => {
   });
 
   it('lists the accounts grouped by bank with their type', async () => {
-    const page = await render((request) =>
-      request.flush({
-        banks: [
-          group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
-          group('Swedbank', [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')]),
-        ],
-        removedBanks: [],
-        syncing: null,
-        lastSync: null,
-      } satisfies AccountsResponse),
-    );
+    const page = await render({
+      banks: [
+        group('Coop Mastercard', [account('Coop Mastercard', 'card')]),
+        group('Swedbank', [account('Lönekonto', 'payment'), account('Sparkonto', 'savings')]),
+      ],
+      removedBanks: [],
+      syncing: null,
+      lastSync: null,
+    });
 
     expect(page.textContent).not.toContain('Inga banker anslutna');
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
@@ -132,14 +133,12 @@ describe('BankerPage', () => {
   });
 
   it('does not show the Servern svarar indicator or a transactions link', async () => {
-    const page = await render((request) =>
-      request.flush({
-        banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
-        removedBanks: [],
-        syncing: null,
-        lastSync: null,
-      } satisfies AccountsResponse),
-    );
+    const page = await render({
+      banks: [group('Swedbank', [account('Lönekonto', 'payment', 42)])],
+      removedBanks: [],
+      syncing: null,
+      lastSync: null,
+    });
 
     expect(page.textContent).not.toContain('Servern svarar');
     expect(page.querySelector('a[href="/transaktioner"]')).toBeNull();
@@ -158,19 +157,18 @@ describe('BankerPage', () => {
     });
 
     it('shows each balance in Swedish format and when the account was last synced', async () => {
-      const page = await render((request) =>
-        request.flush(
-          swedbank(
-            [
-              {
-                ...account('Kort', 'card'),
-                balance: { amount: -1234.5, currency: 'SEK' },
-                lastSyncedAt: '2026-11-10T12:00:00.000Z',
-              },
-              account('Lönekonto', 'payment'),
-            ],
-            null,
-          ),
+      banksStore.lastSyncedAt.set('2026-11-10T12:00:00.000Z');
+      const page = await render(
+        swedbank(
+          [
+            {
+              ...account('Kort', 'card'),
+              balance: { amount: -1234.5, currency: 'SEK' },
+              lastSyncedAt: '2026-11-10T12:00:00.000Z',
+            },
+            account('Lönekonto', 'payment'),
+          ],
+          null,
         ),
       );
 
@@ -190,70 +188,26 @@ describe('BankerPage', () => {
       );
     });
 
-    it('keeps the accounts and keeps polling when a refresh fails during a sync', async () => {
-      vi.useFakeTimers();
-      try {
-        const fixture = TestBed.createComponent(BankerPage);
-        const http = TestBed.inject(HttpTestingController);
-        await vi.advanceTimersByTimeAsync(0);
-        http
-          .expectOne('/api/accounts')
-          .flush(swedbank([account('Lönekonto', 'payment')], 'initial'));
-        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-        http.expectOne('/api/accounts').error(new ProgressEvent('error'));
-        await vi.advanceTimersByTimeAsync(0);
-        const page = fixture.nativeElement as HTMLElement;
-        expect(page.querySelector('[role=alert]')).toBeNull();
-        expect(page.textContent).toContain('Lönekonto');
-        expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
-
-        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-        http.expectOne('/api/accounts').flush(swedbank([account('Lönekonto', 'payment')], null));
-        await vi.advanceTimersByTimeAsync(0);
-        expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
     it('shows that a sync is running and updates when it has finished', async () => {
-      vi.useFakeTimers();
-      try {
-        const fixture = TestBed.createComponent(BankerPage);
-        const http = TestBed.inject(HttpTestingController);
-        await vi.advanceTimersByTimeAsync(0);
-        http
-          .expectOne('/api/accounts')
-          .flush(swedbank([account('Lönekonto', 'payment')], 'initial'));
-        await vi.advanceTimersByTimeAsync(0);
-        const page = fixture.nativeElement as HTMLElement;
-        expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
-        expect(page.querySelector('[data-sync-status] svg')?.classList).toContain('animate-spin');
+      const page = await render(swedbank([account('Lönekonto', 'payment')], 'initial'));
+      expect(page.querySelector('[data-sync-status]')?.textContent).toContain('pågår');
+      expect(page.querySelector('[data-sync-status] svg')?.classList).toContain('animate-spin');
 
-        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-        http.expectOne('/api/accounts').flush(
-          swedbank(
-            [
-              {
-                ...account('Lönekonto', 'payment'),
-                balance: { amount: 89, currency: 'SEK' },
-                lastSyncedAt: '2026-11-10T12:00:00.000Z',
-              },
-            ],
-            null,
-          ),
-        );
-        await vi.advanceTimersByTimeAsync(0);
+      await fetched(
+        swedbank(
+          [
+            {
+              ...account('Lönekonto', 'payment'),
+              balance: { amount: 89, currency: 'SEK' },
+              lastSyncedAt: '2026-11-10T12:00:00.000Z',
+            },
+          ],
+          null,
+        ),
+      );
 
-        expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
-        expect(page.querySelector('[data-balance]')?.textContent?.trim()).toBe('89,00\u00a0kr');
-
-        // Done: it stops asking.
-        await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS * 3);
-        http.expectNone('/api/accounts');
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('pågår');
+      expect(page.querySelector('[data-balance]')?.textContent?.trim()).toBe('89,00\u00a0kr');
     });
 
     it.each([
@@ -261,9 +215,7 @@ describe('BankerPage', () => {
       ['scheduled', 'Uppdaterar…'],
       ['manual', 'Uppdaterar…'],
     ] as const)('names a running %s sync', async (trigger, text) => {
-      const page = await render((request) =>
-        request.flush(swedbank([account('Lönekonto', 'payment')], trigger)),
-      );
+      const page = await render(swedbank([account('Lönekonto', 'payment')], trigger));
 
       expect(page.querySelector('[data-sync-status]')?.textContent?.trim()).toBe(text);
     });
@@ -288,40 +240,28 @@ describe('BankerPage', () => {
       lastSync,
     });
 
-    /** Renders the page showing an idle overview, with fake timers so polling can be stepped. */
+    /** Renders the page showing an idle overview. */
     async function renderIdle(accounts: AccountsResponse = swedbank(null)) {
-      vi.useFakeTimers();
-      const fixture = TestBed.createComponent(BankerPage);
-      const http = TestBed.inject(HttpTestingController);
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne('/api/accounts').flush(accounts);
-      await vi.advanceTimersByTimeAsync(0);
-      const page = fixture.nativeElement as HTMLElement;
+      const page = await render(accounts);
       const button = () => page.querySelector<HTMLButtonElement>('button[data-sync]');
-      return { page, http, button };
+      return { page, button };
     }
 
-    afterEach(() => vi.useRealTimers());
+    const syncStarts = () => banksStore.calls.filter((call) => call.method === 'startSync');
 
     it('starts a sync, shows progress and then how many transactions were new', async () => {
-      const { page, http, button } = await renderIdle();
+      const { page, button } = await renderIdle();
       expect(button()?.textContent?.trim()).toBe('Uppdatera');
 
       button()!.click();
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne('/api/accounts').flush(swedbank('manual'));
-      await vi.advanceTimersByTimeAsync(0);
+      await stable();
+      await fetched(swedbank('manual'));
 
+      expect(syncStarts()).toHaveLength(1);
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain('Uppdaterar');
       expect(button()?.disabled).toBe(true);
 
-      await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-      http
-        .expectOne('/api/accounts')
-        .flush(swedbank(null, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
-      await vi.advanceTimersByTimeAsync(0);
+      await fetched(swedbank(null, summary({ newTransactions: 3 }), '2026-11-10T12:00:00.000Z'));
 
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
         'Uppdaterad nyss · 3 nya transaktioner',
@@ -330,34 +270,56 @@ describe('BankerPage', () => {
       expect(button()?.disabled).toBe(false);
     });
 
+    it('keeps waiting while the accounts shown are from before the sync started', async () => {
+      const { page, button } = await renderIdle();
+
+      button()!.click();
+      await stable();
+
+      expect(button()?.disabled).toBe(true);
+      expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('nyss');
+    });
+
+    it('does not take the last sync for the new one', async () => {
+      const old = summary({ newTransactions: 9 });
+      const { page, button } = await renderIdle(swedbank(null, old));
+
+      button()!.click();
+      await stable();
+      await fetched(swedbank(null, old));
+      expect(button()?.disabled).toBe(true);
+      expect(page.querySelector('[data-sync-status]')?.textContent).not.toContain('nyss');
+
+      await fetched(swedbank('manual', old));
+      await fetched(swedbank(null, old));
+      expect(button()?.disabled).toBe(false);
+    });
+
     it('says so when nothing was new, and uses the singular for one', async () => {
-      const { page, http, button } = await renderIdle();
+      const { page, button } = await renderIdle();
 
       for (const [count, text] of [
         [0, 'Inga nya transaktioner'],
         [1, '1 ny transaktion'],
       ] as const) {
         button()!.click();
-        await vi.advanceTimersByTimeAsync(0);
-        http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
-        await vi.advanceTimersByTimeAsync(0);
-        http.expectOne('/api/accounts').flush(swedbank(null, summary({ newTransactions: count })));
-        await vi.advanceTimersByTimeAsync(0);
+        await stable();
+        await fetched(
+          swedbank(
+            null,
+            summary({ newTransactions: count, finishedAt: `2026-11-10T12:0${count}:00.000Z` }),
+          ),
+        );
         expect(page.querySelector('[data-sync-status]')?.textContent).toContain(text);
       }
     });
 
     it('mentions accounts the bank could not deliver', async () => {
-      const { page, http, button } = await renderIdle();
+      const { page, button } = await renderIdle();
 
       button()!.click();
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
-      await vi.advanceTimersByTimeAsync(0);
-      http
-        .expectOne('/api/accounts')
-        .flush(swedbank(null, summary({ newTransactions: 2, failedAccounts: 1 })));
-      await vi.advanceTimersByTimeAsync(0);
+      await stable();
+      await fetched(swedbank(null, summary({ newTransactions: 2, failedAccounts: 1 })));
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('1 konto kunde inte');
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
@@ -366,18 +328,12 @@ describe('BankerPage', () => {
     });
 
     it('explains a rate limit and shows when the data is from', async () => {
-      const { page, http, button } = await renderIdle(
-        swedbank(null, null, '2026-11-10T08:30:00.000Z'),
-      );
+      const { page, button } = await renderIdle(swedbank(null, null, '2026-11-10T08:30:00.000Z'));
+      banksStore.lastSyncedAt.set('2026-11-10T08:30:00.000Z');
 
       button()!.click();
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
-      await vi.advanceTimersByTimeAsync(0);
-      http
-        .expectOne('/api/accounts')
-        .flush(swedbank(null, summary({ rateLimited: true }), '2026-11-10T08:30:00.000Z'));
-      await vi.advanceTimersByTimeAsync(0);
+      await stable();
+      await fetched(swedbank(null, summary({ rateLimited: true }), '2026-11-10T08:30:00.000Z'));
 
       const alert = page.querySelector('[role=alert]')?.textContent;
       expect(alert).toContain('Banken tillåter inte fler uppdateringar just nu');
@@ -385,31 +341,21 @@ describe('BankerPage', () => {
       expect(page.querySelector('[data-balance]')).not.toBeNull();
     });
 
-    it('keeps following the sync when a poll fails', async () => {
-      const { page, http, button } = await renderIdle();
-
-      button()!.click();
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne({ method: 'POST', url: '/api/sync' }).flush({ started: true });
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne('/api/accounts').error(new ProgressEvent('error'));
-      await vi.advanceTimersByTimeAsync(SYNC_POLL_INTERVAL_MS);
-      http.expectOne('/api/accounts').flush(swedbank(null, summary({ newTransactions: 2 })));
-      await vi.advanceTimersByTimeAsync(0);
+    it('shows when the data is from, as the banks store reports it', async () => {
+      banksStore.lastSyncedAt.set('2026-11-10T12:00:00.000Z');
+      const { page } = await renderIdle();
 
       expect(page.querySelector('[data-sync-status]')?.textContent).toContain(
-        '2 nya transaktioner',
+        'Senast uppdaterad 10 nov 13:00',
       );
-      expect(button()?.disabled).toBe(false);
     });
 
     it('shows an error when the sync cannot be started', async () => {
-      const { page, http, button } = await renderIdle();
+      banksStore.failures['startSync'] = new Error('no');
+      const { page, button } = await renderIdle();
 
       button()!.click();
-      await vi.advanceTimersByTimeAsync(0);
-      http.expectOne({ method: 'POST', url: '/api/sync' }).error(new ProgressEvent('error'));
-      await vi.advanceTimersByTimeAsync(0);
+      await stable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain(
         'Uppdateringen kunde inte startas',
@@ -432,16 +378,15 @@ describe('BankerPage', () => {
   describe('connection expiry and renewal', () => {
     const DAY = 24 * 3600 * 1000;
     const inDays = (days: number) => new Date(Date.now() + days * DAY).toISOString();
-    const swedbank = (overrides: Partial<BankAccounts>) => (request: TestRequest) =>
-      request.flush({
-        banks: [group('Swedbank', [account('Lönekonto', 'payment')], overrides)],
-        removedBanks: [],
-        syncing: null,
-        lastSync: null,
-      } satisfies AccountsResponse);
+    const swedbank = (overrides: Partial<BankAccounts>): AccountsResponse => ({
+      banks: [group('Swedbank', [account('Lönekonto', 'payment')], overrides)],
+      removedBanks: [],
+      syncing: null,
+      lastSync: null,
+    });
     const renewButton = async (page: HTMLElement) => {
       page.querySelector<HTMLButtonElement>('[data-bank-menu] [data-menu-trigger]')?.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       return Array.from(page.querySelectorAll('button')).find(
         (button) => button.textContent?.trim() === 'Förnya',
       );
@@ -458,13 +403,14 @@ describe('BankerPage', () => {
     });
 
     it('lets the owner renew a connection that is still active', async () => {
+      banksStore.responses['startConnection'] = 'https://bankid.example/auth';
       const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
-      const http = TestBed.inject(HttpTestingController);
 
       (await renewButton(page))!.click();
-      const request = http.expectOne({ method: 'POST', url: '/api/connections' });
-      expect(request.request.body).toEqual({ bank: 'Swedbank', renew: true });
-      request.flush({ url: 'https://bankid.example/auth' });
+      expect(banksStore.calls).toContainEqual({
+        method: 'startConnection',
+        args: ['Swedbank', true],
+      });
 
       expect(redirects).toEqual(['https://bankid.example/auth']);
     });
@@ -501,24 +447,24 @@ describe('BankerPage', () => {
     });
 
     it('sends the owner to BankID to renew the same bank', async () => {
+      banksStore.responses['startConnection'] = 'https://bankid.example/auth';
       const page = await render(swedbank({ status: 'expired' }));
-      const http = TestBed.inject(HttpTestingController);
 
       (await renewButton(page))!.click();
-      const request = http.expectOne({ method: 'POST', url: '/api/connections' });
-      expect(request.request.body).toEqual({ bank: 'Swedbank' });
-      request.flush({ url: 'https://bankid.example/auth' });
+      expect(banksStore.calls).toContainEqual({
+        method: 'startConnection',
+        args: ['Swedbank', false],
+      });
 
       expect(redirects).toEqual(['https://bankid.example/auth']);
     });
 
     it('says so when the renewal cannot be started', async () => {
+      banksStore.failures['startConnection'] = new Error('no');
       const page = await render(swedbank({ status: 'expired' }));
-      const http = TestBed.inject(HttpTestingController);
 
       (await renewButton(page))!.click();
-      http.expectOne({ method: 'POST', url: '/api/connections' }).error(new ProgressEvent('error'));
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain(
         'Förnyelsen kunde inte startas',
@@ -542,14 +488,14 @@ describe('BankerPage', () => {
   });
 
   describe('hiding an account', () => {
-    it('hides a shown account and fetches the accounts again', async () => {
+    it('hides a shown account and shows it hidden when the accounts follow', async () => {
       const response = (hidden: boolean): AccountsResponse => ({
         banks: [group('Swedbank', [{ ...account('Lönekonto', 'payment', 7), hidden }])],
         removedBanks: [],
         syncing: null,
         lastSync: null,
       });
-      const page = await render((request) => request.flush(response(false)));
+      const page = await render(response(false));
       const toggle = page.querySelector<HTMLInputElement>('[data-toggle-hidden]');
       expect(toggle?.getAttribute('role')).toBe('switch');
       expect(toggle?.classList).toContain('switch');
@@ -557,14 +503,8 @@ describe('BankerPage', () => {
       expect(page.querySelector('[data-hidden-row]')).toBeNull();
 
       toggle?.click();
-      const http = TestBed.inject(HttpTestingController);
-      const put = http.expectOne('/api/accounts/7/hidden');
-      expect(put.request.method).toBe('PUT');
-      expect(put.request.body).toEqual({ hidden: true });
-      put.flush(null);
-      await new Promise((resolve) => setTimeout(resolve));
-      http.expectOne('/api/accounts').flush(response(true));
-      await TestBed.inject(ApplicationRef).whenStable();
+      expect(accountsStore.calls).toEqual([{ method: 'setHidden', args: [7, true] }]);
+      await fetched(response(true));
 
       expect(page.querySelector('[data-hidden-row]')).not.toBeNull();
       expect(page.querySelector<HTMLInputElement>('[data-toggle-hidden]')?.checked).toBe(false);
@@ -579,21 +519,15 @@ describe('BankerPage', () => {
         syncing: null,
         lastSync: null,
       });
-      const page = await render((request) => request.flush(response(false)));
+      const page = await render(response(false));
       const box = page.querySelector<HTMLInputElement>('[data-toggle-savings]');
       expect(box?.getAttribute('role')).toBe('switch');
       expect(box?.checked).toBe(false);
       expect(box?.closest('label')?.getAttribute('title')).toContain('Följ bara saldot');
 
       box?.click();
-      const http = TestBed.inject(HttpTestingController);
-      const put = http.expectOne('/api/accounts/7/savings');
-      expect(put.request.method).toBe('PUT');
-      expect(put.request.body).toEqual({ savings: true });
-      put.flush(null);
-      await new Promise((resolve) => setTimeout(resolve));
-      http.expectOne('/api/accounts').flush(response(true));
-      await TestBed.inject(ApplicationRef).whenStable();
+      expect(accountsStore.calls).toEqual([{ method: 'setSavings', args: [7, true] }]);
+      await fetched(response(true));
 
       expect(page.querySelector<HTMLInputElement>('[data-toggle-savings]')?.checked).toBe(true);
       expect(page.querySelector('[data-account-name]')?.parentElement?.textContent).toContain(
@@ -615,7 +549,7 @@ describe('BankerPage', () => {
       page.querySelector<HTMLButtonElement>(`button[data-share=${option}]`)!.click();
 
     it('shows the options with the account’s share selected', async () => {
-      const page = await render((request) => request.flush(response('half')));
+      const page = await render(response('half'));
 
       const options = [...page.querySelectorAll('button[data-share]')];
       expect(options.map((o) => o.textContent?.trim())).toEqual([
@@ -627,31 +561,22 @@ describe('BankerPage', () => {
       expect(pressed(page)).toBe('half');
     });
 
-    it('saves a chosen share and fetches the accounts again', async () => {
-      const page = await render((request) => request.flush(response('me')));
+    it('saves a chosen share and shows it when the accounts follow', async () => {
+      const page = await render(response('me'));
 
       choose(page, 'partner');
-      const http = TestBed.inject(HttpTestingController);
-      const put = http.expectOne('/api/accounts/7/share');
-      expect(put.request.method).toBe('PUT');
-      expect(put.request.body).toEqual({ share: 'partner' });
-      put.flush(null);
-      await new Promise((resolve) => setTimeout(resolve));
-      http.expectOne('/api/accounts').flush(response('partner'));
-      await TestBed.inject(ApplicationRef).whenStable();
+      expect(accountsStore.calls).toEqual([{ method: 'setShare', args: [7, 'partner'] }]);
+      await fetched(response('partner'));
 
       expect(pressed(page)).toBe('partner');
     });
 
     it('says so when Hushåll cannot be chosen yet', async () => {
-      const page = await render((request) => request.flush(response('me')));
+      accountsStore.failures['setShare'] = { status: 409 };
+      const page = await render(response('me'));
 
       choose(page, 'household');
-      const http = TestBed.inject(HttpTestingController);
-      http
-        .expectOne('/api/accounts/7/share')
-        .flush({ message: 'no ratio' }, { status: 409, statusText: 'Conflict' });
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('Hushåll');
       expect(pressed(page)).toBe('me');
@@ -668,7 +593,7 @@ describe('BankerPage', () => {
     });
     const removeButton = async (page: HTMLElement) => {
       page.querySelector<HTMLButtonElement>('[data-bank-menu] [data-menu-trigger]')?.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       return page.querySelector<HTMLButtonElement>('[data-remove-bank]');
     };
 
@@ -679,57 +604,52 @@ describe('BankerPage', () => {
       document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-confirm]')!;
 
     it('removes the bank after the owner confirms and shows the page again', async () => {
-      const page = await render((request) => request.flush(response()));
-      const http = TestBed.inject(HttpTestingController);
+      const page = await render(response());
 
       (await removeButton(page))!.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       expect(dialog()?.textContent).toContain('historiken finns kvar');
       expect(dialog()?.querySelector('[data-continue-account]')).toBeNull();
-      http.expectNone('/api/connections/Swedbank');
+      expect(banksStore.calls).toEqual([]);
       confirmButton().click();
-      http.expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' }).flush(null);
-      await new Promise((resolve) => setTimeout(resolve));
+      expect(banksStore.calls).toEqual([{ method: 'remove', args: ['Swedbank', []] }]);
 
-      http.expectOne('/api/accounts').flush(
+      await fetched(
         response({
           banks: [],
           removedBanks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment')] }],
         }),
       );
-      await TestBed.inject(ApplicationRef).whenStable();
       expect(dialog()).toBeNull();
       expect(page.querySelector('[data-bank]')).toBeNull();
       page
         .querySelector<HTMLButtonElement>('[data-removed-banks] [data-disclosure-toggle]')!
         .click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       expect(page.querySelector('[data-removed-bank="Swedbank"]')?.textContent).toContain(
         'Lönekonto',
       );
     });
 
     it('does nothing when the owner cancels', async () => {
-      const page = await render((request) => request.flush(response()));
+      const page = await render(response());
 
       (await removeButton(page))!.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-cancel]')!.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
 
       expect(dialog()).toBeNull();
-      TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank');
+      expect(banksStore.calls).toEqual([]);
     });
 
     describe('with savings accounts', () => {
       const first = { ...account('Sparkonto', 'savings'), id: 7, savings: true };
       const second = { ...account('ISK', 'savings'), id: 8, savings: true };
       const open = async () => {
-        const page = await render((request) =>
-          request.flush(response({ banks: [group('Swedbank', [first, second])] })),
-        );
+        const page = await render(response({ banks: [group('Swedbank', [first, second])] }));
         (await removeButton(page))!.click();
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
         return page;
       };
       const boxes = () =>
@@ -745,50 +665,38 @@ describe('BankerPage', () => {
         expect(dialog()?.textContent).toContain('Sparkonto');
         expect(dialog()?.textContent).toContain('ISK');
         confirmButton().click();
-        TestBed.inject(HttpTestingController).expectOne({
-          method: 'DELETE',
-          url: '/api/connections/Swedbank?continueManually=7,8',
-        });
+        expect(banksStore.calls).toEqual([{ method: 'remove', args: ['Swedbank', [7, 8]] }]);
       });
 
       it('closes the savings account that was unchecked', async () => {
         await open();
 
         boxes()[1]!.click();
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
         confirmButton().click();
-        TestBed.inject(HttpTestingController).expectOne({
-          method: 'DELETE',
-          url: '/api/connections/Swedbank?continueManually=7',
-        });
+        expect(banksStore.calls).toEqual([{ method: 'remove', args: ['Swedbank', [7]] }]);
       });
     });
 
     it('says so when the bank could not be removed', async () => {
-      const page = await render((request) => request.flush(response()));
+      banksStore.failures['remove'] = new Error('no');
+      const page = await render(response());
 
       (await removeButton(page))!.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       confirmButton().click();
-      TestBed.inject(HttpTestingController)
-        .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' })
-        .flush(null, { status: 500, statusText: 'Error' });
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte tas bort');
     });
 
     it('lists removed banks in a collapsed section where accounts can be hidden and shown', async () => {
       const hidden = { ...account('Dolt', 'payment', 2), hidden: true };
-      const page = await render((request) =>
-        request.flush(
-          response({
-            banks: [],
-            removedBanks: [
-              { bank: 'Swedbank', accounts: [account('Lönekonto', 'payment'), hidden] },
-            ],
-          }),
-        ),
+      const page = await render(
+        response({
+          banks: [],
+          removedBanks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment'), hidden] }],
+        }),
       );
 
       const section = page.querySelector<HTMLElement>('[data-removed-banks]')!;
@@ -796,7 +704,7 @@ describe('BankerPage', () => {
       expect(toggle.getAttribute('aria-expanded')).toBe('false');
       expect(section.textContent).toContain('Borttagna banker');
       toggle.click();
-      await TestBed.inject(ApplicationRef).whenStable();
+      await stable();
       const rows = section.querySelectorAll('li');
       const switches = (row: Element) =>
         row.querySelector<HTMLInputElement>('[data-toggle-hidden]');
@@ -804,9 +712,7 @@ describe('BankerPage', () => {
       expect(switches(rows[1]!)?.checked).toBe(false);
 
       switches(rows[1]!)!.click();
-      TestBed.inject(HttpTestingController)
-        .expectOne({ method: 'PUT', url: '/api/accounts/2/hidden' })
-        .flush(null);
+      expect(accountsStore.calls).toEqual([{ method: 'setHidden', args: [2, false] }]);
     });
 
     describe('deleting a removed bank for good', () => {
@@ -819,21 +725,20 @@ describe('BankerPage', () => {
         page
           .querySelector<HTMLButtonElement>('[data-removed-banks] [data-disclosure-toggle]')!
           .click();
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
         page.querySelector<HTMLButtonElement>('[data-delete-bank]')!.click();
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
       };
       const type = async (text: string) => {
         const input = document.querySelector<HTMLInputElement>('[data-delete-name]')!;
         input.value = text;
         input.dispatchEvent(new Event('input'));
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
       };
       const confirm = () => confirmButton();
 
       it('erases the bank once its name is typed', async () => {
-        const page = await render((request) => request.flush(removedResponse()));
-        const http = TestBed.inject(HttpTestingController);
+        const page = await render(removedResponse());
 
         await open(page);
         expect(dialog()?.textContent).toContain('manuellt tas inte bort');
@@ -844,48 +749,50 @@ describe('BankerPage', () => {
         await type('Swedbank');
         confirm().click();
 
-        http
-          .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank/permanent' })
-          .flush(null);
-        await new Promise((resolve) => setTimeout(resolve));
-        http.expectOne('/api/accounts').flush(response());
+        expect(banksStore.calls).toEqual([{ method: 'deleteForGood', args: ['Swedbank'] }]);
+        await fetched(response());
+        expect(dialog()).toBeNull();
       });
 
       it('can be cancelled', async () => {
-        const page = await render((request) => request.flush(removedResponse()));
+        const page = await render(removedResponse());
 
         await open(page);
         document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-cancel]')!.click();
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
 
         expect(dialog()).toBeNull();
-        TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank/permanent');
+        expect(banksStore.calls).toEqual([]);
       });
 
       it('says so when it fails', async () => {
-        const page = await render((request) => request.flush(removedResponse()));
+        banksStore.failures['deleteForGood'] = new Error('no');
+        const page = await render(removedResponse());
 
         await open(page);
         await type('Swedbank');
         confirm().click();
-        TestBed.inject(HttpTestingController)
-          .expectOne('/api/connections/Swedbank/permanent')
-          .flush(null, { status: 500, statusText: 'Error' });
-        await TestBed.inject(ApplicationRef).whenStable();
+        await stable();
 
         expect(page.querySelector('[role=alert]')?.textContent).toContain('tas bort helt');
       });
     });
 
     it('shows no Borttagna banker section when none were removed', async () => {
-      const page = await render((request) => request.flush(response()));
+      const page = await render(response());
 
       expect(page.querySelector('[data-removed-banks]')).toBeNull();
     });
   });
 
+  it('tries again when the first fetch failed and the owner comes back', async () => {
+    await render('failed');
+
+    expect(accountsStore.calls).toContainEqual({ method: 'reload', args: [] });
+  });
+
   it('shows an error when the accounts cannot be fetched', async () => {
-    const page = await render(failed);
+    const page = await render('failed');
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
     expect(page.textContent).not.toContain('Inga banker anslutna');

@@ -12,6 +12,7 @@ export class FakeSettlementStore extends SettlementStore {
   private readonly recorder = new Recorder();
   readonly calls = this.recorder.calls;
   readonly responses = this.recorder.responses;
+  readonly failures = this.recorder.failures;
 
   setBalance(request: SetBalanceSettingRequest): Observable<SettlementResponse> {
     return this.recorder.reply('setBalance', request);

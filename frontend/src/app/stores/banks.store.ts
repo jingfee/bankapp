@@ -1,5 +1,14 @@
 import { HttpClient } from '@angular/common/http';
-import { DestroyRef, Injectable, type Signal, forwardRef, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  type Signal,
+  effect,
+  forwardRef,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import type {
   AccountsResponse,
   StartConnectionRequest,
@@ -7,16 +16,22 @@ import type {
   StartSyncResponse,
 } from '@bankapp/shared';
 import { type Observable, map, tap } from 'rxjs';
-import { AccountsService } from '../accounts.service';
+import { AccountsStore } from './accounts.store';
 import { Invalidation } from './invalidation';
 
 /** How often the accounts are asked for again while a sync is running. */
 export const SYNC_POLL_INTERVAL_MS = 2000;
 
+const DAY_MS = 24 * 3600 * 1000;
+
+/** How long a bank connection is good for when it is made or renewed. */
+const CONNECTION_DAYS = 90;
+
 /**
- * The bank connections: their mutations, and what the navigation shows about them (the sync
- * status). The status is reported from the accounts as they are fetched; while a sync is running
- * the store fetches them itself, unless a page keeps reporting, and fires `banks` when it ends.
+ * The bank connections: their mutations, and what Banker and the navigation show about them
+ * (the sync status, how long a connection has left). The status follows the accounts as
+ * `AccountsStore` fetches them; while a sync is running the store has them fetched again, and
+ * fires `banks` when it ends.
  */
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpBanksStore) })
 export abstract class BanksStore {
@@ -28,9 +43,7 @@ export abstract class BanksStore {
   abstract readonly expiringCount: Signal<number>;
 
   abstract report(status: { lastSyncedAt: string | null; failed: boolean; expiring: number }): void;
-  /** Reports the status held by an accounts response, and follows its sync if one is running. */
-  abstract reportAccounts(result: AccountsResponse): void;
-  /** Fetches the status once after login, unless something has reported it already. */
+  /** Starts following the accounts once the owner is logged in. */
   abstract loadOnce(): void;
   /** Forgets the status, when the owner logs out. */
   abstract reset(): void;
@@ -51,12 +64,23 @@ export abstract class BanksStore {
   abstract remove(bank: string, continueManually?: number[]): Observable<void>;
   /** Erases a removed bank and everything it brought in (ADR 0013). */
   abstract deleteForGood(bank: string): Observable<void>;
+
+  /** Whole days left of a connection that is good until `validUntil`, at least 1. */
+  daysLeft(validUntil: string): number {
+    return Math.max(1, Math.ceil((Date.parse(validUntil) - Date.now()) / DAY_MS));
+  }
+
+  /** How much of a full connection period is left, from 0 to 1. */
+  connectionLeft(validUntil: string): number {
+    const left = (Date.parse(validUntil) - Date.now()) / DAY_MS;
+    return Math.min(1, Math.max(0, left / CONNECTION_DAYS));
+  }
 }
 
 @Injectable()
 export class HttpBanksStore extends BanksStore {
   private readonly http = inject(HttpClient);
-  private readonly accounts = inject(AccountsService);
+  private readonly accounts = inject(AccountsStore);
   private readonly invalidation = inject(Invalidation);
 
   private readonly lastSynced = signal<string | null>(null);
@@ -66,26 +90,39 @@ export class HttpBanksStore extends BanksStore {
   readonly lastFailed = this.failed.asReadonly();
   readonly expiringCount = this.expiring.asReadonly();
 
-  private loading = false;
-  /** Changes on logout, so answers to requests from the earlier session are ignored. */
-  private session = 0;
-  private loaded = false;
   private syncRunning = false;
+  /** Polls left to wait for a sync the owner started to show up as running. */
+  private awaitingStart = 0;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     super();
     inject(DestroyRef).onDestroy(() => clearTimeout(this.pollTimer));
+    effect(() => {
+      const result = this.accounts.accounts();
+      if (result) untracked(() => this.reportAccounts(result));
+    });
   }
 
   report(status: { lastSyncedAt: string | null; failed: boolean; expiring: number }): void {
-    this.loaded = true;
     this.lastSynced.set(status.lastSyncedAt);
     this.failed.set(status.failed);
     this.expiring.set(status.expiring);
   }
 
-  reportAccounts(result: AccountsResponse): void {
+  loadOnce(): void {
+    this.accounts.activate();
+  }
+
+  reset(): void {
+    this.accounts.deactivate();
+    this.report({ lastSyncedAt: null, failed: false, expiring: 0 });
+    clearTimeout(this.pollTimer);
+    this.syncRunning = false;
+    this.awaitingStart = 0;
+  }
+
+  private reportAccounts(result: AccountsResponse): void {
     const times = result.banks.flatMap((group) =>
       group.accounts.flatMap((account) => (account.lastSyncedAt ? [account.lastSyncedAt] : [])),
     );
@@ -98,37 +135,15 @@ export class HttpBanksStore extends BanksStore {
     this.followSync(result.syncing !== null);
   }
 
-  loadOnce(): void {
-    if (this.loaded || this.loading) return;
-    this.loading = true;
-    const session = this.session;
-    this.accounts.list().subscribe({
-      next: (result) => {
-        if (session !== this.session) return;
-        this.loading = false;
-        if (!this.loaded) this.reportAccounts(result);
-      },
-      // The status is a convenience; a failure leaves it empty until Banker reports.
-      error: () => {
-        if (session === this.session) this.loading = false;
-      },
-    });
-  }
-
-  reset(): void {
-    this.report({ lastSyncedAt: null, failed: false, expiring: 0 });
-    this.loaded = false;
-    clearTimeout(this.pollTimer);
-    this.syncRunning = false;
-    this.loading = false;
-    this.session++;
-  }
-
   /** Polls while a sync runs, and fires `banks` once one that was running has finished. */
   private followSync(running: boolean): void {
     clearTimeout(this.pollTimer);
     if (running) {
       this.syncRunning = true;
+      this.awaitingStart = 0;
+      this.pollWhileRunning();
+    } else if (!this.syncRunning && this.awaitingStart > 0) {
+      // A sync was just started and the server has not shown it yet: it is not finished.
       this.pollWhileRunning();
     } else if (this.syncRunning) {
       this.syncRunning = false;
@@ -137,15 +152,12 @@ export class HttpBanksStore extends BanksStore {
   }
 
   private pollWhileRunning(): void {
-    // A page that follows the sync reports every interval, which postpones this poll; it only
-    // fires when nobody else is watching, e.g. for a scheduled sync noticed from another page.
-    const session = this.session;
+    // Asked again every interval, also after a failed fetch, so a sync is never left unfollowed.
     this.pollTimer = setTimeout(() => {
-      this.accounts.list().subscribe({
-        next: (result) => session === this.session && this.reportAccounts(result),
-        error: () => session === this.session && this.pollWhileRunning(),
-      });
-    }, SYNC_POLL_INTERVAL_MS * 1.5);
+      if (!this.syncRunning && --this.awaitingStart < 0) return;
+      this.accounts.reload();
+      this.pollWhileRunning();
+    }, SYNC_POLL_INTERVAL_MS);
   }
 
   startConnection(bank: string, renew = false): Observable<string> {
@@ -160,7 +172,14 @@ export class HttpBanksStore extends BanksStore {
   }
 
   startSync(): Observable<StartSyncResponse> {
-    return this.http.post<StartSyncResponse>('/api/sync', null);
+    return this.http.post<StartSyncResponse>('/api/sync', null).pipe(
+      tap(() => {
+        // Followed from now on, even if the first answer does not show it running yet.
+        this.awaitingStart = 5;
+        this.accounts.reload();
+        this.pollWhileRunning();
+      }),
+    );
   }
 
   remove(bank: string, continueManually: number[] = []): Observable<void> {

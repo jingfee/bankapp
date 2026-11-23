@@ -12,6 +12,7 @@ export class FakeSavingsStore extends SavingsStore {
   private readonly recorder = new Recorder();
   readonly calls = this.recorder.calls;
   readonly responses = this.recorder.responses;
+  readonly failures = this.recorder.failures;
 
   create(request: ManualSavingsAccountRequest): Observable<ManualSavingsAccount> {
     return this.recorder.reply('create', request);
