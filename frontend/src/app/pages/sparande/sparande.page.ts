@@ -152,7 +152,7 @@ interface Chart {
             <ng-container chart-controls>
               <select
                 data-account-select
-                class="input"
+                class="input w-auto"
                 aria-label="Konto"
                 [value]="selected()"
                 (change)="select($event)"

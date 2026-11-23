@@ -122,7 +122,7 @@ interface SharedRow {
                 </div>
               }
 
-              <div>
+              <div class="flex flex-wrap gap-2">
                 <button
                   type="button"
                   data-open-setting
@@ -131,6 +131,16 @@ interface SharedRow {
                 >
                   Ställ in saldo
                 </button>
+                @if (open(); as period) {
+                  <button
+                    type="button"
+                    data-close-month
+                    class="btn btn-secondary btn-sm"
+                    (click)="startClosing(period)"
+                  >
+                    Avsluta {{ monthOnly(period.month).toLowerCase() }}
+                  </button>
+                }
               </div>
               @if (settingOpen()) {
                 <app-sheet
@@ -184,16 +194,6 @@ interface SharedRow {
               }
 
               @if (open(); as period) {
-                <div>
-                  <button
-                    type="button"
-                    data-close-month
-                    class="btn btn-secondary btn-sm"
-                    (click)="startClosing(period)"
-                  >
-                    Avsluta {{ monthOnly(period.month).toLowerCase() }}
-                  </button>
-                </div>
                 @if (closing()) {
                   <app-sheet
                     data-close-form
@@ -323,6 +323,7 @@ interface SharedRow {
 
             @if (closed().length > 0) {
               <app-disclosure
+                class="card block p-2 sm:p-3"
                 data-toggle-closed
                 label="Tidigare perioder"
                 [count]="closed().length"
@@ -333,7 +334,7 @@ interface SharedRow {
                     <section
                       data-closed-period
                       [attr.data-month]="period.month"
-                      class="card expand-in flex flex-col gap-3 p-4 sm:p-5"
+                      class="card expand-in flex flex-col gap-3 bg-surface-2 p-4 sm:p-5"
                     >
                       <h2 class="card-title">
                         <span data-period-title>{{ monthName(period.month) }}</span>

@@ -274,6 +274,7 @@ const PART_COLOURS = [
                 class="btn btn-sm btn-secondary"
                 (click)="startEntry(null)"
               >
+                <app-icon name="plus" [size]="16" />
                 Ny bolånenotering
               </button>
             }
@@ -322,7 +323,7 @@ const PART_COLOURS = [
                         >{{ part.rateAdjustment.next | shortDate }}</span
                       >
                       @if (countdown(part.rateAdjustment.next).text; as text) {
-                        <span data-rate-soon class="pill pill-accent">{{ text }}</span>
+                        <span data-rate-soon class="pill pill-accent ml-1.5">{{ text }}</span>
                       }
                     </span>
                     <span>
