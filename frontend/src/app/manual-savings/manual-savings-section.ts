@@ -12,9 +12,9 @@ import { ManualSavingsService } from '../manual-savings.service';
   selector: 'app-manual-savings-section',
   imports: [DateField, MoneyPipe],
   template: `
-    <section data-manual-savings class="card flex flex-col gap-4 p-5">
+    <section data-manual-savings class="card flex flex-col gap-4 p-4 sm:p-5">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-lg font-semibold">Manuella sparkonton</h2>
+        <h2 class="card-title">Manuella sparkonton</h2>
         @if (!adding()) {
           <button
             type="button"

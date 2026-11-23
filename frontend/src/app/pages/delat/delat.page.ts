@@ -80,11 +80,11 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
       } @else {
         <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
           <div class="flex min-w-0 flex-col gap-4">
-            <section data-balance-card class="card glow-violet flex flex-col gap-4 p-6">
-              <h2 class="text-sm font-medium text-muted">Avräkningssaldo</h2>
+            <section data-balance-card class="card glow-violet flex flex-col gap-4 p-5 sm:p-6">
+              <h2 class="eyebrow">Avräkningssaldo</h2>
               @if (settlement().balance === null) {
                 <div data-switch-help>
-                  <h3 class="text-lg font-semibold">Ställ in saldot för att börja</h3>
+                  <h3 class="card-title">Ställ in saldot för att börja</h3>
                   <p class="mt-2 text-sm text-muted">
                     Ställ in saldot till partnerns andel av det som redan är betalt, per idag. Har
                     partnerns senaste överföring också täckt räkningar som betalas de närmaste
@@ -217,9 +217,9 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
             </section>
 
             @if (open(); as period) {
-              <section data-open-period class="card flex flex-col gap-3 p-5">
+              <section data-open-period class="card flex flex-col gap-3 p-4 sm:p-5">
                 <div class="flex items-center justify-between gap-3">
-                  <h2 class="font-display text-lg font-semibold">
+                  <h2 class="card-title">
                     <span data-period-title>{{ monthName(period.month) }}</span>
                     <span class="text-sm font-normal text-muted"> · pågående</span>
                   </h2>
@@ -272,7 +272,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                 }
                 <div class="flex justify-between text-sm">
                   <span class="text-muted">Ingående saldo</span>
-                  <span data-carried-in class="tabular-nums">{{ period.carriedIn | money }}</span>
+                  <span data-carried-in class="amount">{{ period.carriedIn | money }}</span>
                 </div>
                 <ng-container
                   [ngTemplateOutlet]="itemList"
@@ -283,14 +283,14 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                     @for (payment of period.payments; track payment.transactionId) {
                       <li data-payment class="flex justify-between">
                         <span class="text-muted">Betalt {{ payment.date }}</span>
-                        <span class="tabular-nums">{{ payment.amount | money }}</span>
+                        <span class="amount">{{ payment.amount | money }}</span>
                       </li>
                     }
                   </ul>
                 }
                 <div class="flex justify-between border-t border-line pt-3 text-sm font-medium">
                   <span>Utgående saldo</span>
-                  <span data-carried-out class="tabular-nums">{{ period.carriedOut | money }}</span>
+                  <span data-carried-out class="amount">{{ period.carriedOut | money }}</span>
                 </div>
               </section>
             }
@@ -312,9 +312,9 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                   <section
                     data-closed-period
                     [attr.data-month]="period.month"
-                    class="card expand-in flex flex-col gap-3 p-5"
+                    class="card expand-in flex flex-col gap-3 p-4 sm:p-5"
                   >
-                    <h2 class="font-display text-lg font-semibold">
+                    <h2 class="card-title">
                       <span data-period-title>{{ monthName(period.month) }}</span>
                       <span class="text-sm font-normal text-muted">
                         · avslutad, t.o.m. {{ period.closedThrough }}
@@ -322,21 +322,21 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                     </h2>
                     <dl class="grid grid-cols-2 gap-y-1 text-sm">
                       <dt class="text-muted">Ingående saldo</dt>
-                      <dd data-carried-in class="text-right tabular-nums">
+                      <dd data-carried-in class="text-right amount">
                         {{ period.carriedIn | money }}
                       </dd>
                       <dt class="text-muted">Partnerns andel</dt>
-                      <dd data-period-part class="text-right tabular-nums">
+                      <dd data-period-part class="text-right amount">
                         {{ partnerPartSum(period) | money }}
                       </dd>
                       @for (payment of period.payments; track payment.transactionId) {
                         <dt class="text-muted">Betalt {{ payment.date }}</dt>
-                        <dd data-payment class="text-right tabular-nums">
+                        <dd data-payment class="text-right amount">
                           {{ payment.amount | money }}
                         </dd>
                       }
                       <dt class="font-medium">Utgående saldo</dt>
-                      <dd data-carried-out class="text-right font-medium tabular-nums">
+                      <dd data-carried-out class="text-right font-medium amount">
                         {{ period.carriedOut | money }}
                       </dd>
                     </dl>
@@ -394,14 +394,14 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
           </div>
 
           <div class="flex min-w-0 flex-col gap-4">
-            <section data-ratio-card class="card flex flex-col gap-4 p-6">
-              <h2 class="text-sm font-medium text-muted">Hushållsandel</h2>
+            <section data-ratio-card class="card flex flex-col gap-4 p-5 sm:p-6">
+              <h2 class="eyebrow">Hushållsandel</h2>
               @if (current()) {
                 <p data-ratio-heading class="amount text-4xl">
                   {{ sliderValue() }}/{{ 100 - sliderValue() }}
                 </p>
               } @else {
-                <p data-ratio-heading class="text-lg font-semibold">Ingen hushållsandel inställd</p>
+                <p data-ratio-heading class="card-title">Ingen hushållsandel inställd</p>
               }
               <input
                 type="range"
@@ -507,9 +507,9 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
               </ul>
             </section>
 
-            <section data-shared-card class="card flex flex-col gap-4 p-6">
+            <section data-shared-card class="card flex flex-col gap-4 p-4 sm:p-5">
               <div class="flex items-center justify-between gap-3">
-                <h2 class="min-w-0 text-sm font-medium text-muted">Delade underkategorier</h2>
+                <h2 class="card-title min-w-0">Delade underkategorier</h2>
                 <button
                   type="button"
                   data-add-shared
@@ -598,7 +598,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
                 </span>
                 <span
                   data-partner-part
-                  class="text-sm tabular-nums"
+                  class="text-sm amount"
                   [class.text-danger]="item.partnerPart < 0"
                 >
                   {{ item.partnerPart | money }}

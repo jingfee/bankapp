@@ -13,7 +13,7 @@ function safeReturnUrl(value: string | null): string {
   template: `
     <main class="grid min-h-dvh place-items-center px-4 py-10">
       <form
-        class="card flex w-full max-w-sm flex-col gap-5 p-6"
+        class="card flex w-full max-w-sm flex-col gap-5 p-5 sm:p-6"
         [class.shake]="shaking()"
         novalidate
         (submit)="$event.preventDefault(); submit()"

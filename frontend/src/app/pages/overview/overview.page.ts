@@ -161,9 +161,7 @@ function bars<T extends { id: number; name: string; total: number }>(
   imports: [Page, NgTemplateOutlet, RouterLink, MoneyPipe, CategoryBar, TransactionList],
   template: `
     <ng-template #tileBody let-tile>
-      <span class="text-[11px] font-semibold tracking-wider text-muted uppercase">{{
-        tile.label
-      }}</span>
+      <span class="eyebrow">{{ tile.label }}</span>
       <span
         data-amount
         class="amount text-[17px] whitespace-nowrap sm:text-[21px]"
@@ -294,7 +292,7 @@ function bars<T extends { id: number; name: string; total: number }>(
               <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
                 @if (chart(); as c) {
                   <section data-spending-chart class="card min-w-0 p-4 sm:p-5">
-                    <h2 class="mb-1 text-lg font-semibold">Utgifter jämfört med förra månaden</h2>
+                    <h2 class="mb-1 card-title">Utgifter jämfört med förra månaden</h2>
                     <p data-spending-chart-summary class="mb-4 text-sm text-muted">
                       {{ c.summary }}
                     </p>
@@ -431,7 +429,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 
                 @if (spending().length > 0 || income().length > 0) {
                   <section data-section="spending" class="card @container p-4 sm:p-5">
-                    <h2 class="mb-4 text-lg font-semibold">Utgifter per kategori</h2>
+                    <h2 class="mb-4 card-title">Utgifter per kategori</h2>
                     @if (spending().length === 0) {
                       <p class="text-muted">Inga utgifter den här månaden.</p>
                     } @else {
@@ -470,9 +468,7 @@ function bars<T extends { id: number; name: string; total: number }>(
                           <span
                             class="absolute inset-0 flex flex-col items-center justify-center text-center"
                           >
-                            <span class="text-[11px] tracking-wider text-muted uppercase"
-                              >Utgifter</span
-                            >
+                            <span class="eyebrow">Utgifter</span>
                             <span data-donut-total class="amount text-base">{{
                               o.totals.spending | money
                             }}</span>
@@ -571,7 +567,7 @@ function bars<T extends { id: number; name: string; total: number }>(
               @if (accountRows(); as rows) {
                 <section data-accounts class="card p-4 sm:p-5">
                   <div class="mb-3 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold">Konton</h2>
+                    <h2 class="card-title">Konton</h2>
                     <a routerLink="/banker" class="text-sm font-semibold text-accent">Banker →</a>
                   </div>
                   <ul class="flex flex-col gap-1">

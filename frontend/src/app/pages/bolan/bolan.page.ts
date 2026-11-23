@@ -72,7 +72,7 @@ const PART_COLOURS = [
       }
 
       @if (parts().length === 0) {
-        <section class="card flex flex-col gap-3 p-5" data-intro>
+        <section class="card flex flex-col gap-3 p-4 sm:p-5" data-intro>
           <p class="text-muted">
             Följ bolånet här: vad som är kvar att betala, vad det kostar per månad och när räntan
             och villkoren ska ses över. Lägg till bolånet med dess första lånedel.
@@ -91,28 +91,37 @@ const PART_COLOURS = [
       }
 
       @if (openParts().length > 0) {
-        <section class="card grid gap-4 p-5 sm:grid-cols-3" data-summary>
-          <div class="flex flex-col gap-1">
-            <span class="text-sm text-muted">Kvarvarande skuld</span>
-            <span data-total-debt class="amount text-2xl">{{ summary().debt | money }}</span>
+        <section
+          class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3"
+          data-summary
+        >
+          <div class="stat-tile">
+            <span class="eyebrow">Kvarvarande skuld</span>
+            <span data-total-debt class="amount text-[17px] whitespace-nowrap sm:text-[21px]">{{
+              summary().debt | money
+            }}</span>
           </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-sm text-muted">Snittränta</span>
-            <span data-average-rate class="amount text-2xl">{{
+          <div class="stat-tile">
+            <span class="eyebrow">Snittränta</span>
+            <span data-average-rate class="amount text-[17px] whitespace-nowrap sm:text-[21px]">{{
               summary().rate === null ? '–' : percent(summary().rate!)
             }}</span>
           </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-sm text-muted">Beräknad månadsbetalning</span>
+          <div class="stat-tile">
+            <span class="eyebrow">Beräknad månadsbetalning</span>
             @if (estimate(); as e) {
-              <span data-estimate class="amount text-2xl">{{ e.total | money }}</span>
-              <span class="text-sm text-muted">
+              <span data-estimate class="amount text-[17px] whitespace-nowrap sm:text-[21px]">{{
+                e.total | money
+              }}</span>
+              <span class="text-xs leading-snug text-muted">
                 Ränta <span data-estimate-interest class="amount">{{ e.interest | money }}</span> ·
                 Amortering
                 <span data-estimate-amortisation class="amount">{{ e.amortisation | money }}</span>
               </span>
             } @else {
-              <span data-estimate class="amount text-2xl">–</span>
+              <span data-estimate class="amount text-[17px] whitespace-nowrap sm:text-[21px]"
+                >–</span
+              >
             }
           </div>
         </section>
@@ -134,7 +143,7 @@ const PART_COLOURS = [
       @if (chartMonths().length > 0) {
         <section class="card p-4 sm:p-5" data-chart-card>
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 class="w-full font-display sm:w-auto text-lg font-semibold">
+            <h2 class="card-title w-full sm:w-auto">
               {{ mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt' }}
             </h2>
             <div class="flex flex-wrap gap-2">
@@ -272,9 +281,9 @@ const PART_COLOURS = [
         </section>
       }
 
-      <section class="card flex flex-col gap-4 p-5" data-mortgage>
+      <section class="card flex flex-col gap-4 p-4 sm:p-5" data-mortgage>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 class="font-display text-lg font-semibold">Lånedelar</h2>
+          <h2 class="card-title">Lånedelar</h2>
           <div class="flex flex-wrap gap-2">
             @if (openParts().length > 0 && panel()?.kind !== 'entry') {
               <button
@@ -610,8 +619,8 @@ const PART_COLOURS = [
       </section>
 
       @if (panel()?.kind === 'entry') {
-        <section class="card flex flex-col gap-4 p-5">
-          <h2 class="font-display text-lg font-semibold">Bolånenotering</h2>
+        <section class="card flex flex-col gap-4 p-4 sm:p-5">
+          <h2 class="card-title">Bolånenotering</h2>
           <form
             data-entry-form
             class="flex flex-col gap-4"
@@ -645,8 +654,8 @@ const PART_COLOURS = [
       }
 
       @if (entries().length > 0) {
-        <section class="card flex flex-col gap-3 p-5">
-          <h2 class="font-display text-lg font-semibold">Noteringar</h2>
+        <section class="card flex flex-col gap-3 p-4 sm:p-5">
+          <h2 class="card-title">Noteringar</h2>
           <ul class="flex flex-col divide-y divide-line text-sm" data-entries>
             @for (entry of entries(); track entry.id) {
               <li class="flex items-start justify-between gap-3 py-2" data-entry>
