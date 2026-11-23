@@ -1,14 +1,13 @@
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, linkedSignal, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { type Subscription, map } from 'rxjs';
 import type {
   AccountType,
   Category,
-  HouseholdRatioEntry,
   Money,
   ShareOption,
   Transaction,
@@ -30,11 +29,10 @@ import { Icon } from '../../icon/icon';
 import { Skeleton } from '../../skeleton/skeleton';
 import { ShareControl } from '../../share-control/share-control';
 import { MoneyPipe } from '../../formatting/money.pipe';
-import { SharesService } from '../../shares.service';
+import { SharesStore } from '../../stores/shares.store';
 import { MANUAL_LABEL, SHARE_LABELS, householdPercentLabel } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsStore } from '../../stores/transactions.store';
-import { TransactionsService } from '../../transactions.service';
 import { Page } from '../../page/page';
 
 type State =
@@ -525,10 +523,9 @@ function formatOriginal({ amount, currency }: Money): string {
 export class TransactionDetailsPage {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
-  private readonly transactions = inject(TransactionsService);
   private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryList = inject(CategoriesService);
-  private readonly sharesService = inject(SharesService);
+  private readonly sharesStore = inject(SharesStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
 
@@ -553,9 +550,8 @@ export class TransactionDetailsPage {
 
   protected readonly shareError = signal<string | null>(null);
   protected readonly manualLabel = MANUAL_LABEL;
-  /** The household ratio, fetched once the page is shown; null until then or if that failed. */
-  protected readonly ratio = signal<HouseholdRatioEntry[] | null>(null);
-  private loadingRatio = false;
+  /** The household ratio; null until it is fetched or if that failed. */
+  protected readonly ratio = computed(() => this.sharesStore.householdRatio() ?? null);
   private shareRequest: Subscription | undefined;
 
   protected readonly offsetting = signal(false);
@@ -563,9 +559,27 @@ export class TransactionDetailsPage {
   /** Null while the candidates are being fetched. */
   protected readonly offsetCandidates = signal<Transaction[] | null>(null);
   private candidateRequest: Subscription | undefined;
-  private loadRequest: Subscription | undefined;
 
-  protected readonly state = signal<State>({ status: 'loading' });
+  private readonly read = this.transactionsStore.details(computed(() => this.id() ?? undefined));
+  /**
+   * What a change answered with, shown until the read has fetched again. It is dropped when the
+   * read's value changes, which includes moving to another transaction.
+   */
+  private readonly edited = linkedSignal<TransactionDetails | undefined, TransactionDetails | null>(
+    {
+      source: this.read.value,
+      computation: () => null,
+    },
+  );
+  protected readonly state = computed<State>(() => {
+    const details = this.edited() ?? this.read.value();
+    if (details !== undefined && details !== null) return { status: 'ready', details };
+    if (!this.read.failed()) return { status: 'loading' };
+    const error = this.read.error();
+    return {
+      status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
+    };
+  });
   protected readonly details = computed(() => {
     const state = this.state();
     return state.status === 'ready' ? state.details : null;
@@ -644,27 +658,25 @@ export class TransactionDetailsPage {
   });
 
   constructor() {
+    this.sharesStore.activate();
+    inject(DestroyRef).onDestroy(() => this.sharesStore.deactivate());
     // Following a link to the linked purchase or refund keeps this page and changes the id.
-    this.route.paramMap
-      .pipe(takeUntilDestroyed())
-      .subscribe((params) => this.load(params.get('id') ?? ''));
+    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(() => this.reset());
   }
 
   protected closeEditor(): void {
     void this.router.navigate(['/transaktioner', this.id()]);
   }
 
-  /** The edit changed what the page shows, so it is fetched again. */
+  /** The edit is a `transactions` fact, so the read fetches the details again itself. */
   protected onEdited(): void {
     this.toast.show('Transaktionen sparades');
     this.closeEditor();
-    this.load(this.id() ?? '');
   }
 
-  private load(id: string): void {
-    this.state.set({ status: 'loading' });
+  /** Forgets what belonged to the transaction shown before. */
+  private reset(): void {
     this.candidateRequest?.unsubscribe();
-    this.loadRequest?.unsubscribe();
     this.shareRequest?.unsubscribe();
     this.saving.set(false);
     this.offsetting.set(false);
@@ -673,16 +685,6 @@ export class TransactionDetailsPage {
     this.similarNote.set(null);
     this.picking.set(false);
     this.shareError.set(null);
-    this.loadRequest = this.transactions.get(id).subscribe({
-      next: (details) => {
-        this.state.set({ status: 'ready', details });
-        this.loadRatio();
-      },
-      error: (error: unknown) =>
-        this.state.set({
-          status: error instanceof HttpErrorResponse && error.status === 404 ? 'gone' : 'failed',
-        }),
-    });
   }
 
   /** The effective share, named the way the options are: Hushåll shows its ratio. */
@@ -718,21 +720,6 @@ export class TransactionDetailsPage {
     return t === null ? 0 : Math.round((t.amount.amount - this.ownerPart()) * 100) / 100 + 0;
   });
 
-  /** The ratio decides whether Hushåll can be chosen, so it is fetched once the page is shown. */
-  private loadRatio(): void {
-    if (this.ratio() !== null || this.loadingRatio) return;
-    this.loadingRatio = true;
-    this.sharesService.householdRatio().subscribe({
-      next: (entries) => {
-        this.ratio.set(entries);
-        this.loadingRatio = false;
-      },
-      error: () => {
-        this.loadingRatio = false;
-      },
-    });
-  }
-
   /** Sets the transaction's own share; null removes it so the inherited share applies. */
   protected setShare(share: ShareOption | null): void {
     const details = this.details();
@@ -741,7 +728,7 @@ export class TransactionDetailsPage {
     this.shareError.set(null);
     this.shareRequest = this.transactionsStore.setShare(details.id, share).subscribe({
       next: (updated) => {
-        this.state.set({ status: 'ready', details: updated });
+        this.edited.set(updated);
         this.toast.show(share === null ? 'Egen andel togs bort' : 'Andelen sparades');
         this.saving.set(false);
       },
@@ -764,7 +751,7 @@ export class TransactionDetailsPage {
     this.offsetSearch.set(text);
     this.offsetCandidates.set(null);
     this.candidateRequest?.unsubscribe();
-    this.candidateRequest = this.transactions.offsetCandidates(details.id, text).subscribe({
+    this.candidateRequest = this.transactionsStore.offsetCandidates(details.id, text).subscribe({
       next: ({ transactions }) => this.offsetCandidates.set(transactions),
       error: () => {
         this.offsetting.set(false);
@@ -781,7 +768,7 @@ export class TransactionDetailsPage {
     this.categoryError.set(null);
     this.transactionsStore.setOffset(details.id, purchaseId).subscribe({
       next: (updated) => {
-        this.state.set({ status: 'ready', details: updated });
+        this.edited.set(updated);
         this.toast.show(purchaseId === null ? 'Kvittningen togs bort' : 'Kvittningen sparades');
         this.offsetting.set(false);
         this.saving.set(false);
@@ -820,7 +807,7 @@ export class TransactionDetailsPage {
     this.similarNote.set(null);
     this.transactionsStore.setCategory(details.id, subcategoryId).subscribe({
       next: ({ category, updatedSimilar }) => {
-        this.state.set({ status: 'ready', details: { ...details, category } });
+        this.edited.set({ ...details, category });
         this.similarNote.set(similarUpdatedNote(updatedSimilar));
         this.toast.show(saved);
         this.picking.set(false);

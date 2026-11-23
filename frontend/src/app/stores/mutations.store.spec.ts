@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import type { Observable } from 'rxjs';
 import { TransactionsService } from '../transactions.service';
+import { comesBackToKeptList, leaveList } from './transactions.store.testing';
 import { AccountsStore } from './accounts.store';
 import { BanksStore } from './banks.store';
 import { type Fact, Invalidation } from './invalidation';
@@ -303,7 +304,7 @@ describe('what the owner would see after a mutation (#201)', () => {
   it.each(mutations)(
     '%s drops the kept list (and fetches the review count again where ADR 0015 says)',
     (name, method, url, call, response) => {
-      transactions.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
+      leaveList(http);
       call().subscribe();
       http
         .expectOne((request) => request.method === method && request.url === url)
@@ -315,15 +316,15 @@ describe('what the owner would see after a mutation (#201)', () => {
         http.expectOne('/api/transactions/review/count').flush({ count: 4 });
         expect(transactions.reviewCount()).toBe(4);
       }
-      expect(transactions.listed).toBeNull();
+      expect(comesBackToKeptList(http)).toBe(false);
     },
   );
 
   it('a settlement change leaves the kept list and the review count alone', () => {
-    transactions.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
+    leaveList(http);
     TestBed.inject(SettlementStore).undoClose().subscribe();
     http.expectOne('/api/settlement/undo-close').flush({});
     http.expectNone('/api/transactions/review/count');
-    expect(transactions.listed).not.toBeNull();
+    expect(comesBackToKeptList(http)).toBe(true);
   });
 });

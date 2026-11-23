@@ -85,6 +85,11 @@ export function filtersToParams(filters: TransactionFilters): Record<string, str
   return params;
 }
 
+/** The query string of the filters; two filter sets with the same key list the same transactions. */
+export function filtersKey(filters: TransactionFilters): string {
+  return new URLSearchParams(filtersToParams(filters)).toString();
+}
+
 /** How many of the panel's sections have a filter set; the search field is not one of them. */
 export function activeFilterCount(filters: TransactionFilters): number {
   return [

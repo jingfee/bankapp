@@ -30,7 +30,6 @@ import { today } from '../dates';
 import { ShareControl } from '../share-control/share-control';
 import { SharesService } from '../shares.service';
 import { TransactionsStore } from '../stores/transactions.store';
-import { TransactionsService } from '../transactions.service';
 
 type Status = 'loading' | 'ready' | 'failed' | 'gone';
 
@@ -212,7 +211,6 @@ export class ManualTransactionSheet implements OnInit {
   /** The owner dismissed the sheet (Escape, backdrop, Avbryt or the close button). */
   readonly closed = output<void>();
 
-  private readonly transactions = inject(TransactionsService);
   private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryService = inject(CategoriesService);
   private readonly shares = inject(SharesService);
@@ -277,7 +275,7 @@ export class ManualTransactionSheet implements OnInit {
   }
 
   private load(id: string): void {
-    this.transactions.get(id).subscribe({
+    this.transactionsStore.get(id).subscribe({
       next: (t) => {
         if (t.account !== null) return this.status.set('gone');
         this.editingId = t.id;

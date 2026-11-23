@@ -1,36 +1,44 @@
 import { Location } from '@angular/common';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import type { CategoriesResponse, TransactionCategory, TransactionDetails } from '@bankapp/shared';
-import { of } from 'rxjs';
+import type {
+  Category,
+  HouseholdRatioEntry,
+  TransactionCategory,
+  TransactionDetails,
+} from '@bankapp/shared';
+import { of, throwError } from 'rxjs';
+import { CategoriesService } from '../../categories.service';
+import { SharesStore } from '../../stores/shares.store';
+import { FakeSharesStore } from '../../stores/shares.store.fake';
+import { TransactionsStore } from '../../stores/transactions.store';
+import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
 import { ToastService } from '../../toast/toast.service';
-import { TransactionsService } from '../../transactions.service';
 import { TransactionDetailsPage } from './transaction-details.page';
 
 describe('TransactionDetailsPage', () => {
+  let store: FakeTransactionsStore;
+  let sharesStore: FakeSharesStore;
+  /** What the categories read answers; a function so a test can make it fail first. */
+  let listCategories: () => ReturnType<CategoriesService['list']>;
+
   beforeEach(() => {
+    store = new FakeTransactionsStore();
+    sharesStore = new FakeSharesStore();
+    listCategories = () => of([]);
     TestBed.configureTestingModule({
       imports: [TransactionDetailsPage],
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
         provideRouter([{ path: '**', children: [] }]),
+        { provide: TransactionsStore, useValue: store },
+        { provide: SharesStore, useValue: sharesStore },
+        { provide: CategoriesService, useValue: { list: () => listCategories() } },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(convertToParamMap({ id: '5' })), url: of([]) },
         },
       ],
     });
-  });
-
-  afterEach(() => {
-    // Every change makes the service fetch the review count again.
-    TestBed.inject(HttpTestingController)
-      .match('/api/transactions/review/count')
-      .forEach((r) => (r.cancelled ? undefined : r.flush({ count: 0 })));
-    TestBed.inject(HttpTestingController).verify();
   });
 
   const details = (overrides: Partial<TransactionDetails> = {}): TransactionDetails => ({
@@ -60,26 +68,32 @@ describe('TransactionDetailsPage', () => {
 
   async function render(
     response: TransactionDetails | { httpStatus: number },
-    ratio: { from: string; percent: number }[] = [{ from: '2026-01-01', percent: 60 }],
+    ratio: HouseholdRatioEntry[] = [{ from: '2026-01-01', percent: 60 }] as HouseholdRatioEntry[],
   ) {
+    store.detailsById.set({
+      '5': 'httpStatus' in response ? (response.httpStatus === 404 ? 'gone' : 'error') : response,
+    });
+    sharesStore.householdRatio.set(ratio);
     const fixture = TestBed.createComponent(TransactionDetailsPage);
-    await fixture.whenStable();
-    const request = TestBed.inject(HttpTestingController).expectOne('/api/transactions/5');
-    if ('httpStatus' in response) {
-      request.flush('', { status: response.httpStatus, statusText: 'x' });
-    } else {
-      request.flush(response);
-      await fixture.whenStable();
-      TestBed.inject(HttpTestingController)
-        .expectOne('/api/household-ratio')
-        .flush({ entries: ratio });
-    }
     await fixture.whenStable();
     const page = fixture.nativeElement as HTMLElement;
     const field = (key: string) =>
       page.querySelector(`[data-field="${key}"]`)?.textContent?.trim() ?? null;
     return { fixture, page, field };
   }
+
+  /** The arguments of each call the page made to the store's method. */
+  const callsTo = (method: string) =>
+    store.calls.filter((c) => c.method === method).map((c) => c.args);
+
+  it('reads the transaction of the id in the URL, and the household ratio while shown', async () => {
+    const { fixture } = await render(details());
+
+    expect(store.detailsRequested).toEqual(['5']);
+    expect(sharesStore.calls).toEqual([{ method: 'activate', args: [] }]);
+    fixture.destroy();
+    expect(sharesStore.calls.at(-1)).toEqual({ method: 'deactivate', args: [] });
+  });
 
   it('shows the details in Swedish', async () => {
     const { page, field } = await render(
@@ -176,10 +190,7 @@ describe('TransactionDetailsPage', () => {
       expect(shareText(page, 'source')).toBe(expected);
     });
 
-    async function openChoices(response: TransactionDetails) {
-      const rendered = await render(response);
-      return { ...rendered, http: TestBed.inject(HttpTestingController) };
-    }
+    const openChoices = (response: TransactionDetails) => render(response);
 
     const optionButtons = (page: HTMLElement) =>
       Array.from(page.querySelectorAll<HTMLButtonElement>('button[data-share]'));
@@ -204,33 +215,30 @@ describe('TransactionDetailsPage', () => {
     });
 
     it('sets the chosen option and shows the new share', async () => {
-      const { page, fixture, http } = await openChoices(details());
-      const service = TestBed.inject(TransactionsService);
-      service.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
+      const { page, fixture } = await openChoices(details());
+      store.responses['setShare'] = details({
+        share: { option: 'partner', percent: 0, source: 'transaction' },
+      });
 
       optionButtons(page)[3]!.click();
-      const put = http.expectOne('/api/transactions/5/share');
-      expect(put.request.method).toBe('PUT');
-      expect(put.request.body).toEqual({ share: 'partner' });
-      put.flush(details({ share: { option: 'partner', percent: 0, source: 'transaction' } }));
+      expect(callsTo('setShare')).toEqual([[5, 'partner']]);
       await fixture.whenStable();
 
       expect(shareText(page, 'name')).toBe('Partner');
       expect(shareText(page, 'source')).toBe('Egen andel');
       expect(TestBed.inject(ToastService).message()).toBe('Andelen sparades');
-      expect(service.listed).toBeNull();
     });
 
     it('removes the own share to go back to the inherited one', async () => {
       const { page, fixture } = await render(
         details({ share: { option: 'partner', percent: 0, source: 'transaction' } }),
       );
-      const http = TestBed.inject(HttpTestingController);
+      store.responses['setShare'] = details({
+        share: { option: 'half', percent: 50, source: 'account' },
+      });
 
       (page.querySelector('[data-remove-share]') as HTMLButtonElement).click();
-      const put = http.expectOne('/api/transactions/5/share');
-      expect(put.request.body).toEqual({ share: null });
-      put.flush(details({ share: { option: 'half', percent: 50, source: 'account' } }));
+      expect(callsTo('setShare')).toEqual([[5, null]]);
       await fixture.whenStable();
 
       expect(shareText(page, 'name')).toBe('50/50');
@@ -252,11 +260,9 @@ describe('TransactionDetailsPage', () => {
     });
 
     it('shows an error when saving fails', async () => {
-      const { page, fixture, http } = await openChoices(details());
+      const { page, fixture } = await openChoices(details());
+      store.failures['setShare'] = new Error('failed');
       optionButtons(page)[1]!.click();
-      http
-        .expectOne('/api/transactions/5/share')
-        .flush('', { status: 500, statusText: 'Server Error' });
       await fixture.whenStable();
 
       expect(page.querySelector('[data-share-error]')?.textContent).toContain('kunde inte sparas');
@@ -306,15 +312,7 @@ describe('TransactionDetailsPage', () => {
     });
 
     it('shows a guessed category dimmed and confirms it with one tap', async () => {
-      const service = TestBed.inject(TransactionsService);
       const guess = { ...livsmedel, confirmed: false };
-      service.listed = {
-        key: '',
-        transactions: [{ ...details(), date: '2026-11-08', category: guess }],
-        cursor: null,
-        count: 1,
-        sum: null,
-      };
       const rendered = await render(details({ category: guess }));
       const { page } = rendered;
 
@@ -324,20 +322,15 @@ describe('TransactionDetailsPage', () => {
       );
       expect(page.querySelector('[data-guess-bar]')?.textContent).toContain('Stämmer gissningen?');
 
+      store.responses['setCategory'] = { category: livsmedel, updatedSimilar: 0, others: [] };
       (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
-      const request = TestBed.inject(HttpTestingController).expectOne(
-        '/api/transactions/5/category',
-      );
-      expect(request.request.method).toBe('PUT');
-      expect(request.request.body).toEqual({ subcategoryId: 12 });
-      request.flush({ category: livsmedel, updatedSimilar: 0, others: [] });
+      expect(callsTo('setCategory')).toEqual([[5, 12]]);
       await rendered.fixture.whenStable();
 
       expect(page.querySelector('[data-category] [data-guessed]')).toBeNull();
       expect(page.querySelector('[data-confirm-category]')).toBeNull();
       expect(page.querySelector('[data-category-guessed-note]')).toBeNull();
       expect(TestBed.inject(ToastService).message()).toBe('Kategorin bekräftades');
-      expect(service.listed?.transactions[0]?.category).toEqual(livsmedel);
     });
 
     it('says how many similar transactions were updated, if any', async () => {
@@ -345,10 +338,8 @@ describe('TransactionDetailsPage', () => {
       const { page } = rendered;
       expect(page.querySelector('[data-similar-updated]')).toBeNull();
 
+      store.responses['setCategory'] = { category: livsmedel, updatedSimilar: 1, others: [] };
       (page.querySelector('[data-confirm-category]') as HTMLButtonElement).click();
-      TestBed.inject(HttpTestingController)
-        .expectOne('/api/transactions/5/category')
-        .flush({ category: livsmedel, updatedSimilar: 1, others: [] });
       await rendered.fixture.whenStable();
       rendered.fixture.detectChanges();
 
@@ -377,40 +368,37 @@ describe('TransactionDetailsPage', () => {
       confirmed: true,
     };
 
-    const categories: CategoriesResponse = {
-      categories: [
-        {
-          id: 2,
-          name: 'Mat & Dryck',
-          kind: 'expense',
-          colour: 'green',
-          icon: 'utensils',
-          fixed: false,
-          subcategories: [
-            { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
-            { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
-            { id: 16, name: 'Övrigt', icon: 'circle-ellipsis' },
-          ],
-        },
-        {
-          id: 3,
-          name: 'Transport',
-          kind: 'expense',
-          colour: 'blue',
-          icon: 'bus',
-          fixed: false,
-          subcategories: [
-            { id: 20, name: 'Kollektivtrafik', icon: 'train-front' },
-            { id: 21, name: 'Taxi', icon: 'car-taxi-front' },
-          ],
-        },
-      ],
-    };
+    const categories: Category[] = [
+      {
+        id: 2,
+        name: 'Mat & Dryck',
+        kind: 'expense',
+        colour: 'green',
+        icon: 'utensils',
+        fixed: false,
+        subcategories: [
+          { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+          { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
+          { id: 16, name: 'Övrigt', icon: 'circle-ellipsis' },
+        ],
+      },
+      {
+        id: 3,
+        name: 'Transport',
+        kind: 'expense',
+        colour: 'blue',
+        icon: 'bus',
+        fixed: false,
+        subcategories: [
+          { id: 20, name: 'Kollektivtrafik', icon: 'train-front' },
+          { id: 21, name: 'Taxi', icon: 'car-taxi-front' },
+        ],
+      },
+    ];
 
     async function openPicker(rendered: Awaited<ReturnType<typeof render>>) {
+      listCategories = () => of(categories);
       (rendered.page.querySelector('[data-category-button]') as HTMLButtonElement).click();
-      await rendered.fixture.whenStable();
-      TestBed.inject(HttpTestingController).expectOne('/api/categories').flush(categories);
       await rendered.fixture.whenStable();
     }
 
@@ -441,37 +429,26 @@ describe('TransactionDetailsPage', () => {
       expect(chips(rendered.page)).toEqual(['Livsmedel', 'Restaurang', 'Övrigt']);
     });
 
-    it('saves the chosen subcategory as confirmed and shows it, also in the list kept for the way back', async () => {
-      const service = TestBed.inject(TransactionsService);
-      const listed = { ...details(), date: '2026-11-08', category: livsmedel };
-      service.listed = { key: '', transactions: [listed], cursor: null, count: 1, sum: null };
+    it('saves the chosen subcategory as confirmed and shows it', async () => {
       const rendered = await render(details({ category: livsmedel }));
       await openPicker(rendered);
+      store.responses['setCategory'] = { category: restaurang, updatedSimilar: 0, others: [] };
 
       (rendered.page.querySelector('[data-subcategory="13"]') as HTMLButtonElement).click();
-      const request = TestBed.inject(HttpTestingController).expectOne(
-        '/api/transactions/5/category',
-      );
-      expect(request.request.method).toBe('PUT');
-      expect(request.request.body).toEqual({ subcategoryId: 13 });
-      request.flush({ category: restaurang, updatedSimilar: 0, others: [] });
+      expect(callsTo('setCategory')).toEqual([[5, 13]]);
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Mat & Dryck / Restaurang');
       expect(rendered.page.querySelector('[data-picker]')).toBeNull();
       expect(TestBed.inject(ToastService).message()).toBe('Kategorin sparades');
-      expect(service.listed?.transactions[0]?.category).toEqual(restaurang);
     });
 
     it('removes the category, making the transaction uncategorised', async () => {
       const rendered = await render(details({ category: livsmedel }));
 
+      store.responses['setCategory'] = { category: null, updatedSimilar: 0, others: [] };
       (rendered.page.querySelector('[data-remove-category]') as HTMLButtonElement).click();
-      const request = TestBed.inject(HttpTestingController).expectOne(
-        '/api/transactions/5/category',
-      );
-      expect(request.request.body).toEqual({ subcategoryId: null });
-      request.flush({ category: null, updatedSimilar: 0, others: [] });
+      expect(callsTo('setCategory')).toEqual([[5, null]]);
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Okategoriserad');
@@ -482,20 +459,17 @@ describe('TransactionDetailsPage', () => {
     it('says so when the categories cannot be fetched, and tries again on the next tap', async () => {
       const rendered = await render(details());
       const button = rendered.page.querySelector('[data-category-button]') as HTMLButtonElement;
-      const http = TestBed.inject(HttpTestingController);
 
+      listCategories = () => throwError(() => new Error('failed'));
       button.click();
-      await rendered.fixture.whenStable();
-      http.expectOne('/api/categories').flush('', { status: 500, statusText: 'x' });
       await rendered.fixture.whenStable();
       expect(rendered.page.querySelector('[role="alert"]')?.textContent).toContain(
         'Kategorierna kunde inte hämtas',
       );
       expect(rendered.page.querySelector('[data-picker]')).toBeNull();
 
+      listCategories = () => of(categories);
       button.click();
-      await rendered.fixture.whenStable();
-      http.expectOne('/api/categories').flush(categories);
       await rendered.fixture.whenStable();
       expect(rendered.page.querySelector('[role="alert"]')).toBeNull();
       expect(rendered.page.querySelector('[data-picker]')).not.toBeNull();
@@ -505,10 +479,8 @@ describe('TransactionDetailsPage', () => {
       const rendered = await render(details({ category: livsmedel }));
       await openPicker(rendered);
 
+      store.failures['setCategory'] = new Error('failed');
       (rendered.page.querySelector('[data-subcategory="13"]') as HTMLButtonElement).click();
-      TestBed.inject(HttpTestingController)
-        .expectOne('/api/transactions/5/category')
-        .flush('', { status: 500, statusText: 'x' });
       await rendered.fixture.whenStable();
 
       expect(categoryText(rendered.page)).toBe('Mat & Dryck / Livsmedel');
@@ -555,37 +527,28 @@ describe('TransactionDetailsPage', () => {
     });
 
     it('offers suggestions on a money-in transaction and links the chosen purchase', async () => {
-      const service = TestBed.inject(TransactionsService);
-      service.listed = { key: '', transactions: [], cursor: null, count: 0, sum: null };
       const rendered = await render(details({ amount: refund.amount }));
-      const http = TestBed.inject(HttpTestingController);
+      store.responses['offsetCandidates'] = {
+        transactions: [{ ...details(), id: 3, description: 'Zalando', date: '2026-11-10' }],
+      };
 
       (rendered.page.querySelector('[data-offset-toggle]') as HTMLButtonElement).click();
       await rendered.fixture.whenStable();
-      http.expectOne('/api/transactions/5/offset-candidates').flush({
-        transactions: [{ ...details(), id: 3, description: 'Zalando', date: '2026-11-10' }],
-      });
-      await rendered.fixture.whenStable();
+      expect(callsTo('offsetCandidates')).toEqual([[5, '']]);
 
+      store.responses['setOffset'] = details({ amount: refund.amount, offsets: purchase });
       (document.querySelector('[data-offset-candidate="3"]') as HTMLButtonElement).click();
-      const put = http.expectOne('/api/transactions/5/offset');
-      expect(put.request.method).toBe('PUT');
-      expect(put.request.body).toEqual({ purchaseId: 3 });
-      put.flush(details({ amount: refund.amount, offsets: purchase }));
-      http.expectOne('/api/transactions/review/count').flush({ count: 0 });
+      expect(callsTo('setOffset')).toEqual([[5, 3]]);
       await rendered.fixture.whenStable();
 
       expect(rendered.page.querySelector('[data-offsets-purchase]')).not.toBeNull();
       expect(TestBed.inject(ToastService).message()).toBe('Kvittningen sparades');
-      expect(service.listed).toBeNull();
     });
 
     it('searches for any purchase', async () => {
       const rendered = await render(details({ amount: refund.amount }));
-      const http = TestBed.inject(HttpTestingController);
+      store.responses['offsetCandidates'] = { transactions: [] };
       (rendered.page.querySelector('[data-offset-toggle]') as HTMLButtonElement).click();
-      await rendered.fixture.whenStable();
-      http.expectOne('/api/transactions/5/offset-candidates').flush({ transactions: [] });
       await rendered.fixture.whenStable();
 
       const input = document.querySelector('[data-offset-search]') as HTMLInputElement;
@@ -593,12 +556,10 @@ describe('TransactionDetailsPage', () => {
       input.dispatchEvent(new Event('input'));
       await rendered.fixture.whenStable();
 
-      http
-        .expectOne(
-          (r) => r.url === '/api/transactions/5/offset-candidates' && r.params.get('q') === 'zal',
-        )
-        .flush({ transactions: [] });
-      await rendered.fixture.whenStable();
+      expect(callsTo('offsetCandidates')).toEqual([
+        [5, ''],
+        [5, 'zal'],
+      ]);
       expect(document.querySelector('[data-offset-empty]')?.textContent?.trim()).toBe(
         'Inga träffar',
       );
@@ -606,13 +567,10 @@ describe('TransactionDetailsPage', () => {
 
     it('removes a link', async () => {
       const rendered = await render(details({ amount: refund.amount, offsets: purchase }));
-      const http = TestBed.inject(HttpTestingController);
+      store.responses['setOffset'] = details({ amount: refund.amount });
 
       (rendered.page.querySelector('[data-remove-offset]') as HTMLButtonElement).click();
-      const put = http.expectOne('/api/transactions/5/offset');
-      expect(put.request.body).toEqual({ purchaseId: null });
-      put.flush(details({ amount: refund.amount }));
-      http.expectOne('/api/transactions/review/count').flush({ count: 0 });
+      expect(callsTo('setOffset')).toEqual([[5, null]]);
       await rendered.fixture.whenStable();
 
       expect(rendered.page.querySelector('[data-offsets]')).toBeNull();
@@ -666,7 +624,6 @@ describe('TransactionDetailsPage', () => {
   describe('a manual transaction', () => {
     it('shows Manuell as its account, with edit and a confirmed delete, and no raw data', async () => {
       const { fixture, page, field } = await render(details({ account: null, raw: '{}' }));
-      const http = TestBed.inject(HttpTestingController);
 
       expect(field('account')).toBe('Manuell');
       expect(page.querySelector('[data-manual-pill]')?.textContent?.trim()).toBe('Manuell');
@@ -682,7 +639,7 @@ describe('TransactionDetailsPage', () => {
 
       (page.querySelector('[data-delete]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      http.expectNone('/api/transactions/5');
+      expect(callsTo('deleteManual')).toEqual([]);
       expect(document.querySelector('[role="alertdialog"] [data-confirm]')).not.toBeNull();
       (document.querySelector('[role="alertdialog"] [data-cancel]') as HTMLButtonElement).click();
       await fixture.whenStable();
@@ -691,16 +648,13 @@ describe('TransactionDetailsPage', () => {
 
     it('is deleted once confirmed', async () => {
       const { fixture, page } = await render(details({ account: null }));
-      const http = TestBed.inject(HttpTestingController);
 
       (page.querySelector('[data-menu-trigger]') as HTMLButtonElement).click();
       await fixture.whenStable();
       (page.querySelector('[data-delete]') as HTMLButtonElement).click();
       await fixture.whenStable();
       (document.querySelector('[data-confirm]') as HTMLButtonElement).click();
-      const request = http.expectOne('/api/transactions/5');
-      expect(request.request.method).toBe('DELETE');
-      request.flush(null, { status: 204, statusText: 'No Content' });
+      expect(callsTo('deleteManual')).toEqual([[5]]);
       expect(TestBed.inject(ToastService).message()).toBe('Transaktionen togs bort');
     });
 

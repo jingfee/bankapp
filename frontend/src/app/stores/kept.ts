@@ -23,6 +23,8 @@ export interface ParamRead<T> {
   readonly loading: Signal<boolean>;
   /** True when it could not be fetched and there is nothing older to show for these parameters. */
   readonly failed: Signal<boolean>;
+  /** What the latest fetch failed with, e.g. an `HttpErrorResponse` for a 404; undefined while it has not failed. */
+  readonly error: Signal<unknown>;
 }
 
 /**
@@ -59,5 +61,6 @@ export function paramRead<P, T>(
     value,
     loading: computed(() => resource.isLoading() && value() === undefined),
     failed: computed(() => resource.status() === 'error' && value() === undefined),
+    error: computed(() => (resource.status() === 'error' ? resource.error() : undefined)),
   };
 }
