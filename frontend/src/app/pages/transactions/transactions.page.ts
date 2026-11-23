@@ -61,13 +61,15 @@ const SEARCH_DEBOUNCE_MS = 250;
           routerLink="/transaktioner/ny"
           queryParamsHandling="preserve"
           data-add
-          class="btn btn-secondary btn-sm"
-          >+ Manuell</a
+          class="btn btn-secondary btn-sm flex-none whitespace-nowrap"
+          aria-label="Lägg till manuell transaktion"
+          ><span class="max-[359px]:hidden">+ Manuell</span
+          ><span class="min-[360px]:hidden" aria-hidden="true">+</span></a
         >
       </header>
 
       <div class="flex gap-2">
-        <label class="field flex-1" style="height: 50px">
+        <label class="field min-w-0 flex-1">
           <svg
             class="field-icon"
             width="20"
@@ -108,8 +110,7 @@ const SEARCH_DEBOUNCE_MS = 250;
         <button
           type="button"
           data-filter-button
-          class="btn btn-secondary relative"
-          style="height: 50px"
+          class="btn btn-secondary relative h-[46px] flex-none"
           aria-label="Filter"
           (click)="openPanel()"
         >

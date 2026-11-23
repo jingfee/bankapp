@@ -439,10 +439,13 @@ describe('BankerPage', () => {
         syncing: null,
         lastSync: null,
       } satisfies AccountsResponse);
-    const renewButton = (page: HTMLElement) =>
-      Array.from(page.querySelectorAll('button')).find(
+    const renewButton = async (page: HTMLElement) => {
+      page.querySelector<HTMLButtonElement>('[data-bank-menu]')?.click();
+      await TestBed.inject(ApplicationRef).whenStable();
+      return Array.from(page.querySelectorAll('button')).find(
         (button) => button.textContent?.trim() === 'Förnya',
       );
+    };
 
     it('shows the days left on a connection that is good for a while, without a warning', async () => {
       const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
@@ -451,14 +454,14 @@ describe('BankerPage', () => {
       expect(page.querySelector('[data-validity]')?.textContent).toContain('t.o.m.');
       expect(page.querySelector('[data-expiry]')).toBeNull();
       expect(page.querySelector('.meter')?.classList).not.toContain('meter-warning');
-      expect(renewButton(page)?.classList).toContain('btn-secondary');
+      expect(page.querySelector('button[data-renew]:not([role])')).toBeNull();
     });
 
     it('lets the owner renew a connection that is still active', async () => {
       const page = await render(swedbank({ status: 'active', validUntil: inDays(60) }));
       const http = TestBed.inject(HttpTestingController);
 
-      renewButton(page)!.click();
+      (await renewButton(page))!.click();
       const request = http.expectOne({ method: 'POST', url: '/api/connections' });
       expect(request.request.body).toEqual({ bank: 'Swedbank', renew: true });
       request.flush({ url: 'https://bankid.example/auth' });
@@ -475,7 +478,7 @@ describe('BankerPage', () => {
         'Går ut om 10 dagar',
       );
       expect(page.querySelector('.meter')?.classList).toContain('meter-warning');
-      expect(renewButton(page)?.classList).toContain('btn-primary');
+      expect(page.querySelector('button[data-renew]')?.classList).toContain('btn-primary');
     });
 
     it('says "1 dag" when a day is left', async () => {
@@ -494,14 +497,14 @@ describe('BankerPage', () => {
         'Uppdateras inte',
       );
       expect(page.querySelector('[data-days-left]')?.textContent?.trim()).toBe('Utgången');
-      expect(renewButton(page)?.classList).toContain('btn-primary');
+      expect(page.querySelector('button[data-renew]')?.classList).toContain('btn-primary');
     });
 
     it('sends the owner to BankID to renew the same bank', async () => {
       const page = await render(swedbank({ status: 'expired' }));
       const http = TestBed.inject(HttpTestingController);
 
-      renewButton(page)!.click();
+      (await renewButton(page))!.click();
       const request = http.expectOne({ method: 'POST', url: '/api/connections' });
       expect(request.request.body).toEqual({ bank: 'Swedbank' });
       request.flush({ url: 'https://bankid.example/auth' });
@@ -513,7 +516,7 @@ describe('BankerPage', () => {
       const page = await render(swedbank({ status: 'expired' }));
       const http = TestBed.inject(HttpTestingController);
 
-      renewButton(page)!.click();
+      (await renewButton(page))!.click();
       http.expectOne({ method: 'POST', url: '/api/connections' }).error(new ProgressEvent('error'));
       await TestBed.inject(ApplicationRef).whenStable();
 
@@ -666,8 +669,11 @@ describe('BankerPage', () => {
       lastSync: null,
       ...overrides,
     });
-    const removeButton = (page: HTMLElement) =>
-      page.querySelector<HTMLButtonElement>('[data-remove-bank]');
+    const removeButton = async (page: HTMLElement) => {
+      page.querySelector<HTMLButtonElement>('[data-bank-menu]')?.click();
+      await TestBed.inject(ApplicationRef).whenStable();
+      return page.querySelector<HTMLButtonElement>('[data-remove-bank]');
+    };
 
     afterEach(() => vi.restoreAllMocks());
 
@@ -676,7 +682,7 @@ describe('BankerPage', () => {
       const page = await render((request) => request.flush(response()));
       const http = TestBed.inject(HttpTestingController);
 
-      removeButton(page)!.click();
+      (await removeButton(page))!.click();
       expect(confirmation.mock.calls[0]![0]).toContain('historiken finns kvar');
       http.expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' }).flush(null);
       await new Promise((resolve) => setTimeout(resolve));
@@ -698,7 +704,7 @@ describe('BankerPage', () => {
       vi.spyOn(window, 'confirm').mockReturnValue(false);
       const page = await render((request) => request.flush(response()));
 
-      removeButton(page)!.click();
+      (await removeButton(page))!.click();
 
       TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank');
     });
@@ -715,7 +721,7 @@ describe('BankerPage', () => {
         request.flush(response({ banks: [group('Swedbank', [first, second])] })),
       );
 
-      removeButton(page)!.click();
+      (await removeButton(page))!.click();
 
       expect(confirmation.mock.calls[1]![0]).toContain('Fortsätt följa saldot manuellt?');
       expect(confirmation.mock.calls[1]![0]).toContain('Sparkonto');
@@ -730,7 +736,7 @@ describe('BankerPage', () => {
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       const page = await render((request) => request.flush(response()));
 
-      removeButton(page)!.click();
+      (await removeButton(page))!.click();
       TestBed.inject(HttpTestingController)
         .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' })
         .flush(null, { status: 500, statusText: 'Error' });
