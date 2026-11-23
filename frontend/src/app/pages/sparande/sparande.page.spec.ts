@@ -163,7 +163,7 @@ describe('SparandePage', () => {
 
   it('shows a month with its accounts, net deposits and growth on hover', async () => {
     const { root, text, fixture } = await render();
-    root.querySelector('[data-chart-month="2026-11"]')!.dispatchEvent(new Event('pointerenter'));
+    root.querySelector('[data-chart-column="2026-11"]')!.dispatchEvent(new Event('pointerenter'));
     await fixture.whenStable();
     const tooltip = text('[data-chart-tooltip]')!;
     expect(tooltip).toContain('november 2026');
@@ -184,11 +184,11 @@ describe('SparandePage', () => {
       return month(label, [['manual-1', 100 + i, null]]);
     });
     const { root, click } = await render({ ...RESPONSE, months });
-    expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(12);
+    expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(12);
     await click('[data-range="all"]');
-    expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(15);
+    expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(15);
     await click('[data-range="year"]');
-    expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(12);
+    expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(12);
   });
 
   it('lists each account, with closed ones collapsed under Avslutade', async () => {

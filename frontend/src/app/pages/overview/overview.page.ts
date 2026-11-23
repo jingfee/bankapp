@@ -1,3 +1,9 @@
+import {
+  ChartCard,
+  type ChartColumn,
+  type ChartLegendItem,
+  type ChartTip,
+} from '../../chart-card/chart-card';
 import { shortDate } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -87,13 +93,6 @@ interface SpendingChart {
   xTicks: { label: string; pct: number }[];
 }
 
-interface ChartTip {
-  /** Where the hovered day sits across the chart, as a percentage. */
-  pct: number;
-  current?: { date: string; amount: string; top: number };
-  previous?: { date: string; amount: string; top: number };
-}
-
 const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
 
 interface Tile {
@@ -155,6 +154,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 @Component({
   selector: 'app-overview-page',
   imports: [
+    ChartCard,
     Page,
     NgTemplateOutlet,
     RouterLink,
@@ -289,140 +289,46 @@ function bars<T extends { id: number; name: string; total: number }>(
             >
               <div class="flex min-w-0 flex-col gap-4 sm:gap-5">
                 @if (chart(); as c) {
-                  <section data-spending-chart class="card min-w-0 p-4 sm:p-5">
-                    <h2 class="mb-1 card-title">Utgifter jämfört med förra månaden</h2>
-                    <p data-spending-chart-summary class="mb-4 text-sm text-muted">
-                      {{ c.summary }}
-                    </p>
-                    <div class="flex min-w-0 gap-2">
-                      <div class="relative h-36 w-14 shrink-0" aria-hidden="true">
-                        @for (tick of c.yTicks; track tick.pct) {
-                          <span
-                            data-y-tick
-                            class="absolute right-0 translate-y-1/2 text-[11px] whitespace-nowrap text-muted"
-                            [style.bottom.%]="tick.pct"
-                            >{{ tick.label }}</span
-                          >
-                        }
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <div
-                          data-chart-plot
-                          class="relative h-36 touch-pan-y"
-                          (pointerleave)="hoveredDay.set(null)"
-                          (pointerdown)="touchDay($event)"
-                          (pointermove)="touchDay($event)"
-                        >
-                          @for (tick of c.yTicks; track tick.pct) {
-                            <div
-                              class="absolute inset-x-0 border-t border-line"
-                              [style.bottom.%]="tick.pct"
-                            ></div>
-                          }
-                          <svg
-                            viewBox="0 0 300 120"
-                            class="absolute inset-0 size-full overflow-visible"
-                            preserveAspectRatio="none"
-                            aria-hidden="true"
-                          >
-                            <polyline
-                              data-line="previous"
-                              [attr.points]="c.previous"
-                              fill="none"
-                              stroke="var(--color-muted)"
-                              stroke-width="2"
-                              stroke-dasharray="5 4"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              vector-effect="non-scaling-stroke"
-                            />
-                            <polyline
-                              data-line="current"
-                              [attr.points]="c.current"
-                              fill="none"
-                              stroke="var(--color-accent)"
-                              stroke-width="3"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              vector-effect="non-scaling-stroke"
-                            />
-                          </svg>
-
-                          @if (tip(); as t) {
-                            <div
-                              class="pointer-events-none absolute inset-y-0 w-px bg-line-strong"
-                              [style.left.%]="t.pct"
-                            ></div>
-                            @if (t.previous; as p) {
-                              <span
-                                class="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted"
-                                [style.left.%]="t.pct"
-                                [style.top.%]="p.top"
-                              ></span>
-                            }
-                            @if (t.current; as cur) {
-                              <span
-                                class="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent"
-                                [style.left.%]="t.pct"
-                                [style.top.%]="cur.top"
-                              ></span>
-                            }
-                            <div
-                              data-chart-tooltip
-                              class="pointer-events-none absolute top-0 z-10 flex flex-col gap-1 rounded-[10px] border border-line-strong bg-surface-3 px-3 py-2 text-xs whitespace-nowrap shadow-lg"
-                              [style.left.%]="t.pct"
-                              [style.transform]="'translateX(-' + t.pct + '%)'"
-                            >
-                              @if (t.current; as cur) {
-                                <span class="flex items-center gap-2"
-                                  ><span class="size-2 rounded-full bg-accent"></span>{{ cur.date }}
-                                  <span class="amount">{{ cur.amount }}</span></span
-                                >
-                              }
-                              @if (t.previous; as p) {
-                                <span class="flex items-center gap-2"
-                                  ><span class="size-2 rounded-full bg-muted"></span>{{ p.date }}
-                                  <span class="amount">{{ p.amount }}</span></span
-                                >
-                              }
-                            </div>
-                          }
-
-                          @for (day of chartDays(); track day) {
-                            <div
-                              class="absolute inset-y-0"
-                              [attr.data-chart-day]="day"
-                              [style.left.%]="((day - 1.5) / (c.length - 1)) * 100"
-                              [style.width.%]="100 / (c.length - 1)"
-                              (pointerenter)="hoveredDay.set(day)"
-                            ></div>
-                          }
-                        </div>
-                        <div class="relative mt-1 h-4" aria-hidden="true">
-                          @for (tick of c.xTicks; track tick.label) {
-                            <span
-                              data-x-tick
-                              class="absolute text-[11px] text-muted"
-                              [style.left.%]="tick.pct"
-                              [style.transform]="'translateX(-' + tick.pct + '%)'"
-                              >{{ tick.label }}</span
-                            >
-                          }
-                        </div>
-                      </div>
-                    </div>
-                    <p class="mt-3 flex gap-4 text-xs text-muted">
-                      <span class="flex items-center gap-1.5"
-                        ><span class="h-0.5 w-4 rounded bg-accent"></span>{{ monthTitle() }}</span
-                      >
-                      <span class="flex items-center gap-1.5"
-                        ><span
-                          class="h-0.5 w-4 rounded border-t-2 border-dashed border-muted"
-                        ></span
-                        >Förra månaden</span
-                      >
-                    </p>
-                  </section>
+                  <app-chart-card
+                    data-spending-chart
+                    title="Utgifter jämfört med förra månaden"
+                    [summary]="c.summary"
+                    [yTicks]="c.yTicks"
+                    [xTicks]="c.xTicks"
+                    [columns]="chartColumns()"
+                    [tip]="tip()"
+                    [legend]="legend()"
+                    (hovered)="hoverDay($event)"
+                  >
+                    <svg
+                      viewBox="0 0 300 120"
+                      class="absolute inset-0 size-full overflow-visible"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                    >
+                      <polyline
+                        data-line="previous"
+                        [attr.points]="c.previous"
+                        fill="none"
+                        stroke="var(--color-muted)"
+                        stroke-width="2"
+                        stroke-dasharray="5 4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      <polyline
+                        data-line="current"
+                        [attr.points]="c.current"
+                        fill="none"
+                        stroke="var(--color-accent)"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </svg>
+                  </app-chart-card>
                 }
 
                 @if (spending().length > 0 || income().length > 0) {
@@ -736,41 +642,49 @@ export class OverviewPage {
     const day = this.hoveredDay();
     if (c === null || day === null) return null;
     const [year, number] = this.month().split('-').map(Number) as [number, number];
-    const at = (days: number[], monthIndex: number) => {
+    const at = (days: number[], monthIndex: number, colour: string) => {
       const amount = days[day - 1];
       if (amount === undefined) return undefined;
       return {
-        date: shortDate(
-          `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-        ),
-        amount: money.transform(amount),
-        top: 100 - ((amount - c.bottom) / (c.top - c.bottom)) * 100,
+        row: {
+          label: shortDate(
+            `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          ),
+          amount: money.transform(amount),
+          colour,
+        },
+        marker: { top: 100 - ((amount - c.bottom) / (c.top - c.bottom)) * 100, colour },
       };
     };
+    const found = [
+      at(c.currentDays, number - 1, 'var(--color-accent)'),
+      at(c.previousDays, number - 2, 'var(--color-muted)'),
+    ].filter((entry) => entry !== undefined);
     return {
       pct: c.length > 1 ? ((day - 1) / (c.length - 1)) * 100 : 0,
-      current: at(c.currentDays, number - 1),
-      previous: at(c.previousDays, number - 2),
+      rows: found.map((entry) => entry.row),
+      markers: found.map((entry) => entry.marker),
     };
   });
 
-  /**
-   * Follows a finger across the chart. A touch pointer is captured by the element it
-   * landed on, so the per-day columns never see it enter; map its x position to a day instead.
-   */
-  protected touchDay(event: PointerEvent): void {
-    const length = this.chart()?.length ?? 0;
-    if (event.pointerType !== 'touch' || length < 1) return;
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    if (box.width <= 0) return;
-    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
-    this.hoveredDay.set(Math.round(ratio * (length - 1)) + 1);
+  protected hoverDay(index: number | null): void {
+    this.hoveredDay.set(index === null ? null : index + 1);
   }
 
-  /** One hover column per day of the chart. */
-  protected readonly chartDays = computed(() =>
-    Array.from({ length: this.chart()?.length ?? 0 }, (_, i) => i + 1),
-  );
+  /** One hover column per day of the chart, centred on its point. */
+  protected readonly chartColumns = computed<ChartColumn[]>(() => {
+    const length = this.chart()?.length ?? 0;
+    return Array.from({ length }, (_, i) => ({
+      key: i + 1,
+      left: ((i - 0.5) / (length - 1)) * 100,
+      width: 100 / (length - 1),
+    }));
+  });
+
+  protected readonly legend = computed<ChartLegendItem[]>(() => [
+    { label: this.monthTitle(), colour: 'var(--color-accent)', kind: 'line' },
+    { label: 'Förra månaden', colour: 'var(--color-muted)', kind: 'dashed' },
+  ]);
 
   /** One ring segment per spending category, in the category's colour. */
   protected readonly donut = computed<DonutSegment[]>(() => {

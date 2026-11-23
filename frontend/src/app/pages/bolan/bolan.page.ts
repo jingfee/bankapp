@@ -22,6 +22,13 @@ import { CategoriesService } from '../../categories.service';
 import { DateField } from '../../date-field/date-field';
 import { today } from '../../dates';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
+import {
+  ChartCard,
+  type ChartColumn,
+  type ChartLegendItem,
+  type ChartTip,
+} from '../../chart-card/chart-card';
+import { monthTicks } from '../../chart-card/month-ticks';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MortgageService } from '../../mortgage.service';
@@ -46,8 +53,7 @@ type Panel = { kind: 'add-part' } | { kind: 'entry'; entry: MortgageEntry | null
 const INTERVAL = /^\d+$/;
 
 const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
-const MONTH_SHORT = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short' });
-const MONTH_YEAR = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short', year: '2-digit' });
+const money = new MoneyPipe();
 const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
 
 const monthDate = (month: string) =>
@@ -73,6 +79,7 @@ const PART_COLOURS = [
 @Component({
   selector: 'app-bolan-page',
   imports: [
+    ChartCard,
     ShortDatePipe,
     Page,
     DateField,
@@ -191,141 +198,69 @@ const PART_COLOURS = [
       }
 
       @if (chartMonths().length > 0) {
-        <section class="card p-4 sm:p-5" data-chart-card>
-          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 class="card-title w-full sm:w-auto">
-              {{ mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt' }}
-            </h2>
-            <div class="flex flex-wrap gap-2">
-              <div class="segmented" role="group" aria-label="Diagram">
+        <app-chart-card
+          data-chart-card
+          [title]="mode() === 'debt' ? 'Kvarvarande skuld' : 'Beräknat vs Betalt'"
+          [yTicks]="yTicks()"
+          [xTicks]="xTicks()"
+          [columns]="columns()"
+          [tip]="tip()"
+          [legend]="legend()"
+          (hovered)="hovered.set($event)"
+        >
+          <ng-container chart-controls>
+            <div class="segmented" role="group" aria-label="Diagram">
+              <button
+                type="button"
+                data-mode="debt"
+                [attr.aria-pressed]="mode() === 'debt'"
+                (click)="mode.set('debt'); hovered.set(null)"
+              >
+                Skuld
+              </button>
+              <button
+                type="button"
+                data-mode="paid"
+                [attr.aria-pressed]="mode() === 'paid'"
+                (click)="mode.set('paid'); hovered.set(null)"
+              >
+                Beräknat vs Betalt
+              </button>
+            </div>
+            <div class="segmented" role="group" aria-label="Period">
+              @for (option of ranges; track option.id) {
                 <button
                   type="button"
-                  data-mode="debt"
-                  [attr.aria-pressed]="mode() === 'debt'"
-                  (click)="mode.set('debt'); hovered.set(null)"
+                  [attr.data-range]="option.id"
+                  [attr.aria-pressed]="range() === option.id"
+                  (click)="range.set(option.id); hovered.set(null)"
                 >
-                  Skuld
+                  {{ option.label }}
                 </button>
-                <button
-                  type="button"
-                  data-mode="paid"
-                  [attr.aria-pressed]="mode() === 'paid'"
-                  (click)="mode.set('paid'); hovered.set(null)"
-                >
-                  Beräknat vs Betalt
-                </button>
-              </div>
-              <div class="segmented" role="group" aria-label="Period">
-                @for (option of ranges; track option.id) {
-                  <button
-                    type="button"
-                    [attr.data-range]="option.id"
-                    [attr.aria-pressed]="range() === option.id"
-                    (click)="range.set(option.id); hovered.set(null)"
-                  >
-                    {{ option.label }}
-                  </button>
-                }
-              </div>
-            </div>
-          </div>
-          @if (chart(); as c) {
-            <div class="flex gap-2">
-              <div class="relative h-36 w-16 shrink-0" aria-hidden="true">
-                @for (tick of c.yTicks; track tick.pct) {
-                  <span
-                    class="absolute right-0 translate-y-1/2 text-[11px] whitespace-nowrap text-muted"
-                    [style.bottom.%]="tick.pct"
-                    >{{ kr(tick.value) }}</span
-                  >
-                }
-              </div>
-              <div class="min-w-0 flex-1">
-                <div
-                  data-chart-plot
-                  class="relative h-36 touch-pan-y"
-                  (pointerleave)="hovered.set(null)"
-                  (pointerdown)="touchMonth($event)"
-                  (pointermove)="touchMonth($event)"
-                >
-                  @for (tick of c.yTicks; track tick.pct) {
-                    <div
-                      class="absolute inset-x-0 border-t border-line"
-                      [style.bottom.%]="tick.pct"
-                    ></div>
-                  }
-                  <svg
-                    viewBox="0 0 300 120"
-                    class="absolute inset-0 size-full overflow-visible"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    @for (bar of c.bars; track $index) {
-                      <rect
-                        data-bar
-                        [attr.data-series]="bar.series"
-                        [attr.x]="bar.x"
-                        [attr.y]="bar.y"
-                        [attr.width]="bar.width"
-                        [attr.height]="bar.height"
-                        [attr.fill]="bar.colour"
-                      />
-                    }
-                  </svg>
-                  @if (tip(); as t) {
-                    <div
-                      class="pointer-events-none absolute inset-y-0 w-px bg-line-strong"
-                      [style.left.%]="t.pct"
-                    ></div>
-                    <div
-                      data-chart-tooltip
-                      class="pointer-events-none absolute top-0 z-10 flex flex-col gap-1 rounded-[10px] border border-line-strong bg-surface-3 px-3 py-2 text-xs whitespace-nowrap shadow-lg"
-                      [style.left.%]="t.pct"
-                      [style.transform]="'translateX(-' + t.pct + '%)'"
-                    >
-                      <span class="font-semibold">{{ t.title }}</span>
-                      @for (line of t.lines; track line.label) {
-                        <span class="flex items-center gap-2"
-                          ><span class="size-2 rounded-full" [style.background]="line.colour"></span
-                          >{{ line.label }}
-                          <span class="amount">{{ line.amount | money }}</span></span
-                        >
-                      }
-                    </div>
-                  }
-                  @for (slot of c.slots; track slot.month; let i = $index) {
-                    <div
-                      class="absolute inset-y-0"
-                      [attr.data-chart-month]="slot.month"
-                      [style.left.%]="(i / c.slots.length) * 100"
-                      [style.width.%]="100 / c.slots.length"
-                      (pointerenter)="hovered.set(i)"
-                    ></div>
-                  }
-                </div>
-                <div class="relative mt-1 h-4" aria-hidden="true">
-                  @for (tick of xTicks(); track tick.month) {
-                    <span
-                      data-x-tick
-                      class="absolute text-[11px] text-muted"
-                      [style.left.%]="tick.pct"
-                      [style.transform]="'translateX(-' + tick.pct + '%)'"
-                      >{{ tick.label }}</span
-                    >
-                  }
-                </div>
-              </div>
-            </div>
-            <p class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" data-legend>
-              @for (item of legend(); track item.label) {
-                <span class="flex items-center gap-1.5"
-                  ><span class="size-2 rounded-full" [style.background]="item.colour"></span
-                  >{{ item.label }}</span
-                >
               }
-            </p>
+            </div>
+          </ng-container>
+          @if (chart(); as c) {
+            <svg
+              viewBox="0 0 300 120"
+              class="absolute inset-0 size-full overflow-visible"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              @for (bar of c.bars; track $index) {
+                <rect
+                  data-bar
+                  [attr.data-series]="bar.series"
+                  [attr.x]="bar.x"
+                  [attr.y]="bar.y"
+                  [attr.width]="bar.width"
+                  [attr.height]="bar.height"
+                  [attr.fill]="bar.colour"
+                />
+              }
+            </svg>
           }
-        </section>
+        </app-chart-card>
       }
 
       <section class="card flex flex-col gap-4 p-4 sm:p-5" data-mortgage>
@@ -906,52 +841,66 @@ export class BolanPage {
   });
 
   protected readonly xTicks = computed(() => {
-    const months = this.chartMonths();
-    const every = months.length <= 12 ? 1 : Math.ceil(months.length / 6);
-    return months.flatMap((m, i) =>
-      i % every === 0 || i === months.length - 1
-        ? [
-            {
-              month: m.month,
-              pct: ((i + 0.5) / months.length) * 100,
-              label: (months.length <= 12 ? MONTH_SHORT : MONTH_YEAR).format(monthDate(m.month)),
-            },
-          ]
-        : [],
-    );
+    const months = this.chartMonths().map((m) => m.month);
+    return monthTicks(months, (i) => ((i + 0.5) / months.length) * 100);
   });
 
-  protected readonly legend = computed(() =>
+  protected readonly yTicks = computed(() =>
+    (this.chart()?.yTicks ?? []).map((tick) => ({ pct: tick.pct, label: this.kr(tick.value) })),
+  );
+
+  protected readonly columns = computed<ChartColumn[]>(() => {
+    const slots = this.chart()?.slots ?? [];
+    return slots.map((slot, i) => ({
+      key: slot.month,
+      left: (i / slots.length) * 100,
+      width: 100 / slots.length,
+    }));
+  });
+
+  protected readonly legend = computed<ChartLegendItem[]>(() =>
     this.mode() === 'paid'
       ? [
-          { label: 'Beräknat', colour: this.colours().get('estimate')! },
-          { label: 'Betalt', colour: this.colours().get('paid')! },
+          { label: 'Beräknat', colour: this.colours().get('estimate')!, kind: 'fill' },
+          { label: 'Betalt', colour: this.colours().get('paid')!, kind: 'fill' },
         ]
       : this.parts()
           .filter((part) =>
             this.chartMonths().some((m) => m.debts.some((d) => d.partId === part.id)),
           )
-          .map((part) => ({ label: part.name, colour: this.colours().get(part.id)! })),
+          .map((part) => ({
+            label: part.name,
+            colour: this.colours().get(part.id)!,
+            kind: 'fill' as const,
+          })),
   );
 
-  protected readonly tip = computed(() => {
+  protected readonly tip = computed<ChartTip | null>(() => {
     const c = this.chart();
     const index = this.hovered();
     const month = index === null ? undefined : this.chartMonths()[index];
     if (c === null || month === undefined || index === null) return null;
     const title = `${MONTH_LONG.format(monthDate(month.month))} ${month.month.slice(0, 4)}`;
-    const lines =
+    const rows =
       this.mode() === 'debt'
         ? month.debts.map((d) => ({
             label: this.partName(d.partId),
             colour: this.colours().get(d.partId)!,
-            amount: d.debt,
+            amount: money.transform(d.debt),
           }))
         : [
-            { label: 'Beräknat', colour: this.colours().get('estimate')!, amount: month.total },
-            { label: 'Betalt', colour: this.colours().get('paid')!, amount: month.paid },
+            {
+              label: 'Beräknat',
+              colour: this.colours().get('estimate')!,
+              amount: money.transform(month.total),
+            },
+            {
+              label: 'Betalt',
+              colour: this.colours().get('paid')!,
+              amount: money.transform(month.paid),
+            },
           ];
-    return { title, lines, pct: ((index + 0.5) / this.chartMonths().length) * 100 };
+    return { title, rows, pct: ((index + 0.5) / this.chartMonths().length) * 100 };
   });
   protected readonly failed = signal<string | null>(null);
   protected readonly busy = signal(false);
@@ -1053,16 +1002,6 @@ export class BolanPage {
     const debt = month?.debts.find((d) => d.partId === part.id)?.debt;
     if (debt === undefined || part.rate === null) return null;
     return Math.round(((debt * part.rate) / 1200) * 100) / 100;
-  }
-
-  /** Follows a finger across the chart: a touch pointer never enters the per-month columns. */
-  protected touchMonth(event: PointerEvent): void {
-    const length = this.chartMonths().length;
-    if (event.pointerType !== 'touch' || length < 1) return;
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    if (box.width <= 0) return;
-    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 0.999999);
-    this.hovered.set(Math.floor(ratio * length));
   }
 
   protected startNewRate(part: LoanPart): void {

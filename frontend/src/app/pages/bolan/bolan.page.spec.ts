@@ -418,16 +418,16 @@ describe('BolanPage', () => {
 
     it('shows the latest year by default and every month under Allt', async () => {
       const { root, click } = await render(MORTGAGE, many(20));
-      expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(12);
+      expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(12);
       await click('[data-range="all"]');
-      expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(20);
+      expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(20);
       await click('[data-range="1y"]');
-      expect(root.querySelectorAll('[data-chart-month]')).toHaveLength(12);
+      expect(root.querySelectorAll('[data-chart-column]')).toHaveLength(12);
     });
 
     it('tells the month in a tooltip', async () => {
       const { fixture, root } = await render();
-      root.querySelector('[data-chart-month="2026-11"]')!.dispatchEvent(new Event('pointerenter'));
+      root.querySelector('[data-chart-column="2026-11"]')!.dispatchEvent(new Event('pointerenter'));
       await fixture.whenStable();
       const tooltip = root.querySelector('[data-chart-tooltip]')!;
       expect(tooltip.textContent).toContain('november 2026');
