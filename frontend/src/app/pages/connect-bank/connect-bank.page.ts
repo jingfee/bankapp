@@ -6,7 +6,7 @@ import type { Bank } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
 import { BanksService } from '../../banks.service';
-import { ConnectionsService } from '../../connections.service';
+import { BanksStore } from '../../stores/banks.store';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
 import { Icon } from '../../icon/icon';
@@ -112,7 +112,7 @@ type Loaded = { banks: Bank[] } | { failed: true };
   `,
 })
 export class ConnectBankPage {
-  private readonly connections = inject(ConnectionsService);
+  private readonly banksStore = inject(BanksStore);
   private readonly redirector = inject(Redirector);
   protected readonly query = signal('');
   protected readonly starting = signal(false);
@@ -146,7 +146,7 @@ export class ConnectBankPage {
   protected connect(bank: string): void {
     this.starting.set(true);
     this.startError.set(undefined);
-    this.connections.start(bank).subscribe({
+    this.banksStore.startConnection(bank).subscribe({
       next: (url) => this.redirector.goTo(url),
       error: (error: unknown) => {
         this.starting.set(false);

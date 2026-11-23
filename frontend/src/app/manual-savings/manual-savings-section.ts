@@ -13,6 +13,7 @@ import { DateField } from '../date-field/date-field';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { MoneyPipe } from '../formatting/money.pipe';
 import { ManualSavingsService } from '../manual-savings.service';
+import { SavingsStore } from '../stores/savings.store';
 
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
 @Component({
@@ -318,6 +319,7 @@ import { ManualSavingsService } from '../manual-savings.service';
 })
 export class ManualSavingsSection {
   private readonly service = inject(ManualSavingsService);
+  private readonly store = inject(SavingsStore);
   /** Emits after the owner has changed an account or an entry, so figures built on them can refresh. */
   readonly changed = output<void>();
   protected readonly today = today;
@@ -376,7 +378,7 @@ export class ManualSavingsSection {
 
   protected createAccount(): void {
     this.run(
-      this.service.create(this.request()),
+      this.store.create(this.request()),
       (created) => {
         this.accounts.update((all) => [...all, created]);
         this.changed.emit();
@@ -422,7 +424,7 @@ export class ManualSavingsSection {
 
   protected rename(account: ManualSavingsAccount): void {
     this.run(
-      this.service.rename(account.id, this.request()),
+      this.store.rename(account.id, this.request()),
       (updated) => {
         this.replace(updated);
         this.renamingId.set(null);
@@ -433,7 +435,7 @@ export class ManualSavingsSection {
 
   protected close(account: ManualSavingsAccount): void {
     this.run(
-      this.service.close(account.id, { date: this.closeDate() }),
+      this.store.close(account.id, { date: this.closeDate() }),
       (updated) => {
         this.replace(updated);
         this.closingId.set(null);
@@ -445,7 +447,7 @@ export class ManualSavingsSection {
 
   protected reopen(account: ManualSavingsAccount): void {
     this.run(
-      this.service.reopen(account.id),
+      this.store.reopen(account.id),
       (updated) => this.replace(updated),
       'Kontot kunde inte öppnas igen. Försök igen senare.',
     );
@@ -486,8 +488,8 @@ export class ManualSavingsSection {
     const editing = this.editingEntry();
     this.busy.set(true);
     (editing
-      ? this.service.updateEntry(account.id, editing.id, request)
-      : this.service.addEntry(account.id, request)
+      ? this.store.updateEntry(account.id, editing.id, request)
+      : this.store.addEntry(account.id, request)
     ).subscribe({
       next: (updated) => {
         this.busy.set(false);
@@ -507,7 +509,7 @@ export class ManualSavingsSection {
 
   protected deleteEntry(account: ManualSavingsAccount, entry: BalanceEntry): void {
     this.run(
-      this.service.deleteEntry(account.id, entry.id),
+      this.store.deleteEntry(account.id, entry.id),
       (updated) => {
         this.replace(updated);
         this.deleting.set(null);

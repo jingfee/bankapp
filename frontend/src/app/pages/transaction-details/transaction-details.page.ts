@@ -33,6 +33,7 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesService } from '../../shares.service';
 import { MANUAL_LABEL, SHARE_LABELS, householdPercentLabel } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
+import { TransactionsStore } from '../../stores/transactions.store';
 import { TransactionsService } from '../../transactions.service';
 import { Page } from '../../page/page';
 
@@ -525,6 +526,7 @@ export class TransactionDetailsPage {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly transactions = inject(TransactionsService);
+  private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryList = inject(CategoriesService);
   private readonly sharesService = inject(SharesService);
   private readonly toast = inject(ToastService);
@@ -737,7 +739,7 @@ export class TransactionDetailsPage {
     if (details === null || this.saving()) return;
     this.saving.set(true);
     this.shareError.set(null);
-    this.shareRequest = this.transactions.setShare(details.id, share).subscribe({
+    this.shareRequest = this.transactionsStore.setShare(details.id, share).subscribe({
       next: (updated) => {
         this.state.set({ status: 'ready', details: updated });
         this.toast.show(share === null ? 'Egen andel togs bort' : 'Andelen sparades');
@@ -777,7 +779,7 @@ export class TransactionDetailsPage {
     if (details === null || this.saving()) return;
     this.saving.set(true);
     this.categoryError.set(null);
-    this.transactions.setOffset(details.id, purchaseId).subscribe({
+    this.transactionsStore.setOffset(details.id, purchaseId).subscribe({
       next: (updated) => {
         this.state.set({ status: 'ready', details: updated });
         this.toast.show(purchaseId === null ? 'Kvittningen togs bort' : 'Kvittningen sparades');
@@ -816,7 +818,7 @@ export class TransactionDetailsPage {
     this.saving.set(true);
     this.categoryError.set(null);
     this.similarNote.set(null);
-    this.transactions.setCategory(details.id, subcategoryId).subscribe({
+    this.transactionsStore.setCategory(details.id, subcategoryId).subscribe({
       next: ({ category, updatedSimilar }) => {
         this.state.set({ status: 'ready', details: { ...details, category } });
         this.similarNote.set(similarUpdatedNote(updatedSimilar));
@@ -835,7 +837,7 @@ export class TransactionDetailsPage {
   protected deleteManual(id: number): void {
     this.saving.set(true);
     this.deleteError.set(false);
-    this.transactions.deleteManual(id).subscribe({
+    this.transactionsStore.deleteManual(id).subscribe({
       next: () => {
         this.toast.show('Transaktionen togs bort');
         void this.router.navigateByUrl('/transaktioner');

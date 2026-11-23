@@ -29,6 +29,8 @@ import { MonthField } from '../../month-field/month-field';
 import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementService } from '../../settlement.service';
+import { SettlementStore } from '../../stores/settlement.store';
+import { SharesStore } from '../../stores/shares.store';
 import { today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
 import { ShareControl } from '../../share-control/share-control';
@@ -653,6 +655,8 @@ export class DelatPage {
   private readonly categoriesService = inject(CategoriesService);
   private readonly shares = inject(SharesService);
   private readonly settlementService = inject(SettlementService);
+  private readonly settlementStore = inject(SettlementStore);
+  private readonly sharesStore = inject(SharesStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
 
@@ -819,7 +823,7 @@ export class DelatPage {
 
   protected saveMonth(): void {
     this.run(
-      this.settlementService.setOpenMonth({ month: this.monthDraft() }),
+      this.settlementStore.setOpenMonth({ month: this.monthDraft() }),
       'Månaden kunde inte ändras. Den måste vara senare än den förra.',
       () => this.editingMonth.set(false),
     );
@@ -838,7 +842,7 @@ export class DelatPage {
 
   protected closeMonth(): void {
     this.run(
-      this.settlementService.close({
+      this.settlementStore.close({
         closedThrough: this.closingDate(),
         nextMonth: this.nextMonth(),
       }),
@@ -848,11 +852,11 @@ export class DelatPage {
   }
 
   protected saveReport(period: SettlementPeriod): void {
-    this.run(this.settlementService.saveReport(period.month), 'Rapporten kunde inte sparas.');
+    this.run(this.settlementStore.saveReport(period.month), 'Rapporten kunde inte sparas.');
   }
 
   protected undoClose(): void {
-    this.run(this.settlementService.undoClose(), 'Avslutet kunde inte ångras.', () =>
+    this.run(this.settlementStore.undoClose(), 'Avslutet kunde inte ångras.', () =>
       this.undoing.set(null),
     );
   }
@@ -899,7 +903,7 @@ export class DelatPage {
     }
     this.saving.set(true);
     this.error.set(null);
-    this.settlementService.setBalance({ amount, asOf: this.asOf() }).subscribe({
+    this.settlementStore.setBalance({ amount, asOf: this.asOf() }).subscribe({
       next: (response) => {
         this.settlement.set(response);
         this.amount.set('');
@@ -962,7 +966,7 @@ export class DelatPage {
   private saveRatio(entries: HouseholdRatioEntry[], done?: () => void): void {
     this.saving.set(true);
     this.error.set(null);
-    this.shares
+    this.sharesStore
       .setHouseholdRatio([...entries].sort((a, b) => a.from.localeCompare(b.from)))
       .subscribe({
         next: (saved) => {
@@ -1006,7 +1010,7 @@ export class DelatPage {
   private saveShare(id: number, option: ShareOption, done?: () => void): void {
     this.saving.set(true);
     this.error.set(null);
-    this.shares.setSubcategoryShare(id, option).subscribe({
+    this.sharesStore.setSubcategoryShare(id, option).subscribe({
       next: () => {
         this.saving.set(false);
         this.subcategoryShares.update((shares) => {

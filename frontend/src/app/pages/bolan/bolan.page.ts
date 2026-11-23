@@ -32,6 +32,7 @@ import { monthTicks } from '../../chart-card/month-ticks';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MortgageService } from '../../mortgage.service';
+import { MortgageStore } from '../../stores/mortgage.store';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 import {
@@ -776,6 +777,7 @@ const PART_COLOURS = [
 })
 export class BolanPage {
   private readonly service = inject(MortgageService);
+  private readonly store = inject(MortgageStore);
   private readonly categories = inject(CategoriesService);
   private readonly now = today();
   private figuresRequest: Subscription | undefined;
@@ -1016,7 +1018,7 @@ export class BolanPage {
     const rate = parseAmount(this.rate());
     if (rate === null || rate < 0) return this.formError.set('Ange räntan i procent, t.ex. 3,85.');
     if (this.rateFrom() === '') return this.formError.set('Ange från vilket datum räntan gäller.');
-    this.submit(this.service.addRateChange(part.id, { from: this.rateFrom(), rate }));
+    this.submit(this.store.addRateChange(part.id, { from: this.rateFrom(), rate }));
   }
 
   protected value(event: Event): string {
@@ -1093,7 +1095,7 @@ export class BolanPage {
     const days = this.recurringDays();
     if (days === null) return;
     this.submit(
-      this.service.addPart({
+      this.store.addPart({
         name: this.name().trim(),
         startedOn: this.date(),
         debt,
@@ -1114,7 +1116,7 @@ export class BolanPage {
     const days = this.recurringDays();
     if (days === null) return;
     const calls: Observable<MortgageResponse>[] = [
-      this.service.updatePart(part.id, { name: this.name().trim(), ...days }),
+      this.store.updatePart(part.id, { name: this.name().trim(), ...days }),
     ];
     if (this.rateTouched()) {
       const rate = parseAmount(this.rate());
@@ -1122,7 +1124,7 @@ export class BolanPage {
         return this.formError.set('Ange räntan i procent, t.ex. 3,85.');
       if (this.rateFrom() === '')
         return this.formError.set('Ange från vilket datum räntan gäller.');
-      calls.push(this.service.addRateChange(part.id, { from: this.rateFrom(), rate }));
+      calls.push(this.store.addRateChange(part.id, { from: this.rateFrom(), rate }));
     }
     if (this.amountTouched()) {
       const amount = parseAmount(this.amount());
@@ -1132,7 +1134,7 @@ export class BolanPage {
       if (this.amountFrom() === '') {
         return this.formError.set('Ange från vilket datum amorteringen gäller.');
       }
-      calls.push(this.service.addAmortisationChange(part.id, { from: this.amountFrom(), amount }));
+      calls.push(this.store.addAmortisationChange(part.id, { from: this.amountFrom(), amount }));
     }
     this.submit(concat(...calls).pipe(last()));
   }
@@ -1146,7 +1148,7 @@ export class BolanPage {
     if (this.endDate() === '' || this.endDate() > today()) {
       return this.formError.set('Ange ett datum som inte ligger i framtiden.');
     }
-    this.submit(this.service.endPart(part.id, { date: this.endDate() }));
+    this.submit(this.store.endPart(part.id, { date: this.endDate() }));
   }
 
   protected saveEntry(): void {
@@ -1166,16 +1168,14 @@ export class BolanPage {
     if (debts.length === 0) return this.formError.set('Ingen lånedel är öppen det datumet.');
     const request = { date: this.date(), debts };
     this.submit(
-      open.entry
-        ? this.service.updateEntry(open.entry.id, request)
-        : this.service.addEntry(request),
+      open.entry ? this.store.updateEntry(open.entry.id, request) : this.store.addEntry(request),
     );
   }
 
   protected deleteEntry(entry: MortgageEntry): void {
     this.busy.set(true);
     this.failed.set(null);
-    this.service.deleteEntry(entry.id).subscribe({
+    this.store.deleteEntry(entry.id).subscribe({
       next: (mortgage) => {
         this.busy.set(false);
         this.deletingEntry.set(null);
