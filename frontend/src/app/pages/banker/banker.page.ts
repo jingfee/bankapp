@@ -210,8 +210,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         }
         <div class="stagger grid items-start gap-4 lg:grid-cols-2">
           @for (group of result.banks; track group.bank) {
-            <section [attr.data-bank]="group.bank" class="card flex flex-col gap-4 p-4 sm:p-5">
-              <div class="flex items-center gap-3">
+            <section
+              [attr.data-bank]="group.bank"
+              class="card flex min-w-0 flex-col gap-4 p-4 sm:p-5"
+            >
+              <div class="flex flex-wrap items-center gap-3">
                 <span
                   aria-hidden="true"
                   class="grid size-11 flex-none place-content-center rounded-xl bg-accent/15 font-display text-lg font-semibold text-accent"
@@ -227,7 +230,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   <button
                     type="button"
                     data-renew
-                    class="btn btn-sm btn-primary flex-none"
+                    class="btn btn-sm btn-primary flex-none max-[419px]:order-last max-[419px]:w-full"
                     [disabled]="renewing()"
                     (click)="renew(group.bank, false)"
                   >
@@ -290,7 +293,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     [attr.data-hidden-row]="account.hidden ? '' : null"
                   >
                     <div
-                      class="flex items-start justify-between gap-3"
+                      class="flex flex-col gap-1 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between min-[420px]:gap-3"
                       [class.opacity-55]="account.hidden"
                     >
                       <span class="flex min-w-0 flex-col">
@@ -306,7 +309,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           }}</span>
                         </span>
                       </span>
-                      <span class="flex flex-none flex-col items-end text-xs text-muted">
+                      <span
+                        class="flex flex-col text-xs text-muted min-[420px]:flex-none min-[420px]:items-end"
+                      >
                         <span data-synced>{{
                           account.lastSyncedAt
                             ? 'Uppdaterad ' + (account.lastSyncedAt | dateTime)
