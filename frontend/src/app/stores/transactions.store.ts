@@ -22,6 +22,8 @@ import type {
   Transaction,
   TransactionCategoryResponse,
   TransactionDetails,
+  TransactionReviewCountResponse,
+  TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
 import { type Observable, type Subscription, tap } from 'rxjs';
@@ -30,7 +32,6 @@ import {
   filtersKey,
   filtersToParams,
 } from '../pages/transactions/transaction-filters';
-import { TransactionsService } from '../transactions.service';
 import { Invalidation } from './invalidation';
 import { type ParamRead, paramRead } from './kept';
 
@@ -91,6 +92,19 @@ export abstract class TransactionsStore {
   abstract get(id: string): Observable<TransactionDetails>;
   /** Purchases a money-in transaction could be offset against: likely ones, or those matching `search`. */
   abstract offsetCandidates(id: number, search?: string): Observable<OffsetCandidatesResponse>;
+  /**
+   * What waits for review: guessed and uncategorised transactions, newest first, and suggested
+   * replacements. Live only for as long as the page that asked: call it where the page is
+   * created. It is fetched again when a fact that moves transactions fires, and its answer
+   * updates `reviewCount`.
+   */
+  abstract review(): ParamRead<TransactionReviewResponse>;
+  /** How many transactions wait for review, shown on the header icon; 0 until it is known. */
+  abstract readonly reviewCount: Signal<number>;
+  /** Fetches `reviewCount` again; a failure leaves it as it was. */
+  abstract refreshReviewCount(): void;
+  /** Sets `reviewCount` back to 0, as when the owner signs out. */
+  abstract resetReviewCount(): void;
 
   /** Adds a manual transaction. */
   abstract addManual(request: ManualTransactionRequest): Observable<Transaction>;
@@ -117,14 +131,50 @@ export abstract class TransactionsStore {
 export class HttpTransactionsStore extends TransactionsStore {
   private readonly http = inject(HttpClient);
   private readonly invalidation = inject(Invalidation);
-  // The review and its count still live in the service, which also listens to the map for them.
-  private readonly reviews = inject(TransactionsService);
+  private readonly count = signal(0);
+  readonly reviewCount = this.count.asReadonly();
+  private countRequest: Subscription | undefined;
   /** Set by the list; read when the owner comes back to it with the browser's back button. */
   private listed: ListedTransactions | null = null;
 
   constructor() {
     super();
     this.invalidation.onRead('listed', () => (this.listed = null));
+    // What changed may affect what waits for review, also while no page shows the list.
+    this.invalidation.onRead('review', () => this.refreshReviewCount());
+  }
+
+  review(): ParamRead<TransactionReviewResponse> {
+    const read = paramRead<true, TransactionReviewResponse>(
+      signal<true>(true),
+      () => ({ url: '/api/transactions/review' }),
+      this.invalidation.version('review'),
+    );
+    effect(() => {
+      const answer = read.value();
+      if (answer === undefined) return;
+      // This answer is newer than any count request still on its way.
+      untracked(() => {
+        this.countRequest?.unsubscribe();
+        this.count.set(answer.count);
+      });
+    });
+    return read;
+  }
+
+  /** Only the latest request may set the count, so a slow older answer cannot overwrite it. */
+  refreshReviewCount(): void {
+    this.countRequest?.unsubscribe();
+    this.countRequest = this.http
+      .get<TransactionReviewCountResponse>('/api/transactions/review/count')
+      .subscribe({
+        next: (response) => this.count.set(response.count),
+        error: () => undefined,
+      });
+  }
+
+  resetReviewCount(): void {
+    this.count.set(0);
   }
 
   list(request: Signal<TransactionListRequest | undefined>): TransactionListRead {

@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { Observable } from 'rxjs';
-import { TransactionsService } from '../transactions.service';
 import { comesBackToKeptList, leaveList } from './transactions.store.testing';
 import { AccountsStore } from './accounts.store';
 import { BanksStore } from './banks.store';
@@ -237,14 +236,14 @@ describe('store mutations', () => {
 
 describe('what the owner would see after a mutation (#201)', () => {
   let http: HttpTestingController;
-  let transactions: TransactionsService;
+  let transactions: TransactionsStore;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
-    transactions = TestBed.inject(TransactionsService);
+    transactions = TestBed.inject(TransactionsStore);
   });
 
   const mutations: [string, string, string, () => Observable<unknown>, unknown][] = [

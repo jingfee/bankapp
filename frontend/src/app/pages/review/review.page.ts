@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CATEGORY_PALETTE,
@@ -15,14 +15,11 @@ import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { accountLabel } from '../../share-display';
 import { TransactionsStore } from '../../stores/transactions.store';
-import { TransactionsService } from '../../transactions.service';
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
-
-type Status = 'loading' | 'ready' | 'failed';
 
 /** Rows shown before Visa alla. */
 const VISIBLE_ROWS = 5;
@@ -297,15 +294,35 @@ const COLLAPSE_MS = 450;
   `,
 })
 export class ReviewPage {
-  private readonly service = inject(TransactionsService);
   private readonly store = inject(TransactionsStore);
+  private readonly review = this.store.review();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
 
   protected readonly accountLabel = accountLabel;
-  protected readonly status = signal<Status>('loading');
-  protected readonly transactions = signal<Transaction[]>([]);
-  protected readonly replacements = signal<ReplacementSuggestion[]>([]);
+  protected readonly status = computed(() =>
+    this.review.value() !== undefined ? 'ready' : this.review.failed() ? 'failed' : 'loading',
+  );
+  /** Rows handled this visit that have collapsed away; the store may not have dropped them yet. */
+  private readonly dropped = signal<ReadonlySet<number>>(new Set());
+  private readonly droppedPairs = signal<ReadonlySet<number>>(new Set());
+  /** The rows collapsing away, kept so they stay once the store has dropped them. */
+  private readonly fading = signal<ReadonlyMap<number, Transaction>>(new Map());
+  private readonly fadingPairs = signal<ReadonlyMap<number, ReplacementSuggestion>>(new Map());
+  protected readonly transactions = computed(() => {
+    const read = this.review.value()?.transactions ?? [];
+    return [
+      ...[...this.fading().values()].filter((t) => !read.some((r) => r.id === t.id)),
+      ...read.filter((t) => !this.dropped().has(t.id)),
+    ];
+  });
+  protected readonly replacements = computed(() => {
+    const read = this.review.value()?.replacements ?? [];
+    return [
+      ...[...this.fadingPairs().values()].filter((p) => !read.some((r) => r.bank.id === p.bank.id)),
+      ...read.filter((p) => !this.droppedPairs().has(p.bank.id)),
+    ];
+  });
   protected readonly deciding = signal<number | null>(null);
   protected readonly picking = signal<number | null>(null);
   protected readonly saving = signal<number | null>(null);
@@ -314,7 +331,6 @@ export class ReviewPage {
   /** Fetched the first time a picker opens. */
   protected readonly categories = signal<Category[] | null>(null);
   private loadingCategories = false;
-  private refreshes = 0;
 
   /** Rows handled this visit that are collapsing away; they leave the lists once done. */
   protected readonly leaving = signal<ReadonlySet<number>>(new Set());
@@ -358,13 +374,26 @@ export class ReviewPage {
     return CATEGORY_PALETTE[colour];
   }
 
-  /** Marks a row as handled; it collapses, then is dropped from `remove`'s list. */
-  private collapse(set: typeof this.leaving, id: number, remove: () => void): void {
-    set.update((ids) => new Set(ids).add(id));
+  /** Marks a row as handled; it collapses, then leaves the list for good. */
+  private collapse<T>(
+    leaving: typeof this.leaving,
+    held: { update: (change: (m: ReadonlyMap<number, T>) => ReadonlyMap<number, T>) => void },
+    dropped: typeof this.dropped,
+    id: number,
+    row: T,
+  ): void {
+    leaving.update((ids) => new Set(ids).add(id));
+    held.update((rows) => new Map(rows).set(id, row));
     const timer = setTimeout(() => {
       this.timers.delete(timer);
-      remove();
-      set.update((ids) => {
+      // Hidden even if the store has not yet answered with the list without it.
+      dropped.update((ids) => new Set(ids).add(id));
+      held.update((rows) => {
+        const next = new Map(rows);
+        next.delete(id);
+        return next;
+      });
+      leaving.update((ids) => {
         const next = new Set(ids);
         next.delete(id);
         return next;
@@ -375,40 +404,13 @@ export class ReviewPage {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.timers.forEach(clearTimeout));
-    this.service.review().subscribe({
-      next: (response) => {
-        this.transactions.set(response.transactions);
-        this.replacements.set(response.replacements);
-        this.initialTotal.set(response.transactions.length + response.replacements.length);
-        this.status.set('ready');
-      },
-      error: () => this.status.set('failed'),
-    });
-  }
-
-  /** Fetches the list again after a save changed other rows; a failure keeps what is shown. */
-  private refresh(withReplacements = false): void {
-    const saves = ++this.refreshes;
-    this.service.review().subscribe({
-      // An answer that a later save has outdated would bring back a row confirmed meanwhile.
-      next: (response) => {
-        if (saves === this.refreshes && this.saving() === null) {
-          // Rows still collapsing away stay until they have gone.
-          const fading = this.transactions().filter(
-            (t) => this.leaving().has(t.id) && !response.transactions.some((r) => r.id === t.id),
-          );
-          this.transactions.set([...fading, ...response.transactions]);
-          if (withReplacements) {
-            const fadingPairs = this.replacements().filter(
-              (p) =>
-                this.leavingPairs().has(p.bank.id) &&
-                !response.replacements.some((r) => r.bank.id === p.bank.id),
-            );
-            this.replacements.set([...fadingPairs, ...response.replacements]);
-          }
-        }
-      },
-      error: () => undefined,
+    effect(() => {
+      const value = this.review.value();
+      if (value === undefined) return;
+      untracked(() => {
+        if (this.initialTotal() === 0)
+          this.initialTotal.set(value.transactions.length + value.replacements.length);
+      });
     });
   }
 
@@ -420,12 +422,8 @@ export class ReviewPage {
     const request = { manualId: pair.manual.id, bankId: pair.bank.id };
     this.store[choice](request).subscribe({
       next: () => {
-        this.collapse(this.leavingPairs, pair.bank.id, () =>
-          this.replacements.update((shown) => shown.filter((p) => p.bank.id !== pair.bank.id)),
-        );
+        this.collapse(this.leavingPairs, this.fadingPairs, this.droppedPairs, pair.bank.id, pair);
         this.deciding.set(null);
-        // The bank transaction is confirmed by Ersätt, and other pairs may change.
-        this.refresh(true);
       },
       error: () => {
         this.error.set('Det gick inte att spara. Försök igen.');
@@ -456,20 +454,14 @@ export class ReviewPage {
   protected save(transaction: Transaction, subcategoryId: number): void {
     if (this.saving() !== null || this.leaving().has(transaction.id)) return; // one save at a time; the buttons are disabled meanwhile
     this.saving.set(transaction.id);
-    this.refreshes += 1; // outdates any refresh still on its way
     this.error.set(null);
     this.similarNote.set(null);
     this.store.setCategory(transaction.id, subcategoryId).subscribe({
       next: ({ updatedSimilar }) => {
-        this.collapse(this.leaving, transaction.id, () =>
-          this.transactions.update((shown) => shown.filter((t) => t.id !== transaction.id)),
-        );
-        this.service.reviewCount.update((count) => Math.max(0, count - 1));
+        this.collapse(this.leaving, this.fading, this.dropped, transaction.id, transaction);
         if (this.picking() === transaction.id) this.picking.set(null);
         this.saving.set(null);
         this.similarNote.set(similarUpdatedNote(updatedSimilar));
-        // The similar ones stay in the list but with the new guess.
-        if (updatedSimilar > 0) this.refresh();
       },
       error: () => {
         this.error.set('Kategorin kunde inte sparas. Försök igen.');

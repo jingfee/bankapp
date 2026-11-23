@@ -64,11 +64,7 @@ describe('App', () => {
     reviewCount?: number,
   ) {
     await TestBed.inject(Router).navigateByUrl(url);
-    const http = TestBed.inject(HttpTestingController);
-    http
-      .match('/api/transactions/review/count')
-      .filter((r) => !r.cancelled)
-      .forEach((r) => r.flush({ count: reviewCount ?? 0 }));
+    transactions.reviewCount.set(reviewCount ?? 0);
     await fixture.whenStable();
   }
 
@@ -462,9 +458,6 @@ describe('App logout', () => {
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
       await router.navigateByUrl('/banker');
-      TestBed.inject(HttpTestingController)
-        .match('/api/transactions/review/count')
-        .forEach((r) => r.flush({ count: 0 }));
       await fixture.whenStable();
       const html = fixture.nativeElement as HTMLElement;
       if (where === '[data-rail-menu]') {
@@ -506,9 +499,6 @@ describe('App logout failure', () => {
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/banker');
-    TestBed.inject(HttpTestingController)
-      .match('/api/transactions/review/count')
-      .forEach((r) => r.flush({ count: 0 }));
     await fixture.whenStable();
     const html = fixture.nativeElement as HTMLElement;
 

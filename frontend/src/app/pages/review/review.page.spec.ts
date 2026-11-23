@@ -1,30 +1,30 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type {
-  CategoriesResponse,
+  Category,
   Transaction,
   TransactionCategory,
   TransactionReviewResponse,
 } from '@bankapp/shared';
-import { TransactionsService } from '../../transactions.service';
+import { of } from 'rxjs';
+import { CategoriesService } from '../../categories.service';
+import { TransactionsStore } from '../../stores/transactions.store';
+import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
 import { ReviewPage } from './review.page';
 
 describe('ReviewPage', () => {
+  let store: FakeTransactionsStore;
+
   beforeEach(() => {
+    store = new FakeTransactionsStore();
     TestBed.configureTestingModule({
       imports: [ReviewPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        { provide: TransactionsStore, useValue: store },
+        { provide: CategoriesService, useValue: { list: () => of(categories) } },
+        provideRouter([]),
+      ],
     });
-  });
-
-  afterEach(() => {
-    // Every change makes the service fetch the review count again.
-    TestBed.inject(HttpTestingController)
-      .match('/api/transactions/review/count')
-      .forEach((r) => (r.cancelled ? undefined : r.flush({ count: 0 })));
-    TestBed.inject(HttpTestingController).verify();
   });
 
   const guess: TransactionCategory = {
@@ -47,36 +47,44 @@ describe('ReviewPage', () => {
     ...overrides,
   });
 
-  const categories: CategoriesResponse = {
-    categories: [
-      {
-        id: 2,
-        name: 'Mat & Dryck',
-        kind: 'expense',
-        colour: 'green',
-        icon: 'utensils',
-        fixed: false,
-        subcategories: [
-          { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
-          { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
-        ],
-      },
-    ],
-  };
+  const categories: Category[] = [
+    {
+      id: 2,
+      name: 'Mat & Dryck',
+      kind: 'expense',
+      colour: 'green',
+      icon: 'utensils',
+      fixed: false,
+      subcategories: [
+        { id: 12, name: 'Livsmedel', icon: 'shopping-basket' },
+        { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
+      ],
+    },
+  ];
 
   type Body = Omit<TransactionReviewResponse, 'replacements'> &
     Partial<Pick<TransactionReviewResponse, 'replacements'>>;
 
+  const answer = (body: Body): TransactionReviewResponse => ({ replacements: [], ...body });
+
   async function render(body: Body | 'error') {
     const fixture = TestBed.createComponent(ReviewPage);
     await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    const request = http.expectOne('/api/transactions/review');
-    if (body === 'error') request.error(new ProgressEvent('error'));
-    else request.flush({ replacements: [], ...body });
+    store.reviewAnswer.set(body === 'error' ? 'error' : answer(body));
+    if (body !== 'error') store.reviewCount.set(body.count);
     await fixture.whenStable();
-    return { fixture, page: fixture.nativeElement as HTMLElement, http };
+    return { fixture, page: fixture.nativeElement as HTMLElement };
   }
+
+  /** What the store does after a mutation: the `transactions` fact refreshes the read and the count. */
+  async function refreshed(fixture: { whenStable: () => Promise<unknown> }, body: Body) {
+    store.reviewAnswer.set(answer(body));
+    store.reviewCount.set(body.count);
+    await fixture.whenStable();
+  }
+
+  const calls = (method: string) => store.calls.filter((c) => c.method === method);
+  const saved = { category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] };
 
   /** Ids of the rows still open; a row collapsing away after being handled does not count. */
   const ids = (root: ParentNode) =>
@@ -103,6 +111,13 @@ describe('ReviewPage', () => {
     expect(ids(section)).toEqual(['4', '2', '3', '1']);
   });
 
+  it('shows a skeleton while the review is being read', async () => {
+    const fixture = TestBed.createComponent(ReviewPage);
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('[aria-busy="true"]')).not.toBeNull();
+  });
+
   it('labels the guess, or says there is none', async () => {
     const { page } = await render({
       count: 2,
@@ -123,7 +138,7 @@ describe('ReviewPage', () => {
   });
 
   it('says how many are left and how far along the visit is', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 4,
       transactions: [
         transaction(4, { category: guess }),
@@ -139,10 +154,8 @@ describe('ReviewPage', () => {
     expect(bar().getAttribute('aria-valuenow')).toBe('0');
     expect(bar().getAttribute('aria-valuemax')).toBe('4');
 
+    store.responses['setCategory'] = saved;
     (page.querySelector('li[data-id="4"] [data-confirm]') as HTMLButtonElement).click();
-    http
-      .expectOne('/api/transactions/4/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
     await fixture.whenStable();
 
     expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe('3 kvar att bekräfta');
@@ -154,23 +167,19 @@ describe('ReviewPage', () => {
     const thirteen = Array.from({ length: 13 }, (_, i) => transaction(13 - i));
 
     it('shows the first 5 and a Visa alla button, and keeps 5 showing as rows are confirmed', async () => {
-      const { fixture, page, http } = await render({ count: 13, transactions: thirteen });
+      const { fixture, page } = await render({ count: 13, transactions: thirteen });
       expect(ids(page)).toEqual(['13', '12', '11', '10', '9']);
       expect(page.querySelector('[data-show-all]')?.textContent?.trim()).toBe('Visa alla 13');
 
       (page.querySelector('li[data-id="13"] [data-change]') as HTMLButtonElement).click();
-      await fixture.whenStable();
-      http.expectOne('/api/categories').flush(categories);
       await fixture.whenStable();
       (
         page.querySelector('li[data-id="13"] [data-category-tile="2"]') as HTMLButtonElement
       ).click();
       await fixture.whenStable();
       fixture.detectChanges();
+      store.responses['setCategory'] = saved;
       (page.querySelector('li[data-id="13"] [data-subcategory="13"]') as HTMLButtonElement).click();
-      http
-        .expectOne('/api/transactions/13/category')
-        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
       await fixture.whenStable();
 
       expect(ids(page)).toEqual(['12', '11', '10', '9', '8']);
@@ -188,17 +197,16 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('collapses a confirmed row away before removing it', async () => {
-    const { fixture, page, http } = await render({
+  it('collapses a confirmed row away before removing it, even once the store has dropped it', async () => {
+    const { fixture, page } = await render({
       count: 1,
       transactions: [transaction(1, { category: guess })],
     });
     vi.useFakeTimers();
     try {
+      store.responses['setCategory'] = saved;
       (page.querySelector('[data-confirm]') as HTMLButtonElement).click();
-      http
-        .expectOne('/api/transactions/1/category')
-        .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
+      store.reviewAnswer.set(answer({ count: 0, transactions: [] }));
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
       expect(page.querySelector('li[data-id="1"]')?.hasAttribute('data-leaving')).toBe(true);
@@ -221,27 +229,39 @@ describe('ReviewPage', () => {
     expect(page.querySelector('li[data-id="1"] [data-confirm]')).toBeNull();
   });
 
-  it('confirms a guess with one tap, and the row leaves the list and the count drops', async () => {
-    const { fixture, page, http } = await render({
+  it('confirms a guess with one tap, and the row and the header count follow the store', async () => {
+    const { fixture, page } = await render({
       count: 2,
       transactions: [transaction(2, { category: guess }), transaction(1)],
     });
-    const service = TestBed.inject(TransactionsService);
-    expect(service.reviewCount()).toBe(2);
+    expect(store.reviewCount()).toBe(2);
 
+    store.responses['setCategory'] = saved;
     (page.querySelector('li[data-id="2"] [data-confirm]') as HTMLButtonElement).click();
-    const request = http.expectOne('/api/transactions/2/category');
-    expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ subcategoryId: 12 });
-    request.flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
-    await fixture.whenStable();
+    expect(calls('setCategory')).toEqual([{ method: 'setCategory', args: [2, 12] }]);
+    await refreshed(fixture, { count: 1, transactions: [transaction(1)] });
 
     expect(ids(page)).toEqual(['1']);
-    expect(service.reviewCount()).toBe(1);
+    expect(page.querySelector('[data-remaining]')?.textContent?.trim()).toBe('1 kvar att bekräfta');
+    expect(store.reviewCount()).toBe(1);
+  });
+
+  it('asks for the review once, and never refreshes it or the count itself', async () => {
+    const { fixture, page } = await render({
+      count: 1,
+      transactions: [transaction(1, { category: guess })],
+    });
+
+    store.responses['setCategory'] = { ...saved, updatedSimilar: 1 };
+    (page.querySelector('[data-confirm]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(store.reviewReads).toBe(1);
+    expect(calls('refreshReviewCount')).toEqual([]);
   });
 
   it('says how many similar transactions were updated, and shows their new guess', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 3,
       transactions: [
         transaction(3, { category: guess }),
@@ -250,15 +270,12 @@ describe('ReviewPage', () => {
       ],
     });
 
+    store.responses['setCategory'] = { ...saved, updatedSimilar: 2 };
     (page.querySelector('li[data-id="3"] [data-confirm]') as HTMLButtonElement).click();
-    http
-      .expectOne('/api/transactions/3/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 2, others: [] });
-    http.expectOne('/api/transactions/review').flush({
+    await refreshed(fixture, {
       count: 2,
       transactions: [transaction(2, { category: guess }), transaction(1, { category: guess })],
     });
-    await fixture.whenStable();
     fixture.detectChanges();
 
     expect(page.querySelector('[data-similar-updated]')?.textContent?.trim()).toBe(
@@ -268,50 +285,37 @@ describe('ReviewPage', () => {
   });
 
   it('sets a category from the inline picker, for a guess as well as an uncategorised row', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 2,
       transactions: [transaction(2, { category: guess }), transaction(1)],
     });
 
     (page.querySelector('li[data-id="1"] [data-change]') as HTMLButtonElement).click();
     await fixture.whenStable();
-    http.expectOne('/api/categories').flush(categories);
-    await fixture.whenStable();
     (page.querySelector('li[data-id="1"] [data-category-tile="2"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
+    store.responses['setCategory'] = saved;
     (page.querySelector('li[data-id="1"] [data-subcategory="13"]') as HTMLButtonElement).click();
-    const request = http.expectOne('/api/transactions/1/category');
-    expect(request.request.body).toEqual({ subcategoryId: 13 });
-    request.flush({
-      category: {
-        ...guess,
-        subcategory: { id: 13, name: 'Restaurang', icon: 'utensils-crossed' },
-        confirmed: true,
-      },
-    });
-    await fixture.whenStable();
+    expect(calls('setCategory')).toEqual([{ method: 'setCategory', args: [1, 13] }]);
+    await refreshed(fixture, { count: 1, transactions: [transaction(2, { category: guess })] });
     expect(ids(page)).toEqual(['2']);
 
     (page.querySelector('li[data-id="2"] [data-change]') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(page.querySelector('li[data-id="2"] [data-picker]')).not.toBeNull();
     (page.querySelector('li[data-id="2"] [data-subcategory="13"]') as HTMLButtonElement).click();
-    http
-      .expectOne('/api/transactions/2/category')
-      .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
-    await fixture.whenStable();
+    await refreshed(fixture, { count: 0, transactions: [] });
+    expect(calls('setCategory')[1]).toEqual({ method: 'setCategory', args: [2, 13] });
     expect(ids(page)).toEqual([]);
   });
 
   it('preselects the guessed category and marks its subcategory as current', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 1,
       transactions: [transaction(2, { category: guess })],
     });
     (page.querySelector('li[data-id="2"] [data-change]') as HTMLButtonElement).click();
-    await fixture.whenStable();
-    http.expectOne('/api/categories').flush(categories);
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -327,13 +331,11 @@ describe('ReviewPage', () => {
   });
 
   it('searches subcategories by name, and shows a whole category for its name', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 1,
       transactions: [transaction(1)],
     });
     (page.querySelector('li[data-id="1"] [data-change]') as HTMLButtonElement).click();
-    await fixture.whenStable();
-    http.expectOne('/api/categories').flush(categories);
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -359,13 +361,13 @@ describe('ReviewPage', () => {
   });
 
   it('keeps the row and says so when saving fails', async () => {
-    const { fixture, page, http } = await render({
+    const { fixture, page } = await render({
       count: 1,
       transactions: [transaction(2, { category: guess })],
     });
 
+    store.failures['setCategory'] = new Error('offline');
     (page.querySelector('[data-confirm]') as HTMLButtonElement).click();
-    http.expectOne('/api/transactions/2/category').error(new ProgressEvent('error'));
     await fixture.whenStable();
 
     expect(ids(page)).toEqual(['2']);
@@ -422,56 +424,46 @@ describe('ReviewPage', () => {
       expect(page.querySelector('[data-replacements]')).toBeNull();
     });
 
-    it('replaces the manual transaction and fetches the list again', async () => {
-      const { fixture, page, http } = await render({
+    it('replaces the manual transaction, and the pair and the count follow the store', async () => {
+      const { fixture, page } = await render({
         count: 1,
         transactions: [],
         replacements: [pair],
       });
 
       (page.querySelector('[data-replace]') as HTMLButtonElement).click();
-      const request = http.expectOne('/api/transactions/replace');
-      expect(request.request.body).toEqual({ manualId: 1, bankId: 2 });
-      request.flush(null, { status: 204, statusText: 'No Content' });
-      http
-        .expectOne('/api/transactions/review')
-        .flush({ count: 0, transactions: [], replacements: [] });
-      await fixture.whenStable();
+      expect(calls('replace')).toEqual([{ method: 'replace', args: [{ manualId: 1, bankId: 2 }] }]);
+      await refreshed(fixture, { count: 0, transactions: [], replacements: [] });
 
       expect(page.querySelector('[data-replacement]:not([data-leaving])')).toBeNull();
       expect(page.querySelector('[data-replacement]')?.hasAttribute('data-leaving')).toBe(true);
       expect(page.querySelector('[data-remaining]')).toBeNull();
-      expect(TestBed.inject(TransactionsService).reviewCount()).toBe(0);
+      expect(store.reviewCount()).toBe(0);
     });
 
     it('stores Inte samma and drops the pair', async () => {
-      const { fixture, page, http } = await render({
+      const { fixture, page } = await render({
         count: 1,
         transactions: [],
         replacements: [pair],
       });
 
       (page.querySelector('[data-not-same]') as HTMLButtonElement).click();
-      const request = http.expectOne('/api/transactions/not-same');
-      expect(request.request.body).toEqual({ manualId: 1, bankId: 2 });
-      request.flush(null, { status: 204, statusText: 'No Content' });
-      http
-        .expectOne('/api/transactions/review')
-        .flush({ count: 0, transactions: [], replacements: [] });
-      await fixture.whenStable();
+      expect(calls('notSame')).toEqual([{ method: 'notSame', args: [{ manualId: 1, bankId: 2 }] }]);
+      await refreshed(fixture, { count: 0, transactions: [], replacements: [] });
 
       expect(page.querySelector('[data-replacement]:not([data-leaving])')).toBeNull();
     });
 
     it('keeps the pair and says so when saving fails', async () => {
-      const { fixture, page, http } = await render({
+      const { fixture, page } = await render({
         count: 1,
         transactions: [],
         replacements: [pair],
       });
 
+      store.failures['replace'] = new Error('offline');
       (page.querySelector('[data-replace]') as HTMLButtonElement).click();
-      http.expectOne('/api/transactions/replace').error(new ProgressEvent('error'));
       await fixture.whenStable();
 
       expect(page.querySelector('[data-replacement]')).not.toBeNull();
