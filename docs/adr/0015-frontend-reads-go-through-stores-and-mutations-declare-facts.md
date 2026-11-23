@@ -12,15 +12,15 @@ So every frontend read and mutation goes through a store, one per domain: `Accou
 - **Mutations** declare what changed as a fact: `transactions`, `accounts`, `shares`, `banks`, `settlement`, `mortgage` or `savings`. One invalidation map decides which reads each fact refreshes, so no page or mutation names another store. A mutation whose response is the updated entity uses it; otherwise the affected reads are fetched again. Updates are never optimistic, because shares and the settlement are worked out on the server.
 - **Sync status** lives in `BanksStore`, which polls while a sync is running and fires `banks` when it finishes.
 
-| Fact | Refreshes |
-|---|---|
+| Fact           | Refreshes                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `transactions` | transaction list and the list kept for the way back, review and its count, transaction details, overview, settlement, mortgage figures |
-| `accounts` | accounts, savings, and everything `transactions` refreshes |
-| `shares` | transaction list and the list kept for the way back, transaction details, overview, settlement |
-| `banks` | everything |
-| `settlement` | settlement, overview |
-| `mortgage` | mortgage, mortgage figures |
-| `savings` | savings, manual savings |
+| `accounts`     | accounts, savings, and everything `transactions` refreshes                                                                             |
+| `shares`       | transaction list and the list kept for the way back, transaction details, overview, settlement                                         |
+| `banks`        | everything                                                                                                                             |
+| `settlement`   | settlement, overview                                                                                                                   |
+| `mortgage`     | mortgage, mortgage figures                                                                                                             |
+| `savings`      | savings, manual savings                                                                                                                |
 
 Categories stay cached for the whole session.
 
