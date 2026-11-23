@@ -15,6 +15,8 @@ import { MortgageStore } from './stores/mortgage.store';
 import { FakeMortgageStore } from './stores/mortgage.store.fake';
 import { OverviewStore } from './stores/overview.store';
 import { FakeOverviewStore } from './stores/overview.store.fake';
+import { FakeSavingsStore } from './stores/savings.store.fake';
+import { SavingsStore } from './stores/savings.store';
 import { SettlementStore } from './stores/settlement.store';
 import { FakeSettlementStore } from './stores/settlement.store.fake';
 import { SharesStore } from './stores/shares.store';
@@ -43,6 +45,7 @@ describe('App', () => {
         { provide: AccountsStore, useValue: accounts },
         { provide: MortgageStore, useValue: new FakeMortgageStore() },
         { provide: OverviewStore, useValue: overview },
+        { provide: SavingsStore, useValue: new FakeSavingsStore() },
         { provide: SettlementStore, useValue: new FakeSettlementStore() },
         { provide: SharesStore, useValue: new FakeSharesStore() },
         { provide: TransactionsStore, useValue: transactions },

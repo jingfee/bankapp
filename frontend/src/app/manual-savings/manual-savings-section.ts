@@ -1,7 +1,7 @@
 import { ShortDatePipe } from '../formatting/short-date.pipe';
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import type { BalanceEntry, ManualSavingsAccount } from '@bankapp/shared';
-import { type Observable, catchError, map, of } from 'rxjs';
+import type { Observable } from 'rxjs';
 import { today } from '../dates';
 import { Callout } from '../callout/callout';
 import { Confirm } from '../confirm/confirm';
@@ -12,7 +12,6 @@ import { Icon } from '../icon/icon';
 import { DateField } from '../date-field/date-field';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { MoneyPipe } from '../formatting/money.pipe';
-import { ManualSavingsService } from '../manual-savings.service';
 import { SavingsStore } from '../stores/savings.store';
 
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
@@ -318,15 +317,18 @@ import { SavingsStore } from '../stores/savings.store';
   `,
 })
 export class ManualSavingsSection {
-  private readonly service = inject(ManualSavingsService);
   private readonly store = inject(SavingsStore);
-  /** Emits after the owner has changed an account or an entry, so figures built on them can refresh. */
-  readonly changed = output<void>();
+  private readonly read = this.store.manualSavings();
   protected readonly today = today;
 
-  /** The accounts as last returned; every change replaces the account it touched. */
-  protected readonly accounts = signal<ManualSavingsAccount[]>([]);
-  protected readonly failed = signal<string | null>(null);
+  /** The accounts as last fetched; the `savings` fact every change fires fetches them again. */
+  protected readonly accounts = computed<ManualSavingsAccount[]>(
+    () => this.read.value()?.accounts ?? [],
+  );
+  private readonly actionFailed = signal<string | null>(null);
+  protected readonly failed = computed(() =>
+    this.read.failed() ? 'Sparkontona kunde inte hämtas. Försök igen senare.' : this.actionFailed(),
+  );
   protected readonly busy = signal(false);
 
   protected readonly adding = signal(false);
@@ -359,19 +361,6 @@ export class ManualSavingsSection {
   protected readonly entryDeposits = signal('');
   protected readonly entryError = signal<string | null>(null);
 
-  constructor() {
-    this.service
-      .list()
-      .pipe(
-        map((response) => response.accounts),
-        catchError(() => {
-          this.failed.set('Sparkontona kunde inte hämtas. Försök igen senare.');
-          return of<ManualSavingsAccount[]>([]);
-        }),
-      )
-      .subscribe((accounts) => this.accounts.set(accounts));
-  }
-
   protected value(event: Event): string {
     return (event.target as HTMLInputElement).value;
   }
@@ -380,8 +369,6 @@ export class ManualSavingsSection {
     this.run(
       this.store.create(this.request()),
       (created) => {
-        this.accounts.update((all) => [...all, created]);
-        this.changed.emit();
         this.adding.set(false);
         this.name.set('');
         this.institution.set('');
@@ -395,14 +382,14 @@ export class ManualSavingsSection {
     this.name.set('');
     this.institution.set('');
     this.renamingId.set(null);
-    this.failed.set(null);
+    this.actionFailed.set(null);
     this.adding.set(true);
   }
 
   protected closeAccountForm(): void {
     this.name.set('');
     this.institution.set('');
-    this.failed.set(null);
+    this.actionFailed.set(null);
     this.adding.set(false);
     this.renamingId.set(null);
   }
@@ -418,15 +405,14 @@ export class ManualSavingsSection {
     this.name.set(account.name);
     this.institution.set(account.institution ?? '');
     this.adding.set(false);
-    this.failed.set(null);
+    this.actionFailed.set(null);
     this.renamingId.set(account.id);
   }
 
   protected rename(account: ManualSavingsAccount): void {
     this.run(
       this.store.rename(account.id, this.request()),
-      (updated) => {
-        this.replace(updated);
+      () => {
         this.renamingId.set(null);
       },
       'Namnet kunde inte sparas. Försök igen senare.',
@@ -436,8 +422,7 @@ export class ManualSavingsSection {
   protected close(account: ManualSavingsAccount): void {
     this.run(
       this.store.close(account.id, { date: this.closeDate() }),
-      (updated) => {
-        this.replace(updated);
+      () => {
         this.closingId.set(null);
         if (this.entryFormFor() === account.id) this.entryFormFor.set(null);
       },
@@ -448,7 +433,7 @@ export class ManualSavingsSection {
   protected reopen(account: ManualSavingsAccount): void {
     this.run(
       this.store.reopen(account.id),
-      (updated) => this.replace(updated),
+      () => undefined,
       'Kontot kunde inte öppnas igen. Försök igen senare.',
     );
   }
@@ -491,9 +476,8 @@ export class ManualSavingsSection {
       ? this.store.updateEntry(account.id, editing.id, request)
       : this.store.addEntry(account.id, request)
     ).subscribe({
-      next: (updated) => {
+      next: () => {
         this.busy.set(false);
-        this.replace(updated);
         this.entryFormFor.set(null);
       },
       error: (error: unknown) => {
@@ -510,8 +494,7 @@ export class ManualSavingsSection {
   protected deleteEntry(account: ManualSavingsAccount, entry: BalanceEntry): void {
     this.run(
       this.store.deleteEntry(account.id, entry.id),
-      (updated) => {
-        this.replace(updated);
+      () => {
         this.deleting.set(null);
       },
       'Saldonoteringen kunde inte tas bort. Försök igen senare.',
@@ -523,11 +506,6 @@ export class ManualSavingsSection {
     return { name: this.name().trim(), institution: this.institution().trim() || null };
   }
 
-  private replace(updated: ManualSavingsAccount): void {
-    this.accounts.update((all) => all.map((one) => (one.id === updated.id ? updated : one)));
-    this.changed.emit();
-  }
-
   private run<T>(
     call: Observable<T>,
     done: (result: T) => void,
@@ -535,7 +513,7 @@ export class ManualSavingsSection {
     failedToo?: () => void,
   ): void {
     this.busy.set(true);
-    this.failed.set(null);
+    this.actionFailed.set(null);
     call.subscribe({
       next: (result) => {
         this.busy.set(false);
@@ -543,7 +521,7 @@ export class ManualSavingsSection {
       },
       error: () => {
         this.busy.set(false);
-        this.failed.set(message);
+        this.actionFailed.set(message);
         failedToo?.();
       },
     });

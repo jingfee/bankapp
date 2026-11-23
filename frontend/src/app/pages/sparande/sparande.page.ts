@@ -5,7 +5,7 @@ import { CATEGORY_PALETTE, type SavingsResponse } from '@bankapp/shared';
 import { ManualSavingsSection } from '../../manual-savings/manual-savings-section';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
-import { SavingsService } from '../../savings.service';
+import { SavingsStore } from '../../stores/savings.store';
 import {
   ChartCard,
   type ChartColumn,
@@ -260,7 +260,7 @@ interface Chart {
         </section>
       }
 
-      <app-manual-savings-section (changed)="load()" />
+      <app-manual-savings-section />
     </app-page>
 
     <ng-template #row let-account>
@@ -303,10 +303,10 @@ interface Chart {
   `,
 })
 export class SparandePage {
-  private readonly service = inject(SavingsService);
+  private readonly read = inject(SavingsStore).savings();
 
-  protected readonly data = signal<SavingsResponse | null>(null);
-  protected readonly failed = signal(false);
+  protected readonly data = computed<SavingsResponse | null>(() => this.read.value() ?? null);
+  protected readonly failed = this.read.failed;
   protected readonly selected = signal<string>(ALL);
   protected readonly range = signal<Range>('year');
   protected readonly hovered = signal<number | null>(null);
@@ -317,20 +317,6 @@ export class SparandePage {
   protected readonly closed = computed(() =>
     (this.data()?.accounts ?? []).filter((account) => account.closedOn !== null),
   );
-
-  constructor() {
-    this.load();
-  }
-
-  protected load(): void {
-    this.service.get().subscribe({
-      next: (data) => {
-        this.failed.set(false);
-        this.data.set(data);
-      },
-      error: () => this.failed.set(true),
-    });
-  }
 
   protected select(event: Event): void {
     this.selected.set((event.target as HTMLSelectElement).value);

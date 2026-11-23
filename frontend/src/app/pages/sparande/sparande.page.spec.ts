@@ -1,8 +1,8 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { SavingsAccount, SavingsMonth, SavingsResponse } from '@bankapp/shared';
 import { routes } from '../../app.routes';
+import { FakeSavingsStore } from '../../stores/savings.store.fake';
+import { SavingsStore } from '../../stores/savings.store';
 import { SparandePage } from './sparande.page';
 
 const account = (
@@ -87,24 +87,23 @@ const RESPONSE: SavingsResponse = {
 };
 
 describe('SparandePage', () => {
+  let store: FakeSavingsStore;
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-15T12:00:00'));
+    store = new FakeSavingsStore();
     TestBed.configureTestingModule({
       imports: [SparandePage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [{ provide: SavingsStore, useValue: store }],
     });
   });
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.inject(HttpTestingController).verify();
-  });
+  afterEach(() => vi.useRealTimers());
 
   async function render(response: SavingsResponse = RESPONSE) {
+    store.savingsAnswer.set(response);
+    store.manualSavingsAnswer.set({ accounts: [] });
     const fixture = TestBed.createComponent(SparandePage);
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/savings').flush(response);
-    http.expectOne('/api/manual-savings-accounts').flush({ accounts: [] });
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     const text = (selector: string) =>
