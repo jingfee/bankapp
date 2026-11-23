@@ -8,7 +8,7 @@ import {
   type Transaction,
 } from '@bankapp/shared';
 import { CategoriesService } from '../../categories.service';
-import { CategoryPickerComponent } from '../../category-picker/category-picker';
+import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
@@ -37,7 +37,7 @@ const COLLAPSE_MS = 450;
     MoneyPipe,
     TransactionCategoryBadge,
     CategoryIconComponent,
-    CategoryPickerComponent,
+    CategoryTiles,
     Page,
     Callout,
     Empty,
@@ -262,7 +262,12 @@ const COLLAPSE_MS = 450;
                         @if (picking() === t.id) {
                           <div class="mt-3">
                             @if (categories(); as list) {
-                              <app-category-picker [categories]="list" (picked)="save(t, $event)" />
+                              <app-category-tiles
+                                [categories]="list"
+                                [current]="t.category?.subcategory?.id ?? null"
+                                [searchable]="true"
+                                (picked)="save(t, $event)"
+                              />
                             } @else {
                               <div aria-busy="true"><app-skeleton shape="card" /></div>
                             }
