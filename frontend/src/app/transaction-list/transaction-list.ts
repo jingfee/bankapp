@@ -78,10 +78,14 @@ interface DayGroup {
                       >
                     }
                     <span class="flex min-w-0 items-center gap-1.5 text-muted sm:flex-1">
-                      <span data-account class="min-w-0 truncate sm:order-last sm:ml-auto">{{
-                        accountLabel(transaction)
-                      }}</span>
-                      <span class="sm:hidden" aria-hidden="true">·</span>
+                      <span
+                        data-account
+                        class="min-w-12 truncate sm:order-last sm:ml-auto sm:min-w-0"
+                        >{{ accountLabel(transaction) }}</span
+                      >
+                      @if (hasPills(transaction)) {
+                        <span class="sm:hidden" aria-hidden="true">·</span>
+                      }
                       <span data-pills class="flex shrink-0 flex-nowrap gap-1.5">
                         @if (badge(transaction); as label) {
                           <span data-share-badge class="pill pill-neutral">{{ label }}</span>
@@ -119,6 +123,14 @@ export class TransactionList {
   protected badge(transaction: Transaction): string | null {
     const option = transaction.share.option;
     return option === 'me' ? null : SHARE_LABELS[option];
+  }
+
+  protected hasPills(transaction: Transaction): boolean {
+    return (
+      this.badge(transaction) !== null ||
+      (!!transaction.category && !transaction.category.confirmed) ||
+      transaction.status === 'pending'
+    );
   }
 
   protected tint(colour: CategoryColour): string {

@@ -52,7 +52,7 @@ export interface ChartTip {
   template: `
     <div class="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <h2 class="card-title">{{ title() }}</h2>
-      <div class="flex flex-wrap gap-2"><ng-content select="[chart-controls]" /></div>
+      <div class="flex flex-wrap items-center gap-2"><ng-content select="[chart-controls]" /></div>
     </div>
     @if (summary(); as text) {
       <p data-chart-summary class="-mt-2 mb-4 text-sm text-muted">{{ text }}</p>
