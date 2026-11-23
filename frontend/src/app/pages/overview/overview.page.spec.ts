@@ -329,7 +329,7 @@ describe('OverviewPage', () => {
       );
 
       // Day 15: 1 500 kr this month against 1 200 kr at the same point last month.
-      expect(text(page.querySelector('[data-spending-chart-summary]'))).toBe(
+      expect(text(page.querySelector('[data-chart-summary]'))).toBe(
         'Hittills 1 500,00 kr, 300,00 kr mer än vid samma tidpunkt förra månaden (1 200,00 kr).',
       );
     });
@@ -343,7 +343,7 @@ describe('OverviewPage', () => {
         }),
       );
 
-      expect(text(page.querySelector('[data-spending-chart-summary]'))).toContain(
+      expect(text(page.querySelector('[data-chart-summary]'))).toContain(
         '600,00 kr mindre än vid samma tidpunkt förra månaden (1 200,00 kr)',
       );
     });
@@ -365,7 +365,7 @@ describe('OverviewPage', () => {
 
       expect(points(page, 'current')).toBe(31);
       expect(points(page, 'previous')).toBe(30);
-      expect(text(page.querySelector('[data-spending-chart-summary]'))).toBe(
+      expect(text(page.querySelector('[data-chart-summary]'))).toBe(
         'Totalt 3 100,00 kr, 100,00 kr mer än förra månaden (3 000,00 kr).',
       );
     });
@@ -398,7 +398,7 @@ describe('OverviewPage', () => {
         day: number,
       ) => {
         page
-          .querySelector(`[data-chart-day="${day}"]`)
+          .querySelector(`[data-chart-column="${day}"]`)
           ?.dispatchEvent(new Event('pointerenter', { bubbles: false }));
         await fixture.whenStable();
       };

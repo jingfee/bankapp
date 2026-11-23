@@ -6,6 +6,13 @@ import { ManualSavingsSection } from '../../manual-savings/manual-savings-sectio
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SavingsService } from '../../savings.service';
+import {
+  ChartCard,
+  type ChartColumn,
+  type ChartLegendItem,
+  type ChartTip,
+} from '../../chart-card/chart-card';
+import { monthTicks } from '../../chart-card/month-ticks';
 import { Callout } from '../../callout/callout';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Empty } from '../../empty/empty';
@@ -30,7 +37,6 @@ const SERIES_COLOURS = [
 
 const money = new MoneyPipe();
 const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
-const MONTH_SHORT = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short', year: '2-digit' });
 const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long', year: 'numeric' });
 const MONTH_NAME = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
 
@@ -62,21 +68,11 @@ interface Chart {
   xTicks: { label: string; pct: number }[];
 }
 
-interface Tip {
-  pct: number;
-  title: string;
-  rows: { name: string; colour: string; amount: string }[];
-  total: string;
-  deposits: string | null;
-  growth: string | null;
-  top: number;
-  depositTop: number | null;
-}
-
 /** Sparande: the savings accounts, connected and manual, and how they change over time. */
 @Component({
   selector: 'app-sparande-page',
   imports: [
+    ChartCard,
     ShortDatePipe,
     Page,
     ManualSavingsSection,
@@ -143,193 +139,84 @@ interface Tip {
         </section>
 
         @if (d.months.length > 0) {
-          <section data-chart-section class="card p-4 sm:p-5">
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 class="card-title">Saldo över tid</h2>
-              <div class="flex flex-wrap gap-2">
-                <select
-                  data-account-select
-                  class="input"
-                  aria-label="Konto"
-                  [value]="selected()"
-                  (change)="select($event)"
+          <app-chart-card
+            data-chart-section
+            title="Saldo över tid"
+            [yTicks]="chart()?.yTicks ?? []"
+            [xTicks]="chart()?.xTicks ?? []"
+            [columns]="columns()"
+            [tip]="tip()"
+            [legend]="legend()"
+            (hovered)="hovered.set($event)"
+          >
+            <ng-container chart-controls>
+              <select
+                data-account-select
+                class="input"
+                aria-label="Konto"
+                [value]="selected()"
+                (change)="select($event)"
+              >
+                <option value="all">Alla konton</option>
+                @for (account of d.accounts; track account.key) {
+                  <option [value]="account.key" [selected]="selected() === account.key">
+                    {{ label(account) }}
+                  </option>
+                }
+              </select>
+              <div class="segmented" role="group" aria-label="Period">
+                <button
+                  type="button"
+                  data-range="year"
+                  [attr.aria-pressed]="range() === 'year'"
+                  (click)="range.set('year')"
                 >
-                  <option value="all">Alla konton</option>
-                  @for (account of d.accounts; track account.key) {
-                    <option [value]="account.key" [selected]="selected() === account.key">
-                      {{ label(account) }}
-                    </option>
-                  }
-                </select>
-                <div class="segmented" role="group" aria-label="Period">
-                  <button
-                    type="button"
-                    data-range="year"
-                    [attr.aria-pressed]="range() === 'year'"
-                    (click)="range.set('year')"
-                  >
-                    1 år
-                  </button>
-                  <button
-                    type="button"
-                    data-range="all"
-                    [attr.aria-pressed]="range() === 'all'"
-                    (click)="range.set('all')"
-                  >
-                    Allt
-                  </button>
-                </div>
+                  1 år
+                </button>
+                <button
+                  type="button"
+                  data-range="all"
+                  [attr.aria-pressed]="range() === 'all'"
+                  (click)="range.set('all')"
+                >
+                  Allt
+                </button>
               </div>
-            </div>
-
+            </ng-container>
             @if (chart(); as c) {
-              <div class="flex gap-2">
-                <div class="relative h-44 w-16 shrink-0" aria-hidden="true">
-                  @for (tick of c.yTicks; track tick.pct) {
-                    <span
-                      data-y-tick
-                      class="absolute right-0 translate-y-1/2 text-[11px] whitespace-nowrap text-muted"
-                      [style.bottom.%]="tick.pct"
-                      >{{ tick.label }}</span
-                    >
-                  }
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div
-                    data-chart-plot
-                    class="relative h-44 touch-pan-y"
-                    (pointerleave)="hovered.set(null)"
-                    (pointerdown)="touch($event)"
-                    (pointermove)="touch($event)"
-                  >
-                    @for (tick of c.yTicks; track tick.pct) {
-                      <div
-                        class="absolute inset-x-0 border-t border-line"
-                        [style.bottom.%]="tick.pct"
-                      ></div>
-                    }
-                    <svg
-                      viewBox="0 0 300 120"
-                      class="absolute inset-0 size-full overflow-visible"
-                      preserveAspectRatio="none"
-                      aria-hidden="true"
-                    >
-                      @for (layer of c.layers; track layer.key) {
-                        <polygon
-                          [attr.data-area]="layer.key"
-                          [attr.points]="layer.points"
-                          [attr.fill]="layer.colour"
-                          fill-opacity="0.55"
-                          [attr.stroke]="layer.colour"
-                          stroke-width="1.5"
-                          vector-effect="non-scaling-stroke"
-                        />
-                      }
-                      @if (c.deposits) {
-                        <polyline
-                          data-line="deposits"
-                          [attr.points]="c.deposits"
-                          fill="none"
-                          stroke="var(--color-ink)"
-                          stroke-width="2.5"
-                          stroke-dasharray="5 4"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          vector-effect="non-scaling-stroke"
-                        />
-                      }
-                    </svg>
-
-                    @if (tip(); as t) {
-                      <div
-                        class="pointer-events-none absolute inset-y-0 w-px bg-line-strong"
-                        [style.left.%]="t.pct"
-                      ></div>
-                      <span
-                        class="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent"
-                        [style.left.%]="t.pct"
-                        [style.top.%]="t.top"
-                      ></span>
-                      @if (t.depositTop !== null) {
-                        <span
-                          class="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
-                          [style.left.%]="t.pct"
-                          [style.top.%]="t.depositTop"
-                        ></span>
-                      }
-                      <div
-                        data-chart-tooltip
-                        class="pointer-events-none absolute top-0 z-10 flex flex-col gap-1 rounded-[10px] border border-line-strong bg-surface-3 px-3 py-2 text-xs whitespace-nowrap shadow-lg"
-                        [style.left.%]="t.pct"
-                        [style.transform]="'translateX(-' + t.pct + '%)'"
-                      >
-                        <span class="font-semibold capitalize">{{ t.title }}</span>
-                        @for (row of t.rows; track row.name) {
-                          <span class="flex items-center gap-2"
-                            ><span
-                              class="size-2 rounded-full"
-                              [style.background]="row.colour"
-                            ></span
-                            >{{ row.name }}
-                            <span class="amount ml-auto">{{ row.amount }}</span></span
-                          >
-                        }
-                        <span class="flex items-center gap-2 border-t border-line pt-1"
-                          >Totalt <span class="amount ml-auto">{{ t.total }}</span></span
-                        >
-                        @if (t.deposits !== null) {
-                          <span class="flex items-center gap-2"
-                            >Insatt <span class="amount ml-auto">{{ t.deposits }}</span></span
-                          >
-                        }
-                        @if (t.growth !== null) {
-                          <span class="flex items-center gap-2"
-                            >Utveckling i månaden
-                            <span class="amount ml-auto">{{ t.growth }}</span></span
-                          >
-                        }
-                      </div>
-                    }
-
-                    @for (month of c.months; track month; let i = $index) {
-                      <div
-                        class="absolute inset-y-0"
-                        [attr.data-chart-month]="month"
-                        [style.left.%]="columnLeft(i, c.months.length)"
-                        [style.width.%]="columnWidth(c.months.length)"
-                        (pointerenter)="hovered.set(i)"
-                      ></div>
-                    }
-                  </div>
-                  <div class="relative mt-1 h-4" aria-hidden="true">
-                    @for (tick of c.xTicks; track tick.label) {
-                      <span
-                        data-x-tick
-                        class="absolute text-[11px] text-muted"
-                        [style.left.%]="tick.pct"
-                        [style.transform]="'translateX(-' + tick.pct + '%)'"
-                        >{{ tick.label }}</span
-                      >
-                    }
-                  </div>
-                </div>
-              </div>
-              <p data-legend class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+              <svg
+                viewBox="0 0 300 120"
+                class="absolute inset-0 size-full overflow-visible"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
                 @for (layer of c.layers; track layer.key) {
-                  <span class="flex items-center gap-1.5"
-                    ><span class="size-2.5 rounded-sm" [style.background]="layer.colour"></span
-                    >{{ layer.name }}</span
-                  >
+                  <polygon
+                    [attr.data-area]="layer.key"
+                    [attr.points]="layer.points"
+                    [attr.fill]="layer.colour"
+                    fill-opacity="0.55"
+                    [attr.stroke]="layer.colour"
+                    stroke-width="1.5"
+                    vector-effect="non-scaling-stroke"
+                  />
                 }
                 @if (c.deposits) {
-                  <span class="flex items-center gap-1.5"
-                    ><span class="h-0.5 w-4 rounded border-t-2 border-dashed border-ink"></span
-                    >Insatt</span
-                  >
+                  <polyline
+                    data-line="deposits"
+                    [attr.points]="c.deposits"
+                    fill="none"
+                    stroke="var(--color-ink)"
+                    stroke-width="2.5"
+                    stroke-dasharray="5 4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    vector-effect="non-scaling-stroke"
+                  />
                 }
-              </p>
+              </svg>
             }
-          </section>
+          </app-chart-card>
         }
 
         <section data-accounts class="card flex flex-col gap-4 p-4 sm:p-5">
@@ -552,14 +439,6 @@ export class SparandePage {
       label: `${KR.format(Math.round(value))} kr`,
       pct: pctOf(value),
     }));
-    const wantedTicks = Math.min(figures.length, 4);
-    const tickIndexes = [
-      ...new Set(
-        Array.from({ length: wantedTicks }, (_, k) =>
-          Math.round((k * (figures.length - 1)) / Math.max(wantedTicks - 1, 1)),
-        ),
-      ),
-    ];
     return {
       layers,
       deposits: withDeposits.length > 0 ? depositLine : '',
@@ -567,55 +446,70 @@ export class SparandePage {
       tops: tops.map((value) => 100 - pctOf(value)),
       depositTops: deposits.map((value) => (value === null ? null : 100 - pctOf(value))),
       yTicks,
-      xTicks: tickIndexes.map((i) => ({
-        label: MONTH_SHORT.format(monthDate(figures[i]!.month)),
-        pct: figures.length === 1 ? 0 : (i / (figures.length - 1)) * 100,
-      })),
+      xTicks: monthTicks(
+        figures.map((f) => f.month),
+        (i) => (figures.length === 1 ? 0 : (i / (figures.length - 1)) * 100),
+      ),
     };
   });
 
-  protected readonly tip = computed<Tip | null>(() => {
+  protected readonly tip = computed<ChartTip | null>(() => {
     const c = this.chart();
     const i = this.hovered();
     const f = i === null ? undefined : this.figures()[i];
     if (c === null || i === null || f === undefined) return null;
     const series = this.series();
     const count = c.months.length;
+    const deposits = c.depositTops[i] ?? null;
     return {
       pct: count > 1 ? (i / (count - 1)) * 100 : 0,
       title: MONTH_LONG.format(monthDate(f.month)),
-      rows:
-        this.selected() === ALL
+      rows: [
+        ...(this.selected() === ALL
           ? series.map((entry, k) => ({
-              name: this.label(entry.account),
+              label: this.label(entry.account),
               colour: entry.colour,
               amount: money.transform(f.balances[k]!),
             }))
-          : [],
-      total: money.transform(f.total),
-      deposits: f.netDeposits === null ? null : money.transform(f.netDeposits),
-      growth: f.growth === null ? null : money.transform(f.growth),
-      top: c.tops[i]!,
-      depositTop: c.depositTops[i] ?? null,
+          : []),
+        { label: 'Totalt', amount: money.transform(f.total), separated: true },
+        ...(f.netDeposits === null
+          ? []
+          : [{ label: 'Insatt', amount: money.transform(f.netDeposits) }]),
+        ...(f.growth === null
+          ? []
+          : [{ label: 'Utveckling i månaden', amount: money.transform(f.growth) }]),
+      ],
+      markers: [
+        { top: c.tops[i]!, colour: 'var(--color-accent)' },
+        ...(deposits === null ? [] : [{ top: deposits, colour: 'var(--color-ink)' }]),
+      ],
     };
   });
 
   /** One hover column per month, centred on its point. */
-  protected columnLeft(index: number, count: number): number {
-    return count > 1 ? ((index - 0.5) / (count - 1)) * 100 : 0;
-  }
+  protected readonly columns = computed<ChartColumn[]>(() => {
+    const months = this.chart()?.months ?? [];
+    const count = months.length;
+    return months.map((key, i) => ({
+      key,
+      left: count > 1 ? ((i - 0.5) / (count - 1)) * 100 : 0,
+      width: count > 1 ? 100 / (count - 1) : 100,
+    }));
+  });
 
-  protected columnWidth(count: number): number {
-    return count > 1 ? 100 / (count - 1) : 100;
-  }
-
-  /** Follows a finger across the chart; a touch pointer never "enters" the month columns. */
-  protected touch(event: PointerEvent): void {
-    const count = this.chart()?.months.length ?? 0;
-    if (event.pointerType !== 'touch' || count < 1) return;
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    if (box.width <= 0) return;
-    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
-    this.hovered.set(Math.round(ratio * (count - 1)));
-  }
+  protected readonly legend = computed<ChartLegendItem[]>(() => {
+    const c = this.chart();
+    if (c === null) return [];
+    return [
+      ...c.layers.map((layer): ChartLegendItem => ({
+        label: layer.name,
+        colour: layer.colour,
+        kind: 'fill',
+      })),
+      ...(c.deposits
+        ? [{ label: 'Insatt', colour: 'var(--color-ink)', kind: 'dashed' } as const]
+        : []),
+    ];
+  });
 }
