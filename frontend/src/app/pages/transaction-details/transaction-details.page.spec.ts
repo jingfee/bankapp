@@ -567,7 +567,7 @@ describe('TransactionDetailsPage', () => {
       });
       await rendered.fixture.whenStable();
 
-      (rendered.page.querySelector('[data-offset-candidate="3"]') as HTMLButtonElement).click();
+      (document.querySelector('[data-offset-candidate="3"]') as HTMLButtonElement).click();
       const put = http.expectOne('/api/transactions/5/offset');
       expect(put.request.method).toBe('PUT');
       expect(put.request.body).toEqual({ purchaseId: 3 });
@@ -588,7 +588,7 @@ describe('TransactionDetailsPage', () => {
       http.expectOne('/api/transactions/5/offset-candidates').flush({ transactions: [] });
       await rendered.fixture.whenStable();
 
-      const input = rendered.page.querySelector('[data-offset-search]') as HTMLInputElement;
+      const input = document.querySelector('[data-offset-search]') as HTMLInputElement;
       input.value = 'zal';
       input.dispatchEvent(new Event('input'));
       await rendered.fixture.whenStable();
@@ -599,7 +599,7 @@ describe('TransactionDetailsPage', () => {
         )
         .flush({ transactions: [] });
       await rendered.fixture.whenStable();
-      expect(rendered.page.querySelector('[data-offset-empty]')?.textContent?.trim()).toBe(
+      expect(document.querySelector('[data-offset-empty]')?.textContent?.trim()).toBe(
         'Inga träffar',
       );
     });
@@ -672,23 +672,32 @@ describe('TransactionDetailsPage', () => {
       expect(page.querySelector('[data-manual-pill]')?.textContent?.trim()).toBe('Manuell');
       expect(field('bank')).toBeNull();
       expect(page.querySelector('[data-raw]')).toBeNull();
+
+      (page.querySelector('[data-menu-trigger]') as HTMLButtonElement).click();
+      await fixture.whenStable();
       expect(page.querySelector('[data-edit]')?.getAttribute('href')).toBe(
         '/transaktioner/5/redigera',
       );
+      expect(page.querySelector('[data-delete]')?.textContent?.trim()).toBe('Ta bort…');
 
       (page.querySelector('[data-delete]') as HTMLButtonElement).click();
       await fixture.whenStable();
       http.expectNone('/api/transactions/5');
-      expect(page.querySelector('[data-confirm-delete]')).not.toBeNull();
+      expect(document.querySelector('[role="alertdialog"] [data-confirm]')).not.toBeNull();
+      (document.querySelector('[role="alertdialog"] [data-cancel]') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     });
 
     it('is deleted once confirmed', async () => {
       const { fixture, page } = await render(details({ account: null }));
       const http = TestBed.inject(HttpTestingController);
 
+      (page.querySelector('[data-menu-trigger]') as HTMLButtonElement).click();
+      await fixture.whenStable();
       (page.querySelector('[data-delete]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      (page.querySelector('[data-confirm-delete]') as HTMLButtonElement).click();
+      (document.querySelector('[data-confirm]') as HTMLButtonElement).click();
       const request = http.expectOne('/api/transactions/5');
       expect(request.request.method).toBe('DELETE');
       request.flush(null, { status: 204, statusText: 'No Content' });

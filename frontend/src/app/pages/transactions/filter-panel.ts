@@ -1,18 +1,8 @@
-import {
-  Component,
-  type ElementRef,
-  computed,
-  effect,
-  input,
-  output,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import type { Category } from '@bankapp/shared';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
-import { lockPageScroll } from '../../scroll-lock';
 import { DateField } from '../../date-field/date-field';
-import { Icon } from '../../icon/icon';
+import { Sheet } from '../../sheet/sheet';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { MANUAL_LABEL } from '../../share-display';
 import {
@@ -31,193 +21,158 @@ export interface PanelAccount {
 /** The sections of the filter panel; every change is reported at once and the page applies it. */
 @Component({
   selector: 'app-filter-panel',
-  imports: [CategoryIconComponent, DateField, Icon],
-  host: { '(document:keydown.escape)': 'closed.emit()' },
+  imports: [CategoryIconComponent, DateField, Sheet],
   template: `
-    <button
-      type="button"
-      data-backdrop
-      tabindex="-1"
-      aria-hidden="true"
-      [class.sheet-backdrop]="!entered()"
-      class="fixed inset-0 z-50 bg-black/70 cursor-default"
-      (click)="closed.emit()"
-    ></button>
-    <section
-      role="dialog"
-      aria-modal="true"
-      aria-label="Filter"
-      data-filter-panel
-      [class.sheet]="!entered()"
-      (animationend)="$event.target === $event.currentTarget && entered.set(true)"
-      class="bg-surface-1 fixed right-0 bottom-0 left-0 z-50 flex h-[90dvh] flex-col rounded-t-3xl border border-line-strong sm:top-3 sm:right-3 sm:bottom-3 sm:left-auto sm:h-auto sm:w-[420px] sm:rounded-3xl"
-    >
-      <header class="flex items-center justify-between px-5 pt-4 pb-2">
-        <h2 class="text-lg font-semibold">Filter</h2>
-        <button
-          #close
-          type="button"
-          data-close
-          aria-label="Stäng"
-          class="btn btn-ghost"
-          (click)="closed.emit()"
-        >
-          <app-icon name="x" />
-        </button>
-      </header>
-
-      <div class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-5 py-3">
-        <section data-section="datum" class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium text-muted">Datum</h3>
-          <div class="flex flex-wrap gap-2">
-            @for (chip of periodChips(); track chip.key) {
-              <button
-                type="button"
-                class="chip"
-                [attr.data-period]="chip.key"
-                [attr.aria-pressed]="chip.on"
-                (click)="choosePeriod(chip.key)"
-              >
-                {{ chip.label }}
-              </button>
-            }
-          </div>
-          @if (custom()) {
-            <div class="grid grid-cols-2 gap-2">
-              <label class="flex flex-col gap-1 text-xs text-muted">
-                Från
-                <app-date-field
-                  data-from
-                  [value]="filters().from"
-                  (valueChange)="setDate('from', $event)"
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-xs text-muted">
-                Till
-                <app-date-field
-                  data-to
-                  [value]="filters().to"
-                  (valueChange)="setDate('to', $event)"
-                />
-              </label>
-            </div>
-          }
-        </section>
-
-        <section data-section="typ" class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium text-muted">Typ</h3>
-          <div class="segmented self-start" role="group" aria-label="Typ">
-            @for (option of kinds; track option.kind) {
-              <button
-                type="button"
-                [attr.data-kind]="option.kind || 'all'"
-                [attr.aria-pressed]="filters().kind === option.kind"
-                (click)="change({ kind: option.kind })"
-              >
-                {{ option.label }}
-              </button>
-            }
-          </div>
-        </section>
-
-        <section data-section="belopp" class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium text-muted">Belopp</h3>
-          <div class="flex flex-wrap gap-2">
-            @for (preset of amountPresets; track preset.label) {
-              <button
-                type="button"
-                class="chip"
-                data-amount-preset
-                [attr.aria-pressed]="filters().min === preset.min && filters().max === preset.max"
-                (click)="toggleAmountPreset(preset)"
-              >
-                {{ preset.label }}
-              </button>
-            }
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="field">
-              <input
-                class="field-control"
-                data-min
-                inputmode="decimal"
-                placeholder="Från"
-                aria-label="Lägsta belopp"
-                [value]="amountText('min')"
-                (change)="setAmount('min', $any($event.target))"
-              />
-              <span class="field-suffix">kr</span>
-            </label>
-            <label class="field">
-              <input
-                class="field-control"
-                data-max
-                inputmode="decimal"
-                placeholder="Till"
-                aria-label="Högsta belopp"
-                [value]="amountText('max')"
-                (change)="setAmount('max', $any($event.target))"
-              />
-              <span class="field-suffix">kr</span>
-            </label>
-          </div>
-        </section>
-
-        <section data-section="konton" class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium text-muted">Konton</h3>
-          <div class="flex flex-col gap-2">
-            @for (account of accountOptions(); track account.key) {
-              <label class="check-card">
-                <input
-                  type="checkbox"
-                  class="accent-(--color-accent)"
-                  [attr.data-account]="account.key"
-                  [checked]="filters().accounts.includes(account.key)"
-                  (change)="toggle('accounts', account.key)"
-                />
-                <span>{{ account.label }}</span>
-              </label>
-            }
-          </div>
-        </section>
-
-        <section data-section="kategorier" class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium text-muted">Kategorier</h3>
-          <div class="flex flex-wrap gap-2">
-            @for (category of categories(); track category.id) {
-              <button
-                type="button"
-                class="chip"
-                [attr.data-category]="category.id"
-                [attr.aria-pressed]="filters().categories.includes(String(category.id))"
-                (click)="toggle('categories', String(category.id))"
-              >
-                <app-category-icon [icon]="category.icon" [colour]="category.colour" [size]="28" />
-                {{ category.name }}
-              </button>
-            }
+    <app-sheet data-filter-panel heading="Filter" size="panel" (closed)="closed.emit()">
+      <section data-section="datum" class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium text-muted">Datum</h3>
+        <div class="flex flex-wrap gap-2">
+          @for (chip of periodChips(); track chip.key) {
             <button
               type="button"
               class="chip"
-              data-category="none"
-              [attr.aria-pressed]="filters().categories.includes('none')"
-              (click)="toggle('categories', 'none')"
+              [attr.data-period]="chip.key"
+              [attr.aria-pressed]="chip.on"
+              (click)="choosePeriod(chip.key)"
             >
-              Okategoriserad
+              {{ chip.label }}
             </button>
+          }
+        </div>
+        @if (custom()) {
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex flex-col gap-1 text-xs text-muted">
+              Från
+              <app-date-field
+                data-from
+                [value]="filters().from"
+                (valueChange)="setDate('from', $event)"
+              />
+            </label>
+            <label class="flex flex-col gap-1 text-xs text-muted">
+              Till
+              <app-date-field
+                data-to
+                [value]="filters().to"
+                (valueChange)="setDate('to', $event)"
+              />
+            </label>
           </div>
-        </section>
-      </div>
+        }
+      </section>
 
-      <footer class="flex items-center gap-3 border-t border-line px-5 py-4">
+      <section data-section="typ" class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium text-muted">Typ</h3>
+        <div class="segmented self-start" role="group" aria-label="Typ">
+          @for (option of kinds; track option.kind) {
+            <button
+              type="button"
+              [attr.data-kind]="option.kind || 'all'"
+              [attr.aria-pressed]="filters().kind === option.kind"
+              (click)="change({ kind: option.kind })"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+      </section>
+
+      <section data-section="belopp" class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium text-muted">Belopp</h3>
+        <div class="flex flex-wrap gap-2">
+          @for (preset of amountPresets; track preset.label) {
+            <button
+              type="button"
+              class="chip"
+              data-amount-preset
+              [attr.aria-pressed]="filters().min === preset.min && filters().max === preset.max"
+              (click)="toggleAmountPreset(preset)"
+            >
+              {{ preset.label }}
+            </button>
+          }
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="field">
+            <input
+              class="field-control"
+              data-min
+              inputmode="decimal"
+              placeholder="Från"
+              aria-label="Lägsta belopp"
+              [value]="amountText('min')"
+              (change)="setAmount('min', $any($event.target))"
+            />
+            <span class="field-suffix">kr</span>
+          </label>
+          <label class="field">
+            <input
+              class="field-control"
+              data-max
+              inputmode="decimal"
+              placeholder="Till"
+              aria-label="Högsta belopp"
+              [value]="amountText('max')"
+              (change)="setAmount('max', $any($event.target))"
+            />
+            <span class="field-suffix">kr</span>
+          </label>
+        </div>
+      </section>
+
+      <section data-section="konton" class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium text-muted">Konton</h3>
+        <div class="flex flex-col gap-2">
+          @for (account of accountOptions(); track account.key) {
+            <label class="check-card">
+              <input
+                type="checkbox"
+                class="accent-(--color-accent)"
+                [attr.data-account]="account.key"
+                [checked]="filters().accounts.includes(account.key)"
+                (change)="toggle('accounts', account.key)"
+              />
+              <span>{{ account.label }}</span>
+            </label>
+          }
+        </div>
+      </section>
+
+      <section data-section="kategorier" class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium text-muted">Kategorier</h3>
+        <div class="flex flex-wrap gap-2">
+          @for (category of categories(); track category.id) {
+            <button
+              type="button"
+              class="chip"
+              [attr.data-category]="category.id"
+              [attr.aria-pressed]="filters().categories.includes(String(category.id))"
+              (click)="toggle('categories', String(category.id))"
+            >
+              <app-category-icon [icon]="category.icon" [colour]="category.colour" [size]="28" />
+              {{ category.name }}
+            </button>
+          }
+          <button
+            type="button"
+            class="chip"
+            data-category="none"
+            [attr.aria-pressed]="filters().categories.includes('none')"
+            (click)="toggle('categories', 'none')"
+          >
+            Okategoriserad
+          </button>
+        </div>
+      </section>
+      <ng-container sheet-footer>
         <button type="button" data-clear class="btn btn-secondary" (click)="cleared.emit()">
           Rensa
         </button>
         <button type="button" data-show class="btn btn-primary flex-1" (click)="closed.emit()">
           Visa {{ count() ?? '' }} {{ count() === 1 ? 'transaktion' : 'transaktioner' }}
         </button>
-      </footer>
-    </section>
+      </ng-container>
+    </app-sheet>
   `,
 })
 export class FilterPanel {
@@ -237,8 +192,6 @@ export class FilterPanel {
   readonly cleared = output<void>();
   readonly closed = output<void>();
 
-  /** The slide-in plays once; a restart while a date picker is open would strand the panel. */
-  protected readonly entered = signal(false);
   protected readonly String = String;
   protected readonly amountPresets = AMOUNT_PRESETS;
   protected readonly kinds = [
@@ -246,13 +199,6 @@ export class FilterPanel {
     { kind: 'out' as const, label: 'Utgifter' },
     { kind: 'in' as const, label: 'Inkomster' },
   ];
-
-  private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('close');
-
-  constructor() {
-    lockPageScroll();
-    effect(() => this.closeButton()?.nativeElement.focus());
-  }
 
   protected readonly periodChips = computed(() => {
     const filters = this.filters();

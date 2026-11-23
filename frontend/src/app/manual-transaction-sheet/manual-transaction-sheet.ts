@@ -1,8 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
-  ElementRef,
-  DestroyRef,
+  type ElementRef,
   type OnInit,
   computed,
   effect,
@@ -23,12 +22,11 @@ import { catchError, of } from 'rxjs';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
 import { Callout } from '../callout/callout';
-import { Icon } from '../icon/icon';
+import { Sheet } from '../sheet/sheet';
 import { Skeleton } from '../skeleton/skeleton';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
-import { lockPageScroll } from '../scroll-lock';
 import { ShareControl } from '../share-control/share-control';
 import { SharesService } from '../shares.service';
 import { TransactionsService } from '../transactions.service';
@@ -37,217 +35,172 @@ type Status = 'loading' | 'ready' | 'failed' | 'gone';
 
 const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 /**
  * The form for adding a manual transaction, or editing one when `transactionId` is set (ADR 0009).
- * It opens over the page that hosts it: a centred modal on desktop, a bottom sheet on mobile.
+ * It opens in a Sheet over the page that hosts it.
  */
 @Component({
   selector: 'app-manual-transaction-sheet',
-  imports: [CategoryTiles, DateField, ShareControl, Callout, Icon, Skeleton],
-  host: { '(document:keydown.escape)': 'dismiss()' },
+  imports: [CategoryTiles, DateField, ShareControl, Callout, Sheet, Skeleton],
   template: `
-    <button
-      type="button"
-      data-backdrop
-      tabindex="-1"
-      aria-hidden="true"
-      [class.sheet-backdrop]="!entered()"
-      class="fixed inset-0 z-50 cursor-default bg-black/70"
-      (click)="dismiss()"
-    ></button>
-    <div
-      #dialog
-      role="dialog"
-      aria-modal="true"
-      [attr.aria-label]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
-      data-sheet
-      [class.modal-sheet]="!entered()"
-      (animationend)="$event.target === $event.currentTarget && entered.set(true)"
-      class="bg-surface-1 border-line-strong fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-36px)] flex-col rounded-t-3xl border sm:inset-x-0 sm:top-6 sm:bottom-auto sm:mx-auto sm:max-h-[calc(100dvh-3rem)] sm:w-[600px] sm:max-w-[calc(100vw-2rem)] sm:rounded-3xl"
-      (keydown)="trapFocus($event)"
+    <app-sheet
+      [heading]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
+      [dismissible]="!saving()"
+      (closed)="closed.emit()"
+      (submitted)="save()"
     >
-      <header class="flex items-center justify-between px-5 pt-4 pb-2">
-        <h2 data-title class="text-lg font-semibold">
-          {{ transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion' }}
-        </h2>
-        <button
-          type="button"
-          data-close
-          aria-label="Stäng"
-          class="btn btn-ghost"
-          (click)="dismiss()"
-        >
-          <app-icon name="x" />
-        </button>
-      </header>
-
       @switch (status()) {
         @case ('loading') {
-          <div class="px-5 py-8" aria-busy="true"><app-skeleton [count]="3" /></div>
+          <div class="py-5" aria-busy="true"><app-skeleton [count]="3" /></div>
         }
         @case ('failed') {
-          <app-callout variant="danger" class="m-5"
+          <app-callout variant="danger"
             >Transaktionen kunde inte hämtas. Försök igen senare.</app-callout
           >
         }
         @case ('gone') {
-          <p class="px-5 py-8">Transaktionen finns inte längre, eller går inte att redigera.</p>
+          <p class="py-5">Transaktionen finns inte längre, eller går inte att redigera.</p>
         }
         @default {
-          <form
-            data-form
-            class="flex min-h-0 flex-1 flex-col"
-            (submit)="$event.preventDefault(); save()"
-          >
-            <div
-              class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 py-3"
+          <div class="segmented self-start" role="group" aria-label="Typ">
+            <button
+              type="button"
+              data-kind="out"
+              [attr.aria-pressed]="direction() === 'out'"
+              (click)="setDirection('out')"
             >
-              <div class="segmented self-start" role="group" aria-label="Typ">
-                <button
-                  type="button"
-                  data-kind="out"
-                  [attr.aria-pressed]="direction() === 'out'"
-                  (click)="setDirection('out')"
+              Utgift
+            </button>
+            <button
+              type="button"
+              data-kind="in"
+              [attr.aria-pressed]="direction() === 'in'"
+              (click)="setDirection('in')"
+            >
+              Inkomst
+            </button>
+          </div>
+
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Belopp
+            <span class="field justify-center gap-2" style="height: 76px">
+              <span class="amount text-[44px] leading-none text-muted" aria-hidden="true">{{
+                direction() === 'out' ? '−' : '+'
+              }}</span>
+              <input
+                #amountInput
+                data-amount
+                type="text"
+                inputmode="decimal"
+                placeholder="0"
+                class="field-control amount !flex-none text-center text-[44px] text-ink"
+                style="width: 9ch; field-sizing: content; min-width: 2ch"
+                [value]="amount()"
+                (input)="amount.set(value($event))"
+              />
+              <span class="field-suffix text-xl">kr</span>
+            </span>
+          </label>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="flex flex-col gap-1 text-sm text-muted">
+              Beskrivning
+              <span class="field"
+                ><input
+                  data-description
+                  type="text"
+                  class="field-control"
+                  autocomplete="off"
+                  [value]="description()"
+                  (input)="description.set(value($event))"
+              /></span>
+            </label>
+            <label class="flex flex-col gap-1 text-sm text-muted">
+              Datum
+              <span class="field">
+                <svg
+                  class="field-icon"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
                 >
-                  Utgift
-                </button>
-                <button
-                  type="button"
-                  data-kind="in"
-                  [attr.aria-pressed]="direction() === 'in'"
-                  (click)="setDirection('in')"
-                >
-                  Inkomst
-                </button>
-              </div>
-
-              <label class="flex flex-col gap-1 text-sm text-muted">
-                Belopp
-                <span class="field justify-center gap-2" style="height: 76px">
-                  <span class="amount text-[44px] leading-none text-muted" aria-hidden="true">{{
-                    direction() === 'out' ? '−' : '+'
-                  }}</span>
-                  <input
-                    #amountInput
-                    data-amount
-                    type="text"
-                    inputmode="decimal"
-                    placeholder="0"
-                    class="field-control amount !flex-none text-center text-[44px] text-ink"
-                    style="width: 9ch; field-sizing: content; min-width: 2ch"
-                    [value]="amount()"
-                    (input)="amount.set(value($event))"
-                  />
-                  <span class="field-suffix text-xl">kr</span>
-                </span>
-              </label>
-
-              <div class="grid gap-3 sm:grid-cols-2">
-                <label class="flex flex-col gap-1 text-sm text-muted">
-                  Beskrivning
-                  <span class="field"
-                    ><input
-                      data-description
-                      type="text"
-                      class="field-control"
-                      autocomplete="off"
-                      [value]="description()"
-                      (input)="description.set(value($event))"
-                  /></span>
-                </label>
-                <label class="flex flex-col gap-1 text-sm text-muted">
-                  Datum
-                  <span class="field">
-                    <svg
-                      class="field-icon"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <rect x="3" y="5" width="18" height="16" rx="2" />
-                      <path d="M3 10h18M8 3v4M16 3v4" />
-                    </svg>
-                    <app-date-field
-                      data-date
-                      class="min-w-0 flex-1"
-                      fieldClass="field-control text-left"
-                      [value]="date()"
-                      (valueChange)="date.set($event)"
-                    />
-                  </span>
-                </label>
-              </div>
-
-              <section class="flex flex-col gap-2" aria-label="Kategori">
-                <h3 class="text-sm text-muted">Kategori</h3>
-                <app-category-tiles
-                  [categories]="shownCategories()"
-                  [current]="subcategoryId()"
-                  (picked)="subcategoryId.set($event)"
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M3 10h18M8 3v4M16 3v4" />
+                </svg>
+                <app-date-field
+                  data-date
+                  class="min-w-0 flex-1"
+                  fieldClass="field-control text-left"
+                  [value]="date()"
+                  (valueChange)="date.set($event)"
                 />
-              </section>
+              </span>
+            </label>
+          </div>
 
-              <section class="flex flex-col gap-2">
-                <h3 class="text-sm text-muted">Andel</h3>
-                <app-share-control
-                  label="Andel"
-                  [value]="shownShare()"
-                  (changed)="share.set($event)"
-                />
-              </section>
+          <section class="flex flex-col gap-2" aria-label="Kategori">
+            <h3 class="text-sm text-muted">Kategori</h3>
+            <app-category-tiles
+              [categories]="shownCategories()"
+              [current]="subcategoryId()"
+              (picked)="subcategoryId.set($event)"
+            />
+          </section>
 
-              <section class="flex flex-col gap-2">
-                <h3 class="text-sm text-muted">Betald av</h3>
-                <div class="segmented self-start" role="group" aria-label="Betald av">
-                  <button
-                    type="button"
-                    data-paid-by="owner"
-                    [attr.aria-pressed]="paidBy() === 'owner'"
-                    (click)="paidBy.set('owner')"
-                  >
-                    Jag
-                  </button>
-                  <button
-                    type="button"
-                    data-paid-by="partner"
-                    [attr.aria-pressed]="paidBy() === 'partner'"
-                    (click)="paidBy.set('partner')"
-                  >
-                    Partner
-                  </button>
-                </div>
-              </section>
+          <section class="flex flex-col gap-2">
+            <h3 class="text-sm text-muted">Andel</h3>
+            <app-share-control label="Andel" [value]="shownShare()" (changed)="share.set($event)" />
+          </section>
 
-              @if (error(); as message) {
-                <app-callout variant="danger">{{ message }}</app-callout>
-              }
-            </div>
-
-            <footer class="border-line flex gap-3 border-t px-5 py-4">
-              <button type="button" data-cancel class="btn btn-ghost" (click)="dismiss()">
-                Avbryt
+          <section class="flex flex-col gap-2">
+            <h3 class="text-sm text-muted">Betald av</h3>
+            <div class="segmented self-start" role="group" aria-label="Betald av">
+              <button
+                type="button"
+                data-paid-by="owner"
+                [attr.aria-pressed]="paidBy() === 'owner'"
+                (click)="paidBy.set('owner')"
+              >
+                Jag
               </button>
               <button
-                type="submit"
-                data-save
-                class="btn btn-primary flex-1"
-                [disabled]="saving() || !amountValid()"
+                type="button"
+                data-paid-by="partner"
+                [attr.aria-pressed]="paidBy() === 'partner'"
+                (click)="paidBy.set('partner')"
               >
-                Spara transaktion
+                Partner
               </button>
-            </footer>
-          </form>
+            </div>
+          </section>
+
+          @if (error(); as message) {
+            <app-callout variant="danger">{{ message }}</app-callout>
+          }
         }
       }
-    </div>
+      <ng-container sheet-footer>
+        @if (status() === 'ready') {
+          <button type="button" data-cancel class="btn btn-ghost" (click)="dismiss()">
+            Avbryt
+          </button>
+          <button
+            type="submit"
+            data-save
+            class="btn btn-primary flex-1"
+            [disabled]="saving() || !amountValid()"
+          >
+            Spara transaktion
+          </button>
+        }
+      </ng-container>
+    </app-sheet>
   `,
 })
 export class ManualTransactionSheet implements OnInit {
@@ -261,10 +214,8 @@ export class ManualTransactionSheet implements OnInit {
   private readonly transactions = inject(TransactionsService);
   private readonly categoryService = inject(CategoriesService);
   private readonly shares = inject(SharesService);
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 
-  protected readonly entered = signal(false);
   protected readonly status = signal<Status>('loading');
   private readonly categories = signal<Category[]>([]);
   /** The share each subcategory with a share other than Jag has. */
@@ -299,26 +250,13 @@ export class ManualTransactionSheet implements OnInit {
     return (id === null ? undefined : this.subcategoryShares().get(id)) ?? 'me';
   });
 
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-  private readonly opener = document.activeElement;
-
   constructor() {
-    lockPageScroll();
-    inject(DestroyRef).onDestroy(() => {
-      if (this.opener instanceof HTMLElement && this.opener.isConnected) this.opener.focus();
-    });
-    // Focus moves into the sheet once the form is there.
-    effect(() => {
-      const target = this.amountInput() ?? this.dialog();
-      target?.nativeElement.focus();
-    });
+    // Focus moves to the amount once the form is there.
+    effect(() => this.amountInput()?.nativeElement.focus());
   }
 
   /** Inputs are set once the component exists, so what to load is decided here. */
   ngOnInit(): void {
-    // The sheet is positioned against the window, so it must not sit inside the routed page:
-    // that page is animated, and a fixed element inside it moves with the page's scroll.
-    document.body.append(this.host);
     this.shares
       .subcategoryShares()
       .pipe(catchError(() => of([])))
@@ -371,24 +309,6 @@ export class ManualTransactionSheet implements OnInit {
     this.direction.set(direction);
     // The subcategory belongs to the other kind of category now.
     this.subcategoryId.set(null);
-  }
-
-  /** Keeps Tab and Shift+Tab inside the sheet. */
-  protected trapFocus(event: KeyboardEvent): void {
-    if (event.key !== 'Tab') return;
-    const focusable = Array.from(
-      this.dialog()?.nativeElement.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
-    );
-    const first = focusable.at(0);
-    const last = focusable.at(-1);
-    if (first === undefined || last === undefined) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   protected save(): void {

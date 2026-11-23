@@ -1119,3 +1119,34 @@ router-outlet + * {
     border: 3px solid var(--color-surface-1);
   }
 }
+
+@layer components {
+  /* Menu: the actions behind a ⋯ button; large targets on phones */
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    text-align: left;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--color-ink);
+  }
+  .menu-item:hover,
+  .menu-item:focus-visible {
+    background: var(--color-surface-3);
+    outline: none;
+  }
+  .menu-item-danger {
+    color: var(--color-danger);
+  }
+  @media (min-width: 40rem) {
+    .menu-item {
+      min-height: 38px;
+      font-size: 15px;
+    }
+  }
+}

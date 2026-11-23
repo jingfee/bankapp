@@ -297,7 +297,7 @@ describe('TransactionsPage', () => {
 
     // The sheet moves itself into <body>, where the test teardown would leave it behind.
     fixture.destroy();
-    document.querySelectorAll('[data-sheet]').forEach((el) => el.remove());
+    document.querySelectorAll('app-sheet').forEach((el) => el.remove());
   });
 
   it('shows Manuell where a manual transaction’s account would be and links to adding one', async () => {
@@ -637,7 +637,7 @@ describe('TransactionsPage', () => {
       );
       await fixture.whenStable();
 
-      const panel = page.querySelector('[data-filter-panel]') as HTMLElement;
+      const panel = document.querySelector('[data-filter-panel]') as HTMLElement;
       expect(
         Array.from(panel.querySelectorAll('[data-section="konton"] label')).map((l) =>
           l.textContent?.trim(),
@@ -671,7 +671,7 @@ describe('TransactionsPage', () => {
       expect(panel.querySelector('[data-show]')?.textContent?.trim()).toBe('Visa 7 transaktioner');
       (panel.querySelector('[data-show]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      expect(page.querySelector('[data-filter-panel]')).toBeNull();
+      expect(document.querySelector('[data-filter-panel]')).toBeNull();
     });
 
     it('shows date inputs when Välj datum is picked in the panel', async () => {
@@ -681,7 +681,7 @@ describe('TransactionsPage', () => {
       await fixture.whenStable();
       lookups(http);
       await fixture.whenStable();
-      const panel = page.querySelector('[data-filter-panel]') as HTMLElement;
+      const panel = document.querySelector('[data-filter-panel]') as HTMLElement;
       expect(panel.querySelector('[data-from]')).toBeNull();
 
       (panel.querySelector('[data-period="custom"]') as HTMLButtonElement).click();

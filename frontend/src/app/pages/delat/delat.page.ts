@@ -15,6 +15,9 @@ import {
 import { type Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { Callout } from '../../callout/callout';
+import { Confirm } from '../../confirm/confirm';
+import { Menu, MenuItem } from '../../menu/menu';
+import { Sheet } from '../../sheet/sheet';
 import { Icon } from '../../icon/icon';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Skeleton } from '../../skeleton/skeleton';
@@ -70,6 +73,10 @@ interface SharedRow {
     Disclosure,
     Icon,
     Skeleton,
+    Confirm,
+    Menu,
+    MenuItem,
+    Sheet,
   ],
   template: `
     <app-page title="Delat" subtitle="Avräkning, hushållsandel och delade underkategorier.">
@@ -113,45 +120,47 @@ interface SharedRow {
                 </div>
               }
 
-              @if (settingOpen()) {
-                <form
-                  data-setting-form
-                  class="expand-in flex flex-col gap-3"
-                  (submit)="$event.preventDefault(); saveBalance()"
+              <div>
+                <button
+                  type="button"
+                  data-open-setting
+                  class="btn btn-secondary btn-sm"
+                  (click)="settingOpen.set(true)"
                 >
-                  <div class="flex flex-wrap items-end gap-3">
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Saldo
-                      <span class="field">
-                        <input
-                          type="text"
-                          inputmode="decimal"
-                          data-amount
-                          class="field-control"
-                          [value]="amount()"
-                          (input)="amount.set(value($event))"
-                        />
-                        <span class="field-suffix">kr</span>
-                      </span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Per
-                      <app-date-field
-                        data-as-of
-                        [value]="asOf()"
-                        (valueChange)="asOf.set($event)"
+                  Ställ in saldo
+                </button>
+              </div>
+              @if (settingOpen()) {
+                <app-sheet
+                  data-setting-form
+                  heading="Ställ in saldo"
+                  [dismissible]="!saving()"
+                  (closed)="cancelSetting()"
+                  (submitted)="saveBalance()"
+                >
+                  <label class="flex flex-col gap-1 text-sm text-muted">
+                    Saldo
+                    <span class="field">
+                      <input
+                        type="text"
+                        inputmode="decimal"
+                        data-amount
+                        data-autofocus
+                        class="field-control"
+                        [value]="amount()"
+                        (input)="amount.set(value($event))"
                       />
-                    </label>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      type="submit"
-                      data-save-balance
-                      class="btn btn-primary"
-                      [disabled]="saving() || !amountValid() || asOf() === ''"
-                    >
-                      Spara saldo
-                    </button>
+                      <span class="field-suffix">kr</span>
+                    </span>
+                  </label>
+                  <label class="flex flex-col gap-1 text-sm text-muted">
+                    Per
+                    <app-date-field data-as-of [value]="asOf()" (valueChange)="asOf.set($event)" />
+                  </label>
+                  @if (error(); as message) {
+                    <app-callout variant="danger">{{ message }}</app-callout>
+                  }
+                  <ng-container sheet-footer>
                     <button
                       type="button"
                       data-cancel-setting
@@ -160,71 +169,70 @@ interface SharedRow {
                     >
                       Avbryt
                     </button>
-                  </div>
-                </form>
-              } @else {
-                <div>
-                  <button
-                    type="button"
-                    data-open-setting
-                    class="btn btn-secondary btn-sm"
-                    (click)="settingOpen.set(true)"
-                  >
-                    Ställ in saldo
-                  </button>
-                </div>
+                    <button
+                      type="submit"
+                      data-save-balance
+                      class="btn btn-primary flex-1"
+                      [disabled]="saving() || !amountValid() || asOf() === ''"
+                    >
+                      Spara saldo
+                    </button>
+                  </ng-container>
+                </app-sheet>
               }
 
               @if (open(); as period) {
-                @if (closing()) {
-                  <form
-                    data-close-form
-                    class="flex flex-col gap-3 border-t border-line pt-3"
-                    (submit)="$event.preventDefault(); closeMonth()"
+                <div>
+                  <button
+                    type="button"
+                    data-close-month
+                    class="btn btn-secondary btn-sm"
+                    (click)="startClosing(period)"
                   >
-                    <div class="flex flex-wrap items-end gap-3">
-                      <label class="flex flex-col gap-1 text-sm text-muted">
-                        Avslutsdatum
-                        <app-date-field
-                          data-closing-date
-                          [value]="closingDate()"
-                          (valueChange)="closingDate.set($event)"
-                        />
-                      </label>
-                      <label class="flex flex-col gap-1 text-sm text-muted">
-                        Nästa månad
-                        <app-month-field
-                          data-next-month
-                          [value]="nextMonth()"
-                          (valueChange)="nextMonth.set($event)"
-                        />
-                      </label>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
+                    Avsluta {{ monthOnly(period.month).toLowerCase() }}
+                  </button>
+                </div>
+                @if (closing()) {
+                  <app-sheet
+                    data-close-form
+                    [heading]="'Avsluta ' + monthOnly(period.month).toLowerCase()"
+                    [dismissible]="!saving()"
+                    (closed)="closing.set(false)"
+                    (submitted)="closeMonth()"
+                  >
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Avslutsdatum
+                      <app-date-field
+                        data-closing-date
+                        [value]="closingDate()"
+                        (valueChange)="closingDate.set($event)"
+                      />
+                    </label>
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Nästa månad
+                      <app-month-field
+                        data-next-month
+                        [value]="nextMonth()"
+                        (valueChange)="nextMonth.set($event)"
+                      />
+                    </label>
+                    @if (error(); as message) {
+                      <app-callout variant="danger">{{ message }}</app-callout>
+                    }
+                    <ng-container sheet-footer>
+                      <button type="button" class="btn btn-ghost" (click)="closing.set(false)">
+                        Avbryt
+                      </button>
                       <button
                         type="submit"
                         data-confirm-close
-                        class="btn btn-primary"
+                        class="btn btn-primary flex-1"
                         [disabled]="saving() || closingDate() === '' || !nextMonthValid(period)"
                       >
                         Avsluta
                       </button>
-                      <button type="button" class="btn btn-ghost" (click)="closing.set(false)">
-                        Avbryt
-                      </button>
-                    </div>
-                  </form>
-                } @else {
-                  <div>
-                    <button
-                      type="button"
-                      data-close-month
-                      class="btn btn-secondary btn-sm"
-                      (click)="startClosing(period)"
-                    >
-                      Avsluta {{ monthOnly(period.month).toLowerCase() }}
-                    </button>
-                  </div>
+                    </ng-container>
+                  </app-sheet>
                 }
               }
             </section>
@@ -236,47 +244,50 @@ interface SharedRow {
                     <span data-period-title>{{ monthName(period.month) }}</span>
                     <span class="text-sm font-normal text-muted"> · pågående</span>
                   </h2>
-                  @if (!editingMonth()) {
+                  <app-menu label="Åtgärder för perioden">
                     <button
+                      appMenuItem
                       type="button"
                       data-edit-month
-                      class="btn btn-ghost btn-sm"
                       (click)="startEditMonth(period)"
                     >
                       Ändra månad
                     </button>
-                  }
+                  </app-menu>
                 </div>
                 @if (editingMonth()) {
-                  <form
+                  <app-sheet
                     data-month-form
-                    class="flex flex-col gap-3"
-                    (submit)="$event.preventDefault(); saveMonth()"
+                    heading="Ändra månad"
+                    [dismissible]="!saving()"
+                    (closed)="editingMonth.set(false)"
+                    (submitted)="saveMonth()"
                   >
-                    <div class="flex flex-wrap items-end gap-3">
-                      <label class="flex flex-col gap-1 text-sm text-muted">
-                        Månad
-                        <app-month-field
-                          data-month-input
-                          [value]="monthDraft()"
-                          (valueChange)="monthDraft.set($event)"
-                        />
-                      </label>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
+                    <label class="flex flex-col gap-1 text-sm text-muted">
+                      Månad
+                      <app-month-field
+                        data-month-input
+                        [value]="monthDraft()"
+                        (valueChange)="monthDraft.set($event)"
+                      />
+                    </label>
+                    @if (error(); as message) {
+                      <app-callout variant="danger">{{ message }}</app-callout>
+                    }
+                    <ng-container sheet-footer>
+                      <button type="button" class="btn btn-ghost" (click)="editingMonth.set(false)">
+                        Avbryt
+                      </button>
                       <button
                         type="submit"
                         data-save-month
-                        class="btn btn-primary"
+                        class="btn btn-primary flex-1"
                         [disabled]="saving() || !monthDraftValid()"
                       >
                         Spara
                       </button>
-                      <button type="button" class="btn btn-ghost" (click)="editingMonth.set(false)">
-                        Avbryt
-                      </button>
-                    </div>
-                  </form>
+                    </ng-container>
+                  </app-sheet>
                 }
                 @if (period.overdue) {
                   <p data-overdue class="text-sm text-danger">
@@ -367,27 +378,30 @@ interface SharedRow {
                           >Rapporten kunde inte sparas</app-callout
                         >
                       }
-                      <div class="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          data-save-report
-                          class="btn btn-ghost btn-sm"
-                          [disabled]="saving()"
-                          (click)="saveReport(period)"
-                        >
-                          Spara rapport igen
-                        </button>
-                        @if (first) {
+                      <div class="flex">
+                        <app-menu label="Åtgärder för perioden">
                           <button
+                            appMenuItem
                             type="button"
-                            data-undo-close
-                            class="btn btn-ghost btn-sm"
+                            data-save-report
                             [disabled]="saving()"
-                            (click)="undoClose(period)"
+                            (click)="saveReport(period)"
                           >
-                            Ångra avslut
+                            Spara rapport igen
                           </button>
-                        }
+                          @if (first) {
+                            <button
+                              appMenuItem
+                              type="button"
+                              data-undo-close
+                              [danger]="true"
+                              [disabled]="saving()"
+                              (click)="undoing.set(period.month)"
+                            >
+                              Ångra avslut…
+                            </button>
+                          }
+                        </app-menu>
                       </div>
                     </section>
                   }
@@ -440,71 +454,31 @@ interface SharedRow {
                     data-ratio-entry
                     class="flex flex-wrap items-center justify-between gap-2 py-2"
                   >
-                    @if (editing() === entry.from) {
-                      <span class="flex flex-wrap items-center gap-2">
-                        <app-date-field
-                          data-edit-from
-                          label="Från datum"
-                          [value]="editFrom()"
-                          (valueChange)="editFrom.set($event)"
-                        />
-                        <input
-                          type="number"
-                          data-edit-percent
-                          aria-label="Din andel i procent"
-                          min="1"
-                          max="99"
-                          class="input w-24"
-                          [value]="editPercent()"
-                          (input)="editPercent.set(value($event))"
-                        />
-                      </span>
-                      <span class="flex gap-2">
-                        <button
-                          type="button"
-                          data-save-edit
-                          class="btn btn-primary btn-sm"
-                          [disabled]="saving()"
-                          (click)="saveEdit(entry)"
-                        >
-                          Spara
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm"
-                          (click)="editing.set(null)"
-                        >
-                          Avbryt
-                        </button>
-                      </span>
-                    } @else {
-                      <span class="text-sm">
-                        <span class="font-medium"
-                          >{{ entry.percent }}/{{ 100 - entry.percent }}</span
-                        >
-                        <span class="text-muted"> · från {{ entry.from }}</span>
-                      </span>
-                      <span class="flex gap-2">
-                        <button
-                          type="button"
-                          data-edit
-                          class="btn btn-ghost btn-sm"
-                          [disabled]="saving()"
-                          (click)="startEdit(entry)"
-                        >
-                          Ändra
-                        </button>
-                        <button
-                          type="button"
-                          data-remove
-                          class="btn btn-danger-soft btn-sm"
-                          [disabled]="saving() || ratio().length === 1"
-                          (click)="remove(entry)"
-                        >
-                          Ta bort
-                        </button>
-                      </span>
-                    }
+                    <span class="text-sm">
+                      <span class="font-medium">{{ entry.percent }}/{{ 100 - entry.percent }}</span>
+                      <span class="text-muted"> · från {{ entry.from }}</span>
+                    </span>
+                    <app-menu label="Åtgärder för hushållsandelen från {{ entry.from }}">
+                      <button
+                        appMenuItem
+                        type="button"
+                        data-edit
+                        [disabled]="saving()"
+                        (click)="startEdit(entry)"
+                      >
+                        Ändra
+                      </button>
+                      <button
+                        appMenuItem
+                        type="button"
+                        data-remove
+                        [danger]="true"
+                        [disabled]="saving() || ratio().length === 1"
+                        (click)="removing.set(entry)"
+                      >
+                        Ta bort…
+                      </button>
+                    </app-menu>
                   </li>
                 }
               </ul>
@@ -594,6 +568,79 @@ interface SharedRow {
         </ul>
       </ng-template>
     </app-page>
+
+    @let editEntry = editingEntry();
+    @if (editEntry) {
+      <app-sheet
+        data-ratio-form
+        heading="Ändra hushållsandel"
+        [dismissible]="!saving()"
+        (closed)="editing.set(null)"
+        (submitted)="saveEdit(editEntry)"
+      >
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Från datum
+          <app-date-field
+            data-edit-from
+            label="Från datum"
+            [value]="editFrom()"
+            (valueChange)="editFrom.set($event)"
+          />
+        </label>
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Din andel i procent
+          <input
+            type="number"
+            data-edit-percent
+            data-autofocus
+            min="1"
+            max="99"
+            class="input w-24"
+            [value]="editPercent()"
+            (input)="editPercent.set(value($event))"
+          />
+        </label>
+        @if (error(); as message) {
+          <app-callout variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" class="btn btn-ghost" (click)="editing.set(null)">Avbryt</button>
+          <button type="submit" data-save-edit class="btn btn-primary flex-1" [disabled]="saving()">
+            Spara
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (removing(); as entry) {
+      <app-confirm
+        heading="Ta bort hushållsandelen?"
+        [message]="
+          'Andelen ' +
+          entry.percent +
+          '/' +
+          (100 - entry.percent) +
+          ' från ' +
+          entry.from +
+          ' tas bort.'
+        "
+        confirmLabel="Ta bort"
+        [busy]="saving()"
+        (confirmed)="remove(entry)"
+        (cancelled)="removing.set(null)"
+      />
+    }
+
+    @if (undoing(); as month) {
+      <app-confirm
+        [heading]="'Ångra avslutet av ' + monthName(month) + '?'"
+        message="Perioden blir pågående igen och den nya perioden tas bort."
+        confirmLabel="Ångra avslut"
+        [busy]="saving()"
+        (confirmed)="undoClose()"
+        (cancelled)="undoing.set(null)"
+      />
+    }
   `,
 })
 export class DelatPage {
@@ -636,6 +683,10 @@ export class DelatPage {
   protected readonly ratio = signal<HouseholdRatioEntry[]>([]);
   protected readonly slider = signal<number | null>(null);
   protected readonly editing = signal<string | null>(null);
+  /** The ratio entry being removed, awaiting confirmation. */
+  protected readonly removing = signal<HouseholdRatioEntry | null>(null);
+  /** The month whose closing is being undone, awaiting confirmation. */
+  protected readonly undoing = signal<string | null>(null);
   protected readonly editFrom = signal('');
   protected readonly editPercent = signal('');
 
@@ -693,6 +744,11 @@ export class DelatPage {
     return householdRatioOn(this.ratio(), today());
   });
   /** The history with the entry in force first, then the rest newest first. */
+  /** The ratio entry open in the edit sheet. */
+  protected readonly editingEntry = computed(
+    () => this.ratio().find((e) => e.from === this.editing()) ?? null,
+  );
+
   protected readonly history = computed(() => {
     const current = this.current();
     const rest = [...this.ratio()].sort((a, b) => b.from.localeCompare(a.from));
@@ -789,9 +845,10 @@ export class DelatPage {
     this.run(this.settlementService.saveReport(period.month), 'Rapporten kunde inte sparas.');
   }
 
-  protected undoClose(period: SettlementPeriod): void {
-    if (!confirm(`Ångra avslutet av ${this.monthName(period.month)}?`)) return;
-    this.run(this.settlementService.undoClose(), 'Avslutet kunde inte ångras.');
+  protected undoClose(): void {
+    this.run(this.settlementService.undoClose(), 'Avslutet kunde inte ångras.', () =>
+      this.undoing.set(null),
+    );
   }
 
   /** Sends a change to the periods and shows the answer, or `failure`. */
@@ -806,6 +863,8 @@ export class DelatPage {
       },
       error: () => {
         this.error.set(failure);
+        // A confirmation gives way to the error on the page.
+        this.undoing.set(null);
         this.saving.set(false);
       },
     });
@@ -874,7 +933,10 @@ export class DelatPage {
 
   protected remove(entry: HouseholdRatioEntry): void {
     if (this.ratio().length === 1) return;
-    this.saveRatio(this.ratio().filter((e) => e.from !== entry.from));
+    this.saveRatio(
+      this.ratio().filter((e) => e.from !== entry.from),
+      () => this.removing.set(null),
+    );
   }
 
   /** A valid entry from the form's text, or null after showing what is wrong. */
@@ -905,6 +967,7 @@ export class DelatPage {
         },
         error: () => {
           this.saving.set(false);
+          this.removing.set(null);
           this.error.set('Hushållsandelen kunde inte sparas. Försök igen senare.');
         },
       });
