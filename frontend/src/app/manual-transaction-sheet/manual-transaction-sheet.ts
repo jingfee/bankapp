@@ -22,6 +22,9 @@ import type {
 import { catchError, of } from 'rxjs';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
+import { Callout } from '../callout/callout';
+import { Icon } from '../icon/icon';
+import { Skeleton } from '../skeleton/skeleton';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
@@ -42,7 +45,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
  */
 @Component({
   selector: 'app-manual-transaction-sheet',
-  imports: [CategoryTiles, DateField, ShareControl],
+  imports: [CategoryTiles, DateField, ShareControl, Callout, Icon, Skeleton],
   host: { '(document:keydown.escape)': 'dismiss()' },
   template: `
     <button
@@ -76,16 +79,18 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
           class="btn btn-ghost"
           (click)="dismiss()"
         >
-          ✕
+          <app-icon name="x" />
         </button>
       </header>
 
       @switch (status()) {
         @case ('loading') {
-          <p class="px-5 py-8" aria-live="polite">Hämtar…</p>
+          <div class="px-5 py-8" aria-busy="true"><app-skeleton [count]="3" /></div>
         }
         @case ('failed') {
-          <p class="px-5 py-8" role="alert">Transaktionen kunde inte hämtas. Försök igen senare.</p>
+          <app-callout variant="danger" class="m-5"
+            >Transaktionen kunde inte hämtas. Försök igen senare.</app-callout
+          >
         }
         @case ('gone') {
           <p class="px-5 py-8">Transaktionen finns inte längre, eller går inte att redigera.</p>
@@ -142,14 +147,15 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
               <div class="grid gap-3 sm:grid-cols-2">
                 <label class="flex flex-col gap-1 text-sm text-muted">
                   Beskrivning
-                  <input
-                    data-description
-                    type="text"
-                    class="input"
-                    autocomplete="off"
-                    [value]="description()"
-                    (input)="description.set(value($event))"
-                  />
+                  <span class="field"
+                    ><input
+                      data-description
+                      type="text"
+                      class="field-control"
+                      autocomplete="off"
+                      [value]="description()"
+                      (input)="description.set(value($event))"
+                  /></span>
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-muted">
                   Datum
@@ -221,7 +227,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not
               </section>
 
               @if (error(); as message) {
-                <p role="alert" class="text-danger text-sm">{{ message }}</p>
+                <app-callout variant="danger">{{ message }}</app-callout>
               }
             </div>
 

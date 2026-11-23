@@ -503,10 +503,10 @@ describe('TransactionsPage', () => {
 
       const chips = Array.from(page.querySelectorAll('[data-active-chip]'));
       expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
-        'Utgifter ✕',
-        '100–500 kr ✕',
-        'Coop Mastercard ✕',
-        'Mat & Dryck ✕',
+        'Utgifter',
+        '100–500 kr',
+        'Coop Mastercard',
+        'Mat & Dryck',
       ]);
       expect((chips[3]?.querySelector('[data-dot]') as HTMLElement).style.background).not.toBe('');
       expect(page.querySelector('[data-filter-count]')?.textContent?.trim()).toBe('4');

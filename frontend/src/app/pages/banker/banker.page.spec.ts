@@ -85,7 +85,7 @@ describe('BankerPage', () => {
     const page = await render();
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Banker');
-    expect(page.textContent).toContain('Inga banker är anslutna ännu.');
+    expect(page.textContent).toContain('Inga banker anslutna');
     const link = page.querySelector('a[href="/anslut-bank"]');
     expect(link?.textContent?.trim()).toBe('Anslut bank');
   });
@@ -103,7 +103,7 @@ describe('BankerPage', () => {
       } satisfies AccountsResponse),
     );
 
-    expect(page.textContent).not.toContain('Inga banker är anslutna ännu.');
+    expect(page.textContent).not.toContain('Inga banker anslutna');
     const groups = Array.from(page.querySelectorAll('section[data-bank]')).map((group) => ({
       bank: group.querySelector('h2')?.textContent?.trim(),
       accounts: Array.from(group.querySelectorAll('section > ul > li')).map((li) =>
@@ -694,6 +694,10 @@ describe('BankerPage', () => {
       );
       await TestBed.inject(ApplicationRef).whenStable();
       expect(page.querySelector('[data-bank]')).toBeNull();
+      page
+        .querySelector<HTMLButtonElement>('[data-removed-banks] [data-disclosure-toggle]')!
+        .click();
+      await TestBed.inject(ApplicationRef).whenStable();
       expect(page.querySelector('[data-removed-bank="Swedbank"]')?.textContent).toContain(
         'Lönekonto',
       );
@@ -757,9 +761,12 @@ describe('BankerPage', () => {
         ),
       );
 
-      const section = page.querySelector<HTMLDetailsElement>('[data-removed-banks]')!;
-      expect(section.open).toBe(false);
+      const section = page.querySelector<HTMLElement>('[data-removed-banks]')!;
+      const toggle = section.querySelector<HTMLButtonElement>('[data-disclosure-toggle]')!;
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
       expect(section.textContent).toContain('Borttagna banker');
+      toggle.click();
+      await TestBed.inject(ApplicationRef).whenStable();
       const rows = section.querySelectorAll('li');
       expect(rows[1]?.querySelector('[data-visibility]')?.textContent).toBe('Dolt');
 
@@ -776,6 +783,10 @@ describe('BankerPage', () => {
           removedBanks: [{ bank: 'Swedbank', accounts: [account('Lönekonto', 'payment')] }],
         });
       const open = async (page: HTMLElement) => {
+        page
+          .querySelector<HTMLButtonElement>('[data-removed-banks] [data-disclosure-toggle]')!
+          .click();
+        await TestBed.inject(ApplicationRef).whenStable();
         page.querySelector<HTMLButtonElement>('[data-delete-bank]')!.click();
         await TestBed.inject(ApplicationRef).whenStable();
       };
@@ -846,6 +857,6 @@ describe('BankerPage', () => {
     const page = await render(failed);
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
-    expect(page.textContent).not.toContain('Inga banker är anslutna ännu.');
+    expect(page.textContent).not.toContain('Inga banker anslutna');
   });
 });

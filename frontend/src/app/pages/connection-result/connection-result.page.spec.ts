@@ -25,7 +25,7 @@ describe('ConnectionResultPage', () => {
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Banken är ansluten');
     expect(page.textContent).toContain('Swedbank är nu ansluten.');
     expect(page.querySelector('[role=alert]')).toBeNull();
-    expect(page.querySelector('a[href="/banker"]')?.textContent?.trim()).toBe('Till Banker');
+    expect(page.querySelector('a[href="/banker"]')?.textContent?.trim()).toBe('Till Banker →');
   });
 
   it('reports a cancelled or failed login as an error and offers to try again', () => {
@@ -35,7 +35,7 @@ describe('ConnectionResultPage', () => {
     expect(page.querySelector('[role=alert]')?.textContent).toContain(
       'BankID-inloggningen avbröts eller misslyckades',
     );
-    expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Försök igen');
+    expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Försök igen →');
   });
 
   it('explains that a bank which is already connected was left as it was', () => {

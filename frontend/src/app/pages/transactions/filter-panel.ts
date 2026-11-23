@@ -12,6 +12,7 @@ import type { Category } from '@bankapp/shared';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import { lockPageScroll } from '../../scroll-lock';
 import { DateField } from '../../date-field/date-field';
+import { Icon } from '../../icon/icon';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { MANUAL_LABEL } from '../../share-display';
 import {
@@ -30,7 +31,7 @@ export interface PanelAccount {
 /** The sections of the filter panel; every change is reported at once and the page applies it. */
 @Component({
   selector: 'app-filter-panel',
-  imports: [CategoryIconComponent, DateField],
+  imports: [CategoryIconComponent, DateField, Icon],
   host: { '(document:keydown.escape)': 'closed.emit()' },
   template: `
     <button
@@ -61,7 +62,7 @@ export interface PanelAccount {
           class="btn btn-ghost"
           (click)="closed.emit()"
         >
-          ✕
+          <app-icon name="x" />
         </button>
       </header>
 

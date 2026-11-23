@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../auth/auth.service';
+import { Callout } from '../../callout/callout';
 
 /** Only paths inside the app, so a crafted link cannot send the owner elsewhere after login. */
 function safeReturnUrl(value: string | null): string {
@@ -10,6 +11,7 @@ function safeReturnUrl(value: string | null): string {
 
 @Component({
   selector: 'app-logga-in-page',
+  imports: [Callout],
   template: `
     <main class="grid min-h-dvh place-items-center px-4 py-10">
       <form
@@ -93,7 +95,7 @@ function safeReturnUrl(value: string | null): string {
         </label>
 
         @if (error(); as message) {
-          <p role="alert" class="text-sm text-danger">{{ message }}</p>
+          <app-callout variant="danger">{{ message }}</app-callout>
         }
 
         <button type="submit" class="btn btn-primary w-full" [disabled]="busy()">

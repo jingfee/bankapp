@@ -14,12 +14,16 @@ import type {
   Transaction,
   TransactionDetails,
 } from '@bankapp/shared';
+import { Callout } from '../../callout/callout';
 import { CategoriesService } from '../../categories.service';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../../formatting/date-heading.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
+import { Disclosure } from '../../disclosure/disclosure';
+import { Icon } from '../../icon/icon';
+import { Skeleton } from '../../skeleton/skeleton';
 import { ShareControl } from '../../share-control/share-control';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesService } from '../../shares.service';
@@ -73,6 +77,10 @@ function formatOriginal({ amount, currency }: Money): string {
     CategoryTiles,
     ManualTransactionSheet,
     ShareControl,
+    Callout,
+    Disclosure,
+    Icon,
+    Skeleton,
   ],
   // The routed page is its own stacking context, so while the form is open it must rise above
   // the bottom tabs (z-30).
@@ -84,14 +92,19 @@ function formatOriginal({ amount, currency }: Money): string {
       </button>
       @switch (state().status) {
         @case ('loading') {
-          <p aria-live="polite">Hämtar transaktionen…</p>
+          <div aria-busy="true" class="flex flex-col gap-5">
+            <app-skeleton shape="card" />
+            <app-skeleton shape="card" />
+          </div>
         }
         @case ('gone') {
-          <a routerLink="/transaktioner" class="font-medium underline">Till transaktionerna</a>
+          <a routerLink="/transaktioner" class="font-medium text-accent">Till transaktionerna →</a>
         }
         @case ('failed') {
-          <p role="alert">Transaktionen kunde inte hämtas. Försök igen senare.</p>
-          <a routerLink="/transaktioner" class="font-medium underline">Till transaktionerna</a>
+          <app-callout variant="danger"
+            >Transaktionen kunde inte hämtas. Försök igen senare.</app-callout
+          >
+          <a routerLink="/transaktioner" class="font-medium text-accent">Till transaktionerna →</a>
         }
         @default {
           @if (details(); as t) {
@@ -167,7 +180,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         <button
                           type="button"
                           data-confirm-delete
-                          class="btn btn-sm bg-danger text-on-accent"
+                          class="btn btn-danger btn-sm"
                           [disabled]="saving()"
                           (click)="deleteManual(t.id)"
                         >
@@ -185,16 +198,16 @@ function formatOriginal({ amount, currency }: Money): string {
                         <button
                           type="button"
                           data-delete
-                          class="btn btn-ghost btn-sm text-danger"
+                          class="btn btn-danger-soft btn-sm"
                           (click)="confirmingDelete.set(true)"
                         >
                           Ta bort
                         </button>
                       }
                       @if (deleteError()) {
-                        <p role="alert" class="w-full text-sm text-danger">
-                          Transaktionen kunde inte tas bort. Försök igen.
-                        </p>
+                        <app-callout variant="danger" class="w-full"
+                          >Transaktionen kunde inte tas bort. Försök igen.</app-callout
+                        >
                       }
                     </div>
                   }
@@ -249,7 +262,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         <button
                           type="button"
                           data-confirm-category
-                          class="btn btn-sm bg-positive text-on-accent"
+                          class="btn btn-positive btn-sm"
                           [disabled]="saving()"
                           (click)="setCategory(c.subcategory.id, 'Kategorin bekräftades')"
                         >
@@ -261,7 +274,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       <button
                         type="button"
                         data-remove-category
-                        class="self-start text-sm text-muted underline"
+                        class="btn btn-ghost btn-sm self-start"
                         [disabled]="saving()"
                         (click)="setCategory(null, 'Kategorin togs bort')"
                       >
@@ -273,7 +286,7 @@ function formatOriginal({ amount, currency }: Money): string {
                     <p class="text-sm text-muted">Följer köpets kategori.</p>
                   }
                   @if (categoryError(); as error) {
-                    <p role="alert" class="text-sm text-danger">{{ error }}</p>
+                    <app-callout variant="danger">{{ error }}</app-callout>
                   }
                   @if (similarNote(); as note) {
                     <p data-similar-updated aria-live="polite" class="text-sm text-muted">
@@ -288,7 +301,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         (picked)="setCategory($event, 'Kategorin sparades')"
                       />
                     } @else {
-                      <p aria-live="polite">Hämtar kategorier…</p>
+                      <div aria-busy="true"><app-skeleton shape="card" /></div>
                     }
                   }
                 </section>
@@ -303,9 +316,9 @@ function formatOriginal({ amount, currency }: Money): string {
                     <a
                       data-share-purchase
                       [routerLink]="['/transaktioner', purchase.id]"
-                      class="text-sm font-medium underline [overflow-wrap:anywhere]"
+                      class="text-sm font-medium text-accent [overflow-wrap:anywhere]"
                     >
-                      {{ purchase.description }}
+                      {{ purchase.description }} →
                     </a>
                   } @else {
                     <app-share-control
@@ -344,7 +357,7 @@ function formatOriginal({ amount, currency }: Money): string {
                     <button
                       type="button"
                       data-remove-share
-                      class="self-start text-sm text-muted underline"
+                      class="btn btn-ghost btn-sm self-start"
                       [disabled]="saving()"
                       (click)="setShare(null)"
                     >
@@ -352,7 +365,7 @@ function formatOriginal({ amount, currency }: Money): string {
                     </button>
                   }
                   @if (shareError(); as error) {
-                    <p data-share-error role="alert" class="text-sm text-danger">{{ error }}</p>
+                    <app-callout data-share-error variant="danger">{{ error }}</app-callout>
                   }
                 </section>
 
@@ -401,15 +414,29 @@ function formatOriginal({ amount, currency }: Money): string {
                     </button>
                     @if (offsetting()) {
                       <div class="expand-in flex flex-col gap-3">
-                        <input
-                          data-offset-search
-                          type="search"
-                          placeholder="Sök köp"
-                          aria-label="Sök köp"
-                          class="input"
-                          [value]="offsetSearch()"
-                          (input)="searchOffsets($any($event.target).value)"
-                        />
+                        <label class="field">
+                          <app-icon class="field-icon" name="search" [size]="20" />
+                          <input
+                            data-offset-search
+                            type="search"
+                            placeholder="Sök köp"
+                            aria-label="Sök köp"
+                            class="field-control"
+                            [value]="offsetSearch()"
+                            (input)="searchOffsets($any($event.target).value)"
+                          />
+                          @if (offsetSearch() !== '') {
+                            <button
+                              type="button"
+                              data-clear-offset-search
+                              aria-label="Rensa sökning"
+                              class="field-icon"
+                              (click)="searchOffsets('')"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          }
+                        </label>
                         @if (offsetCandidates(); as candidates) {
                           @if (candidates.length === 0) {
                             <p data-offset-empty class="text-sm text-muted">
@@ -442,7 +469,7 @@ function formatOriginal({ amount, currency }: Money): string {
                             }
                           </ul>
                         } @else {
-                          <p aria-live="polite">Hämtar köp…</p>
+                          <div aria-busy="true"><app-skeleton [count]="3" /></div>
                         }
                       </div>
                     }
@@ -486,12 +513,13 @@ function formatOriginal({ amount, currency }: Money): string {
               </div>
             </div>
             @if (t.account !== null) {
-              <details data-raw class="card p-4 sm:p-5">
-                <summary class="cursor-pointer font-medium">Rådata</summary>
-                <pre data-raw-json class="mt-3 overflow-x-auto text-sm select-all">{{
-                  rawJson()
-                }}</pre>
-              </details>
+              <div class="card p-4 sm:p-5">
+                <app-disclosure data-raw label="Rådata" [title]="true">
+                  <pre data-raw-json class="overflow-x-auto text-sm select-all">{{
+                    rawJson()
+                  }}</pre>
+                </app-disclosure>
+              </div>
             }
           }
         }

@@ -622,11 +622,15 @@ describe('TransactionDetailsPage', () => {
   });
 
   it('has a collapsed Rådata section with pretty-printed JSON', async () => {
-    const { page } = await render(details({ raw: '{"a":{"b":1}}' }));
+    const { page, fixture } = await render(details({ raw: '{"a":{"b":1}}' }));
 
-    const raw = page.querySelector('details[data-raw]') as HTMLDetailsElement;
-    expect(raw.open).toBe(false);
-    expect(raw.querySelector('summary')?.textContent?.trim()).toBe('Rådata');
+    const raw = page.querySelector('[data-raw]') as HTMLElement;
+    const toggle = raw.querySelector<HTMLButtonElement>('[data-disclosure-toggle]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.textContent?.trim()).toBe('Rådata');
+    expect(raw.querySelector('[data-raw-json]')).toBeNull();
+    toggle.click();
+    fixture.detectChanges();
     expect(raw.querySelector('[data-raw-json]')?.textContent).toBe(
       JSON.stringify({ a: { b: 1 } }, null, 2),
     );

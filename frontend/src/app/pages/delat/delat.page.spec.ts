@@ -291,17 +291,23 @@ describe('DelatPage', () => {
           ],
         }),
       });
-      page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+      page
+        .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
+        .click();
       await fixture.whenStable();
       const closed = page.querySelector('[data-closed-period]')!;
       expect(closed.querySelector('[data-item]')).toBeNull();
 
-      closed.querySelector<HTMLButtonElement>('[data-toggle-items]')!.click();
+      closed
+        .querySelector<HTMLButtonElement>('[data-toggle-items] [data-disclosure-toggle]')!
+        .click();
       await fixture.whenStable();
       expect(text(closed.querySelector('[data-item]'))).toContain('Hyra');
       expect(text(closed.querySelector('[data-partner-part]'))).toBe('500,00 kr');
 
-      closed.querySelector<HTMLButtonElement>('[data-toggle-items]')!.click();
+      closed
+        .querySelector<HTMLButtonElement>('[data-toggle-items] [data-disclosure-toggle]')!
+        .click();
       await fixture.whenStable();
       expect(closed.querySelector('[data-item]')).toBeNull();
     });
@@ -310,7 +316,9 @@ describe('DelatPage', () => {
       const { fixture, page } = await render({ settlement });
       expect(page.querySelector('[data-closed-period]')).toBeNull();
 
-      page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+      page
+        .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
+        .click();
       await fixture.whenStable();
 
       const closed = page.querySelector('[data-closed-period]')!;
@@ -451,7 +459,9 @@ describe('DelatPage', () => {
             ],
           }),
         });
-        rendered.page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        rendered.page
+          .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
+          .click();
         await rendered.fixture.whenStable();
         return rendered;
       };
@@ -497,7 +507,9 @@ describe('DelatPage', () => {
       it('offers it on the latest close only, after confirmation', async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const { fixture, page, http } = await render({ settlement: closedTwice });
-        page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        page
+          .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
+          .click();
         await fixture.whenStable();
         const buttons = page.querySelectorAll('[data-undo-close]');
         expect(buttons).toHaveLength(1);
@@ -522,7 +534,9 @@ describe('DelatPage', () => {
       it('does nothing when not confirmed', async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
         const { fixture, page } = await render({ settlement: closedTwice });
-        page.querySelector<HTMLButtonElement>('[data-toggle-closed]')!.click();
+        page
+          .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
+          .click();
         await fixture.whenStable();
         page.querySelector<HTMLButtonElement>('[data-undo-close]')!.click();
         // afterEach verifies that no request was made.

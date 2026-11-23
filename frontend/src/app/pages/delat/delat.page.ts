@@ -14,6 +14,10 @@ import {
 } from '@bankapp/shared';
 import { type Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
+import { Callout } from '../../callout/callout';
+import { Icon } from '../../icon/icon';
+import { Disclosure } from '../../disclosure/disclosure';
+import { Skeleton } from '../../skeleton/skeleton';
 import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { DateField } from '../../date-field/date-field';
@@ -62,18 +66,30 @@ interface SharedRow {
     DateField,
     MonthField,
     ShareControl,
+    Callout,
+    Disclosure,
+    Icon,
+    Skeleton,
   ],
   template: `
     <app-page title="Delat" subtitle="Avräkning, hushållsandel och delade underkategorier.">
       @if (error(); as message) {
-        <p role="alert" class="text-sm text-danger">{{ message }}</p>
+        <app-callout variant="danger">{{ message }}</app-callout>
       }
 
       @let result = loaded();
       @if (!result) {
-        <p aria-live="polite">Hämtar delat…</p>
+        <div aria-busy="true" class="grid gap-4 lg:grid-cols-2">
+          <div class="flex flex-col gap-4">
+            <app-skeleton shape="card" />
+            <app-skeleton shape="card" />
+          </div>
+          <app-skeleton shape="card" />
+        </div>
       } @else if ('failed' in result) {
-        <p role="alert">Det delade kunde inte hämtas. Försök igen senare.</p>
+        <app-callout variant="danger"
+          >Det delade kunde inte hämtas. Försök igen senare.</app-callout
+        >
       } @else {
         <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
           <div class="flex min-w-0 flex-col gap-4">
@@ -293,100 +309,90 @@ interface SharedRow {
             }
 
             @if (closed().length > 0) {
-              <div>
-                <button
-                  type="button"
-                  data-toggle-closed
-                  class="btn btn-ghost btn-sm"
-                  [attr.aria-expanded]="showClosed()"
-                  (click)="showClosed.set(!showClosed())"
-                >
-                  {{ showClosed() ? 'Dölj tidigare perioder' : 'Visa tidigare perioder' }}
-                </button>
-              </div>
-              @if (showClosed()) {
-                @for (period of closed(); track period.month; let first = $first) {
-                  <section
-                    data-closed-period
-                    [attr.data-month]="period.month"
-                    class="card expand-in flex flex-col gap-3 p-4 sm:p-5"
-                  >
-                    <h2 class="card-title">
-                      <span data-period-title>{{ monthName(period.month) }}</span>
-                      <span class="text-sm font-normal text-muted">
-                        · avslutad, t.o.m. {{ period.closedThrough }}
-                      </span>
-                    </h2>
-                    <dl class="grid grid-cols-2 gap-y-1 text-sm">
-                      <dt class="text-muted">Ingående saldo</dt>
-                      <dd data-carried-in class="text-right amount">
-                        {{ period.carriedIn | money }}
-                      </dd>
-                      <dt class="text-muted">Partnerns del</dt>
-                      <dd data-period-part class="text-right amount">
-                        {{ partnerPartSum(period) | money }}
-                      </dd>
-                      @for (payment of period.payments; track payment.transactionId) {
-                        <dt class="text-muted">Betalt {{ payment.date }}</dt>
-                        <dd data-payment class="text-right amount">
-                          {{ payment.amount | money }}
+              <app-disclosure
+                data-toggle-closed
+                label="Tidigare perioder"
+                [count]="closed().length"
+                [(open)]="showClosed"
+              >
+                <div class="flex flex-col gap-4">
+                  @for (period of closed(); track period.month; let first = $first) {
+                    <section
+                      data-closed-period
+                      [attr.data-month]="period.month"
+                      class="card expand-in flex flex-col gap-3 p-4 sm:p-5"
+                    >
+                      <h2 class="card-title">
+                        <span data-period-title>{{ monthName(period.month) }}</span>
+                        <span class="text-sm font-normal text-muted">
+                          · avslutad, t.o.m. {{ period.closedThrough }}
+                        </span>
+                      </h2>
+                      <dl class="grid grid-cols-2 gap-y-1 text-sm">
+                        <dt class="text-muted">Ingående saldo</dt>
+                        <dd data-carried-in class="text-right amount">
+                          {{ period.carriedIn | money }}
                         </dd>
-                      }
-                      <dt class="font-medium">Utgående saldo</dt>
-                      <dd data-carried-out class="text-right font-medium amount">
-                        {{ period.carriedOut | money }}
-                      </dd>
-                    </dl>
-                    @if (period.items.length > 0) {
-                      <div>
-                        <button
-                          type="button"
+                        <dt class="text-muted">Partnerns del</dt>
+                        <dd data-period-part class="text-right amount">
+                          {{ partnerPartSum(period) | money }}
+                        </dd>
+                        @for (payment of period.payments; track payment.transactionId) {
+                          <dt class="text-muted">Betalt {{ payment.date }}</dt>
+                          <dd data-payment class="text-right amount">
+                            {{ payment.amount | money }}
+                          </dd>
+                        }
+                        <dt class="font-medium">Utgående saldo</dt>
+                        <dd data-carried-out class="text-right font-medium amount">
+                          {{ period.carriedOut | money }}
+                        </dd>
+                      </dl>
+                      @if (period.items.length > 0) {
+                        <app-disclosure
                           data-toggle-items
-                          class="btn btn-ghost btn-sm"
-                          [attr.aria-expanded]="itemsShown(period)"
-                          (click)="toggleItems(period)"
+                          label="Transaktioner"
+                          [count]="period.items.length"
+                          [open]="itemsShown(period)"
+                          (openChange)="toggleItems(period)"
                         >
-                          {{ itemsShown(period) ? 'Dölj transaktioner' : 'Visa transaktioner' }}
-                          ({{ period.items.length }})
-                        </button>
-                      </div>
-                      @if (itemsShown(period)) {
-                        <ng-container
-                          [ngTemplateOutlet]="itemList"
-                          [ngTemplateOutletContext]="{ $implicit: period.items }"
-                        />
+                          <ng-container
+                            [ngTemplateOutlet]="itemList"
+                            [ngTemplateOutletContext]="{ $implicit: period.items }"
+                          />
+                        </app-disclosure>
                       }
-                    }
-                    @if (period.reportSaved === false) {
-                      <p data-report-failed class="text-sm text-danger" role="alert">
-                        Rapporten kunde inte sparas
-                      </p>
-                    }
-                    <div class="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        data-save-report
-                        class="btn btn-ghost btn-sm"
-                        [disabled]="saving()"
-                        (click)="saveReport(period)"
-                      >
-                        Spara rapport igen
-                      </button>
-                      @if (first) {
+                      @if (period.reportSaved === false) {
+                        <app-callout data-report-failed variant="danger"
+                          >Rapporten kunde inte sparas</app-callout
+                        >
+                      }
+                      <div class="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          data-undo-close
+                          data-save-report
                           class="btn btn-ghost btn-sm"
                           [disabled]="saving()"
-                          (click)="undoClose(period)"
+                          (click)="saveReport(period)"
                         >
-                          Ångra avslut
+                          Spara rapport igen
                         </button>
-                      }
-                    </div>
-                  </section>
-                }
-              }
+                        @if (first) {
+                          <button
+                            type="button"
+                            data-undo-close
+                            class="btn btn-ghost btn-sm"
+                            [disabled]="saving()"
+                            (click)="undoClose(period)"
+                          >
+                            Ångra avslut
+                          </button>
+                        }
+                      </div>
+                    </section>
+                  }
+                </div>
+              </app-disclosure>
             }
           </div>
 
@@ -491,7 +497,7 @@ interface SharedRow {
                         <button
                           type="button"
                           data-remove
-                          class="btn btn-ghost btn-sm"
+                          class="btn btn-danger-soft btn-sm"
                           [disabled]="saving() || ratio().length === 1"
                           (click)="remove(entry)"
                         >
@@ -514,7 +520,8 @@ interface SharedRow {
                   [attr.aria-expanded]="picking()"
                   (click)="picking.set(!picking())"
                 >
-                  + Lägg till
+                  <app-icon name="plus" [size]="16" />
+                  Lägg till
                 </button>
               </div>
               <p class="text-sm text-muted">

@@ -303,6 +303,94 @@
     background: var(--color-positive);
   }
 
+  /* Destructive: `.btn-danger-soft` is the first click, `.btn-danger` the confirm step. */
+  .btn-danger {
+    background: var(--color-danger);
+    color: #2a0808;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 88%, white);
+  }
+  .btn-danger-soft {
+    background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+    color: var(--color-danger);
+  }
+  .btn-danger-soft:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  }
+
+  /* Callout: a notice with an icon, a body and an optional action. */
+  .callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--callout-colour) 30%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--callout-colour) 10%, transparent);
+    font-size: 14px;
+  }
+  .callout-info {
+    --callout-colour: var(--color-accent);
+  }
+  .callout-warning {
+    --callout-colour: var(--color-warning);
+  }
+  .callout-danger {
+    --callout-colour: var(--color-danger);
+  }
+  .callout-icon {
+    margin-top: 1px;
+    color: var(--callout-colour);
+  }
+
+  /* Empty state: icon, one sentence, the next action. */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 20px;
+    border: 1px dashed var(--color-line-strong);
+    border-radius: 20px;
+    text-align: center;
+  }
+  .empty-icon {
+    display: grid;
+    place-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+  }
+
+  /* Disclosure row: the whole row toggles; the chevron rotates. */
+  .disclosure-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    cursor: pointer;
+    color: var(--color-ink);
+  }
+  .disclosure-chevron {
+    color: var(--color-muted);
+    transition: transform 0.15s ease;
+  }
+
+  /* Skeleton: a placeholder block while data loads. */
+  .skeleton {
+    background: var(--color-surface-2);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes skeleton-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+
   /* Review: the guess label, a tinted chip that stays evenly padded when its text wraps. */
   .guess-tag {
     display: inline-flex;
@@ -817,6 +905,10 @@ router-outlet + * {
   .toast {
     animation: none;
   }
+  .skeleton {
+    animation: none;
+  }
+  .disclosure-chevron,
   .btn,
   .chip,
   .switch::after {
