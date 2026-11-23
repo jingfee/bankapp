@@ -1,3 +1,4 @@
+import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -72,6 +73,7 @@ const PART_COLOURS = [
 @Component({
   selector: 'app-bolan-page',
   imports: [
+    ShortDatePipe,
     Page,
     DateField,
     MoneyPipe,
@@ -382,7 +384,7 @@ const PART_COLOURS = [
                         data-rate-day
                         [class.text-accent]="countdown(part.rateAdjustment.next).soon"
                         [class.font-medium]="countdown(part.rateAdjustment.next).soon"
-                        >{{ part.rateAdjustment.next }}</span
+                        >{{ part.rateAdjustment.next | shortDate }}</span
                       >
                       @if (countdown(part.rateAdjustment.next).text; as text) {
                         <span data-rate-soon class="pill pill-accent">{{ text }}</span>
@@ -394,7 +396,7 @@ const PART_COLOURS = [
                         data-terms-day
                         [class.text-accent]="countdown(part.termsChange.next).soon"
                         [class.font-medium]="countdown(part.termsChange.next).soon"
-                        >{{ part.termsChange.next }}</span
+                        >{{ part.termsChange.next | shortDate }}</span
                       >
                       @if (countdown(part.termsChange.next).text; as text) {
                         <span data-terms-soon class="pill pill-accent">{{ text }}</span>
@@ -461,7 +463,7 @@ const PART_COLOURS = [
                 >
                   <span data-part-name class="truncate font-medium">{{ part.name }}</span>
                   <span data-ended class="text-sm text-muted">
-                    {{ part.startedOn }} – {{ part.endedOn }}
+                    {{ part.startedOn | shortDate }} – {{ part.endedOn | shortDate }}
                   </span>
                 </li>
               }
@@ -477,7 +479,7 @@ const PART_COLOURS = [
             @for (entry of entries(); track entry.id) {
               <li class="flex items-start justify-between gap-3 py-2" data-entry>
                 <span class="flex min-w-0 flex-wrap gap-x-3">
-                  <span data-entry-day>{{ entry.date }}</span>
+                  <span data-entry-day>{{ entry.date | shortDate }}</span>
                   @for (debt of entry.debts; track debt.partId) {
                     <span class="text-muted">
                       {{ partName(debt.partId) }}
@@ -485,7 +487,7 @@ const PART_COLOURS = [
                     </span>
                   }
                 </span>
-                <app-menu [label]="'Åtgärder för noteringen ' + entry.date">
+                <app-menu [label]="'Åtgärder för noteringen ' + (entry.date | shortDate)">
                   <button appMenuItem type="button" data-edit-entry (click)="startEntry(entry)">
                     Ändra
                   </button>
@@ -765,7 +767,7 @@ const PART_COLOURS = [
     @if (deletingEntry(); as entry) {
       <app-confirm
         heading="Ta bort bolånenoteringen?"
-        [message]="'Noteringen ' + entry.date + ' tas bort.'"
+        [message]="'Noteringen ' + (entry.date | shortDate) + ' tas bort.'"
         confirmLabel="Ta bort"
         [busy]="busy()"
         (confirmed)="deleteEntry(entry)"

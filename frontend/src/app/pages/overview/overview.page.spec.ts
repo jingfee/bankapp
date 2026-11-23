@@ -418,8 +418,8 @@ describe('OverviewPage', () => {
         await hover(fixture, page, 10);
 
         const said = plain(text(tooltip(page)));
-        expect(said).toContain('10 november 1 000,00 kr');
-        expect(said).toContain('10 oktober 1 000,00 kr');
+        expect(said).toContain('10 nov 1 000,00 kr');
+        expect(said).toContain('10 okt 1 000,00 kr');
       });
 
       it('shows only last month for a day that has not come yet', async () => {
@@ -427,7 +427,7 @@ describe('OverviewPage', () => {
 
         await hover(fixture, page, 20);
 
-        expect(plain(text(tooltip(page)))).toBe('20 oktober 2 000,00 kr');
+        expect(plain(text(tooltip(page)))).toBe('20 okt 2 000,00 kr');
       });
 
       it('hides the tooltip when the pointer leaves the chart', async () => {

@@ -1,3 +1,4 @@
+import { shortDate } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -94,7 +95,6 @@ interface ChartTip {
 }
 
 const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
-const DAY_LONG = new Intl.DateTimeFormat(APP_LOCALE, { day: 'numeric', month: 'long' });
 
 interface Tile {
   kind: TotalKind | 'savings' | 'settlement';
@@ -112,14 +112,7 @@ interface AccountRow {
 
 const money = new MoneyPipe();
 
-const SHORT_DAY = new Intl.DateTimeFormat(APP_LOCALE, { day: 'numeric', month: 'short' });
 const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
-
-/** `2 nov` for a `YYYY-MM-DD` day. */
-function shortDay(day: string): string {
-  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
-  return SHORT_DAY.format(new Date(year, month - 1, date)).replace('.', '');
-}
 
 /** `Oktober` for a `YYYY-MM` month. */
 function monthName(month: string): string {
@@ -747,7 +740,9 @@ export class OverviewPage {
       const amount = days[day - 1];
       if (amount === undefined) return undefined;
       return {
-        date: DAY_LONG.format(new Date(year, monthIndex, day)),
+        date: shortDate(
+          `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        ),
         amount: money.transform(amount),
         top: 100 - ((amount - c.bottom) / (c.top - c.bottom)) * 100,
       };
@@ -856,7 +851,7 @@ export class OverviewPage {
 
     const closed = settlement.periods.find((p) => p.month === month && p.closedThrough !== null);
     if (closed?.closedThrough) {
-      const lines = [`Avslutad t.o.m. ${shortDay(closed.closedThrough)}`];
+      const lines = [`Avslutad t.o.m. ${shortDate(closed.closedThrough)}`];
       if (closed.carriedOut !== 0) lines.push(`${KR.format(Math.abs(closed.carriedOut))} kr kvar`);
       return {
         ...base,

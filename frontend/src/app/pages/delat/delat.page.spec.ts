@@ -15,6 +15,8 @@ import { DelatPage } from './delat.page';
 
 describe('DelatPage', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     TestBed.configureTestingModule({
       imports: [DelatPage],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -22,6 +24,7 @@ describe('DelatPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     const http = TestBed.inject(HttpTestingController);
     // Changing a ratio or share fetches the balance again; most tests don't look at it.
     for (const refresh of http.match('/api/settlement')) refresh.flush(settlementOf());
@@ -54,7 +57,7 @@ describe('DelatPage', () => {
     ],
   };
 
-  const today = new Date().toLocaleDateString('sv-SE');
+  const today = '2026-11-15';
 
   const period = (overrides: Partial<SettlementPeriod> = {}): SettlementPeriod => ({
     month: '2026-11',
@@ -164,7 +167,7 @@ describe('DelatPage', () => {
 
       expect(text(page.querySelector('[data-balance]'))).toBe('312,00 kr');
       expect(text(page.querySelector('[data-balance-direction]'))).toBe(
-        'Partnern är skyldig dig · sedan avräkningen 2026-10-20',
+        'Partnern är skyldig dig · sedan avräkningen 20 okt',
       );
     });
 
@@ -264,7 +267,7 @@ describe('DelatPage', () => {
         expect.stringContaining('ICA'),
         expect.stringContaining('Återbetalning'),
       ]);
-      expect(text(open.querySelector('[data-item]'))).toContain('2026-11-12');
+      expect(text(open.querySelector('[data-item]'))).toContain('12 nov');
       expect(text(open.querySelector('[data-item]'))).toContain('50/50');
       const parts = open.querySelectorAll('[data-partner-part]');
       expect(parts[0]?.classList.contains('text-danger')).toBe(false);
@@ -329,7 +332,7 @@ describe('DelatPage', () => {
       await fixture.whenStable();
 
       const closed = page.querySelector('[data-closed-period]')!;
-      expect(text(closed.querySelector('h2'))).toBe('Oktober 2026 · avslutad, t.o.m. 2026-11-02');
+      expect(text(closed.querySelector('h2'))).toBe('Oktober 2026 · avslutad, t.o.m. 2 nov');
       expect(text(closed.querySelector('[data-carried-in]'))).toBe('50,00 kr');
       expect(text(closed.querySelector('[data-payment]'))).toBe('200,00 kr');
       expect(text(closed.querySelector('[data-carried-out]'))).toBe('50,00 kr');
@@ -374,7 +377,7 @@ describe('DelatPage', () => {
     it('offers the day of the latest settlement and the next month by default', async () => {
       const { fixture, page } = await render({ settlement });
       expect(text(page.querySelector('[data-close-month]'))).toBe('Avsluta oktober');
-      expect(text(page.querySelectorAll('[data-payment]')[1])).toContain('2026-10-28');
+      expect(text(page.querySelectorAll('[data-payment]')[1])).toContain('28 okt');
 
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
@@ -582,8 +585,8 @@ describe('DelatPage', () => {
       expect(text(page.querySelector('[data-ratio-heading]'))).toBe('55/45');
       expect([...page.querySelectorAll('[data-ratio-entry]')].map((e) => text(e))).toEqual([
         expect.stringContaining('55/45'),
-        expect.stringContaining('2999-01-01'),
-        expect.stringContaining('2026-01-01'),
+        expect.stringContaining('1 jan 2999'),
+        expect.stringContaining('1 jan'),
       ]);
     });
 

@@ -1,3 +1,4 @@
+import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { CATEGORY_PALETTE, type SavingsResponse } from '@bankapp/shared';
@@ -76,6 +77,7 @@ interface Tip {
 @Component({
   selector: 'app-sparande-page',
   imports: [
+    ShortDatePipe,
     Page,
     ManualSavingsSection,
     MoneyPipe,
@@ -402,12 +404,12 @@ interface Tip {
         @if (account.closedOn) {
           <div>
             <dt class="eyebrow">Avslutat</dt>
-            <dd>{{ account.closedOn }}</dd>
+            <dd>{{ account.closedOn | shortDate }}</dd>
           </div>
         }
         <div data-account-updated>
           <dt class="eyebrow">Senast uppdaterad</dt>
-          <dd>{{ account.lastUpdated ?? 'aldrig' }}</dd>
+          <dd>{{ account.lastUpdated ? (account.lastUpdated | shortDate) : 'aldrig' }}</dd>
         </div>
       </dl>
     </ng-template>
