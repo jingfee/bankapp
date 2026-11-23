@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import type { StartSyncResponse } from '@bankapp/shared';
+import type { Bank, StartSyncResponse } from '@bankapp/shared';
 import type { Observable } from 'rxjs';
 import { BanksStore } from './banks.store';
 import { Recorder } from './recorder';
@@ -14,6 +14,16 @@ export class FakeBanksStore extends BanksStore {
   readonly lastFailed = signal(false);
   readonly expiringCount = signal(0);
 
+  readonly available = signal<Bank[] | undefined>(undefined);
+  readonly availableLoading = signal(false);
+  readonly availableFailed = signal(false);
+
+  activateAvailable(): void {
+    this.calls.push({ method: 'activateAvailable', args: [] });
+  }
+  deactivateAvailable(): void {
+    this.calls.push({ method: 'deactivateAvailable', args: [] });
+  }
   report(status: { lastSyncedAt: string | null; failed: boolean; expiring: number }): void {
     this.lastSyncedAt.set(status.lastSyncedAt);
     this.lastFailed.set(status.failed);

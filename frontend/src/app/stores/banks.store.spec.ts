@@ -4,6 +4,7 @@ import {
   type TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { AccountsResponse } from '@bankapp/shared';
 import { BanksStore, SYNC_POLL_INTERVAL_MS } from './banks.store';
@@ -181,5 +182,63 @@ describe('BanksStore sync status', () => {
     expect(store.connectionLeft(inDays(45))).toBeCloseTo(0.5);
     expect(store.connectionLeft(inDays(200))).toBe(1);
     expect(store.connectionLeft(inDays(-2))).toBe(0);
+  });
+});
+
+describe('BanksStore supported banks', () => {
+  let store: BanksStore;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    store = TestBed.inject(BanksStore);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  const bank = { name: 'Skandia', logoUrl: null, beta: false };
+
+  it('fetches nothing until a page asks for the list', async () => {
+    TestBed.tick();
+    http.expectNone('/api/banks');
+    expect(store.available()).toBeUndefined();
+  });
+
+  it('fetches the list while a page shows it and forgets it afterwards', async () => {
+    store.activateAvailable();
+    TestBed.tick();
+    http.expectOne('/api/banks').flush({ banks: [bank] });
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(store.available()).toEqual([bank]);
+    expect(store.availableFailed()).toBe(false);
+
+    store.deactivateAvailable();
+    TestBed.tick();
+    expect(store.available()).toBeUndefined();
+  });
+
+  it('says so when the list cannot be fetched', async () => {
+    store.activateAvailable();
+    TestBed.tick();
+    http.expectOne('/api/banks').error(new ProgressEvent('error'));
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(store.availableFailed()).toBe(true);
+    expect(store.availableLoading()).toBe(false);
+  });
+
+  it('fetches the list again when banks change', async () => {
+    store.activateAvailable();
+    TestBed.tick();
+    http.expectOne('/api/banks').flush({ banks: [bank] });
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    store.connectionResult();
+    TestBed.tick();
+    http.expectOne('/api/banks').flush({ banks: [bank, { ...bank, name: 'Swedbank' }] });
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(store.available()).toHaveLength(2);
   });
 });

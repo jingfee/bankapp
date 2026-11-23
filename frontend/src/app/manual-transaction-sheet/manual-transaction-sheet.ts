@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
+  DestroyRef,
   type ElementRef,
   type OnInit,
   computed,
@@ -18,7 +19,6 @@ import type {
   ShareOption,
   Transaction,
 } from '@bankapp/shared';
-import { catchError, of } from 'rxjs';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
 import { Callout } from '../callout/callout';
@@ -28,7 +28,7 @@ import { CategoryTiles } from '../category-tiles/category-tiles';
 import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
 import { ShareControl } from '../share-control/share-control';
-import { SharesService } from '../shares.service';
+import { SharesStore } from '../stores/shares.store';
 import { TransactionsStore } from '../stores/transactions.store';
 
 type Status = 'loading' | 'ready' | 'failed' | 'gone';
@@ -213,13 +213,17 @@ export class ManualTransactionSheet implements OnInit {
 
   private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryService = inject(CategoriesService);
-  private readonly shares = inject(SharesService);
+  private readonly sharesStore = inject(SharesStore);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 
   protected readonly status = signal<Status>('loading');
   private readonly categories = signal<Category[]>([]);
   /** The share each subcategory with a share other than Jag has. */
-  private readonly subcategoryShares = signal<Map<number, ShareOption>>(new Map());
+  private readonly subcategoryShares = computed(
+    () =>
+      new Map((this.sharesStore.subcategoryShares() ?? []).map((s) => [s.subcategoryId, s.share])),
+  );
   private editingId: number | null = null;
 
   protected readonly description = signal('');
@@ -257,12 +261,8 @@ export class ManualTransactionSheet implements OnInit {
 
   /** Inputs are set once the component exists, so what to load is decided here. */
   ngOnInit(): void {
-    this.shares
-      .subcategoryShares()
-      .pipe(catchError(() => of([])))
-      .subscribe((shares) =>
-        this.subcategoryShares.set(new Map(shares.map((s) => [s.subcategoryId, s.share]))),
-      );
+    this.sharesStore.activate();
+    this.destroyRef.onDestroy(() => this.sharesStore.deactivate());
     this.categoryService.list().subscribe({
       next: (categories) => {
         this.categories.set(categories);

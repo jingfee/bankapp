@@ -1,34 +1,34 @@
-import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  type TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { Bank, BanksResponse, StartConnectionResponse } from '@bankapp/shared';
-import type { AccountsResponse } from '@bankapp/shared';
+import { HttpErrorResponse } from '@angular/common/http';
+import type { AccountsResponse, Bank } from '@bankapp/shared';
 import { Redirector } from '../../redirector';
+import { AccountsStore } from '../../stores/accounts.store';
+import { FakeAccountsStore } from '../../stores/accounts.store.fake';
+import { BanksStore } from '../../stores/banks.store';
+import { FakeBanksStore } from '../../stores/banks.store.fake';
 import { ConnectBankPage } from './connect-bank.page';
 
 describe('ConnectBankPage', () => {
   let redirects: string[];
+  let banksStore: FakeBanksStore;
+  let accountsStore: FakeAccountsStore;
 
   beforeEach(() => {
     redirects = [];
+    banksStore = new FakeBanksStore();
+    accountsStore = new FakeAccountsStore();
     TestBed.configureTestingModule({
       imports: [ConnectBankPage],
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
         provideRouter([]),
+        { provide: BanksStore, useValue: banksStore },
+        { provide: AccountsStore, useValue: accountsStore },
         { provide: Redirector, useValue: { goTo: (url: string) => redirects.push(url) } },
       ],
     });
   });
-
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   const banks: Bank[] = [
     { name: 'Northmill', logoUrl: null, beta: true },
@@ -36,17 +36,13 @@ describe('ConnectBankPage', () => {
     { name: 'Swedbank', logoUrl: null, beta: false },
   ];
 
-  let accountsResponse: Partial<AccountsResponse>;
-  beforeEach(() => (accountsResponse = { banks: [] }));
-
-  async function render(respond: (request: TestRequest) => void) {
+  async function render(setUp: () => void = () => banksStore.available.set(banks)) {
+    setUp();
     const fixture = TestBed.createComponent(ConnectBankPage);
-    await fixture.whenStable();
-    respond(TestBed.inject(HttpTestingController).expectOne('/api/banks'));
-    TestBed.inject(HttpTestingController).expectOne('/api/accounts').flush(accountsResponse);
     await fixture.whenStable();
     const page = fixture.nativeElement as HTMLElement;
     return {
+      fixture,
       page,
       names: () =>
         Array.from(page.querySelectorAll('li [data-bank-name]')).map(
@@ -68,10 +64,8 @@ describe('ConnectBankPage', () => {
     };
   }
 
-  const withBanks = (request: TestRequest) => request.flush({ banks } satisfies BanksResponse);
-
   it('lists the banks and marks beta banks', async () => {
-    const { page, names } = await render(withBanks);
+    const { page, names } = await render();
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Anslut bank');
     expect(names()).toEqual(['Northmill', 'Skandia', 'Swedbank']);
@@ -80,7 +74,7 @@ describe('ConnectBankPage', () => {
   });
 
   it('shows a monogram when a bank has no logo and the logo when it has one', async () => {
-    const { page } = await render(withBanks);
+    const { page } = await render();
 
     const rows = page.querySelectorAll('li');
     expect(rows[0]?.querySelector('[data-monogram]')?.textContent?.trim()).toBe('N');
@@ -92,10 +86,12 @@ describe('ConnectBankPage', () => {
   });
 
   it('marks banks that already have an active connection', async () => {
-    accountsResponse = {
-      banks: [{ bank: 'Skandia', status: 'active', accounts: [], closedAccounts: [] }],
-    } as unknown as Partial<AccountsResponse>;
-    const { page } = await render(withBanks);
+    const { page } = await render(() => {
+      banksStore.available.set(banks);
+      accountsStore.accounts.set({
+        banks: [{ bank: 'Skandia', status: 'active', accounts: [], closedAccounts: [] }],
+      } as unknown as AccountsResponse);
+    });
 
     const marked = Array.from(page.querySelectorAll('li')).filter((li) =>
       li.querySelector('[data-connected]'),
@@ -105,7 +101,7 @@ describe('ConnectBankPage', () => {
   });
 
   it('filters the banks as the owner types, ignoring case', async () => {
-    const { names, type } = await render(withBanks);
+    const { names, type } = await render();
 
     await type('SW');
 
@@ -113,7 +109,7 @@ describe('ConnectBankPage', () => {
   });
 
   it('says so when no bank matches', async () => {
-    const { page, names, type } = await render(withBanks);
+    const { page, names, type } = await render();
 
     await type('zzz');
 
@@ -122,40 +118,48 @@ describe('ConnectBankPage', () => {
   });
 
   it('explains when the bank list is still empty', async () => {
-    const { page } = await render((request) => request.flush({ banks: [] }));
+    const { page } = await render(() => banksStore.available.set([]));
 
     expect(page.textContent).toContain('Inga banker hittades ännu');
   });
 
   it('shows an error when the list cannot be fetched', async () => {
-    const { page } = await render((request) => request.error(new ProgressEvent('error')));
+    const { page } = await render(() => banksStore.availableFailed.set(true));
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
   });
 
-  describe('choosing a bank', () => {
-    const answerStart = (request: TestRequest) =>
-      request.flush({ url: 'https://bankid.example/go' } satisfies StartConnectionResponse);
+  it('shows the list for as long as the page is open', async () => {
+    const { fixture } = await render();
+    expect(banksStore.calls.map((c) => c.method)).toEqual(['activateAvailable']);
+    fixture.destroy();
+    expect(banksStore.calls.map((c) => c.method)).toEqual([
+      'activateAvailable',
+      'deactivateAvailable',
+    ]);
+  });
 
+  it('shows a skeleton while the list is being fetched', async () => {
+    const { page } = await render(() => banksStore.availableLoading.set(true));
+    expect(page.querySelector('[aria-busy=true]')).not.toBeNull();
+  });
+
+  describe('choosing a bank', () => {
     it('starts the connection and sends the owner to BankID', async () => {
-      const { choose } = await render(withBanks);
+      banksStore.responses['startConnection'] = 'https://bankid.example/go';
+      const { choose } = await render();
 
       await choose('Skandia');
-      const request = TestBed.inject(HttpTestingController).expectOne('/api/connections');
-      expect(request.request.method).toBe('POST');
-      expect(request.request.body).toEqual({ bank: 'Skandia' });
-      answerStart(request);
 
+      expect(banksStore.calls.find((c) => c.method === 'startConnection')?.args[0]).toBe('Skandia');
       expect(redirects).toEqual(['https://bankid.example/go']);
     });
 
     it('shows an error and stays put when the connection cannot be started', async () => {
-      const { page, choose } = await render(withBanks);
+      banksStore.failures['startConnection'] = new HttpErrorResponse({ status: 500 });
+      const { page, choose } = await render();
 
       await choose('Skandia');
-      TestBed.inject(HttpTestingController)
-        .expectOne('/api/connections')
-        .flush({}, { status: 500, statusText: 'Server Error' });
       await TestBed.inject(ApplicationRef).whenStable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain(
@@ -165,12 +169,10 @@ describe('ConnectBankPage', () => {
     });
 
     it('says so when the bank is already connected', async () => {
-      const { page, choose } = await render(withBanks);
+      banksStore.failures['startConnection'] = new HttpErrorResponse({ status: 409 });
+      const { page, choose } = await render();
 
       await choose('Skandia');
-      TestBed.inject(HttpTestingController)
-        .expectOne('/api/connections')
-        .flush({}, { status: 409, statusText: 'Conflict' });
       await TestBed.inject(ApplicationRef).whenStable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('redan ansluten');

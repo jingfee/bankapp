@@ -1,11 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import type { Bank } from '@bankapp/shared';
-import { catchError, map, of } from 'rxjs';
-import { AccountsService } from '../../accounts.service';
-import { BanksService } from '../../banks.service';
+import { AccountsStore } from '../../stores/accounts.store';
 import { BanksStore } from '../../stores/banks.store';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
@@ -13,8 +9,6 @@ import { Icon } from '../../icon/icon';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 import { Redirector } from '../../redirector';
-
-type Loaded = { banks: Bank[] } | { failed: true };
 
 @Component({
   selector: 'app-connect-bank-page',
@@ -56,14 +50,14 @@ type Loaded = { banks: Bank[] } | { failed: true };
         <app-callout variant="danger">{{ message }}</app-callout>
       }
 
-      @let result = loaded();
-      @if (!result) {
-        <div aria-busy="true"><app-skeleton [count]="6" /></div>
-      } @else if ('failed' in result) {
+      @let banks = available();
+      @if (banksStore.availableFailed()) {
         <app-callout variant="danger"
           >Banklistan kunde inte hämtas. Försök igen senare.</app-callout
         >
-      } @else if (result.banks.length === 0) {
+      } @else if (!banks) {
+        <div aria-busy="true"><app-skeleton [count]="6" /></div>
+      } @else if (banks.length === 0) {
         <app-empty
           icon="landmark"
           text="Inga banker hittades ännu. Banklistan uppdateras varje natt."
@@ -112,36 +106,31 @@ type Loaded = { banks: Bank[] } | { failed: true };
   `,
 })
 export class ConnectBankPage {
-  private readonly banksStore = inject(BanksStore);
+  protected readonly banksStore = inject(BanksStore);
+  private readonly accountsStore = inject(AccountsStore);
   private readonly redirector = inject(Redirector);
   protected readonly query = signal('');
   protected readonly starting = signal(false);
   protected readonly startError = signal<string | undefined>(undefined);
-  protected readonly loaded = toSignal<Loaded>(
-    inject(BanksService)
-      .list()
-      .pipe(
-        map((banks): Loaded => ({ banks })),
-        catchError(() => of<Loaded>({ failed: true })),
-      ),
-    { initialValue: undefined },
-  );
-  /** Banks with an active connection; a failed lookup just leaves them unmarked. */
-  protected readonly connected = toSignal(
-    inject(AccountsService)
-      .list()
-      .pipe(
-        map((response) => new Set(response.banks.map((group) => group.bank))),
-        catchError(() => of(new Set<string>())),
-      ),
-    { initialValue: new Set<string>() },
+  protected readonly available = this.banksStore.available;
+  /**
+   * Banks with an active connection. The accounts are followed from login (`BanksStore.loadOnce`),
+   * so until they are there nothing is marked.
+   */
+  protected readonly connected = computed(
+    () => new Set(this.accountsStore.accounts()?.banks.map((group) => group.bank)),
   );
   protected readonly filtered = computed(() => {
-    const result = this.loaded();
-    if (!result || 'failed' in result) return [];
     const needle = this.query().trim().toLocaleLowerCase('sv-SE');
-    return result.banks.filter((bank) => bank.name.toLocaleLowerCase('sv-SE').includes(needle));
+    return (this.available() ?? []).filter((bank) =>
+      bank.name.toLocaleLowerCase('sv-SE').includes(needle),
+    );
   });
+
+  constructor() {
+    this.banksStore.activateAvailable();
+    inject(DestroyRef).onDestroy(() => this.banksStore.deactivateAvailable());
+  }
 
   protected connect(bank: string): void {
     this.starting.set(true);
