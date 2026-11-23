@@ -1,5 +1,3 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -15,21 +13,38 @@ import type {
   SettlementResponse,
   Transaction,
 } from '@bankapp/shared';
+import { AccountsStore } from '../../stores/accounts.store';
+import { FakeAccountsStore } from '../../stores/accounts.store.fake';
+import { SettlementStore } from '../../stores/settlement.store';
+import { FakeSettlementStore } from '../../stores/settlement.store.fake';
+import { OverviewStore } from '../../stores/overview.store';
+import { FakeOverviewStore } from '../../stores/overview.store.fake';
 import { OverviewPage } from './overview.page';
 
 describe('OverviewPage', () => {
+  let overviewStore: FakeOverviewStore;
+  let accountsStore: FakeAccountsStore;
+  let settlementStore: FakeSettlementStore;
+
   beforeEach(() => {
+    overviewStore = new FakeOverviewStore();
+    accountsStore = new FakeAccountsStore();
+    settlementStore = new FakeSettlementStore();
     localStorage.clear();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     TestBed.configureTestingModule({
       imports: [OverviewPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideRouter([]),
+        { provide: OverviewStore, useValue: overviewStore },
+        { provide: AccountsStore, useValue: accountsStore },
+        { provide: SettlementStore, useValue: settlementStore },
+      ],
     });
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
     vi.useRealTimers();
   });
 
@@ -146,27 +161,23 @@ describe('OverviewPage', () => {
     body: OverviewResponse | 'error' = overview(),
     accounts: AccountsResponse | 'error' = accountsOf([]),
     settlement: number | null | SettlementResponse | 'error' = null,
+    view = 'mine',
   ) {
+    if (accounts === 'error') accountsStore.failed.set(true);
+    else accountsStore.accounts.set(accounts);
+    if (settlement === 'error') settlementStore.failed.set(true);
+    else settlementStore.settlement.set(settlementOf(settlement));
     const fixture = TestBed.createComponent(OverviewPage);
     await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    const accountsRequest = http.expectOne('/api/accounts');
-    if (accounts === 'error') accountsRequest.error(new ProgressEvent('error'));
-    else accountsRequest.flush(accounts);
-    const settlementRequest = http.expectOne('/api/settlement');
-    if (settlement === 'error') settlementRequest.error(new ProgressEvent('error'));
-    else settlementRequest.flush(settlementOf(settlement));
-    await answer(http, body);
+    await answer(body, view);
     await fixture.whenStable();
-    return { fixture, page: fixture.nativeElement as HTMLElement, http };
+    return { fixture, page: fixture.nativeElement as HTMLElement };
   }
 
-  async function answer(http: HttpTestingController, body: OverviewResponse | 'error') {
+  /** The store's answer for the month and view the page is asking for. */
+  async function answer(body: OverviewResponse | 'error', view = 'mine') {
     const month = body === 'error' ? '2026-11' : body.month;
-    const request = http.expectOne((r) => r.url === '/api/overview');
-    expect(request.request.params.get('month')).toBe(month);
-    if (body === 'error') request.error(new ProgressEvent('error'));
-    else request.flush(body);
+    overviewStore.overviews.update((all) => ({ ...all, [`${month} ${view}`]: body }));
     await TestBed.inject(ApplicationRef).whenStable();
   }
 
@@ -185,14 +196,48 @@ describe('OverviewPage', () => {
     expect(text(page.querySelector('[data-month]'))).toBe('november 2026');
   });
 
+  describe('following the stores', () => {
+    it('follows the settlement only while the page is open', async () => {
+      const { fixture } = await render();
+      expect(settlementStore.calls.map((c) => c.method)).toEqual(['activate']);
+
+      fixture.destroy();
+
+      expect(settlementStore.calls.map((c) => c.method)).toEqual(['activate', 'deactivate']);
+    });
+
+    it('shows a new answer for the month it is on, such as after a sync finishes', async () => {
+      const { fixture, page } = await render(overview({ totals: totals(0, 100) }));
+
+      await answer(overview({ totals: totals(0, 250) }));
+      await fixture.whenStable();
+
+      expect(text(page.querySelector('[data-total="spending"] [data-amount]'))).toBe(
+        '250,00\u00a0kr',
+      );
+    });
+
+    it('shows the settlement tile once the settlement store has it', async () => {
+      const { fixture, page } = await render();
+      expect(page.querySelector('[data-total="settlement"]')).toBeNull();
+
+      settlementStore.settlement.set(settlementOf(75));
+      await fixture.whenStable();
+
+      expect(text(page.querySelector('[data-total="settlement"] [data-amount]'))).toBe(
+        '75,00\u00a0kr',
+      );
+    });
+  });
+
   describe('the settlement tile', () => {
     const card = (page: HTMLElement) => page.querySelector('[data-total="settlement"]');
     /** Opens the page at November, then steps back to `month`. */
     const viewing = async (month: string, settlement: SettlementResponse) => {
-      const { fixture, page, http } = await render(overview(), accountsOf([]), settlement);
+      const { fixture, page } = await render(overview(), accountsOf([]), settlement);
       for (let m = 11; m > Number(month.slice(5)); m--) {
         await click(fixture, page.querySelector('[data-previous-month]'));
-        await answer(http, overview({ month: `2026-${String(m - 1).padStart(2, '0')}` }));
+        await answer(overview({ month: `2026-${String(m - 1).padStart(2, '0')}` }));
         await fixture.whenStable();
       }
       return page;
@@ -349,11 +394,10 @@ describe('OverviewPage', () => {
     });
 
     it('draws a past month in full, against the month before it', async () => {
-      const { fixture, page, http } = await render();
+      const { fixture, page } = await render();
 
       await click(fixture, page.querySelector('[data-previous-month]'));
       await answer(
-        http,
         overview({
           month: '2026-10',
           totals: totals(0, 3100),
@@ -513,30 +557,23 @@ describe('OverviewPage', () => {
     const toggle = (page: HTMLElement, view: string) =>
       page.querySelector<HTMLButtonElement>(`[data-view-toggle] [data-view="${view}"]`);
 
-    it('defaults to Min andel and asks the backend for it', async () => {
-      const fixture = TestBed.createComponent(OverviewPage);
-      await fixture.whenStable();
-      const http = TestBed.inject(HttpTestingController);
-      http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement').flush(settlementOf(null));
-      const request = http.expectOne((r) => r.url === '/api/overview');
-      expect(request.request.params.get('view')).toBe('mine');
-      request.flush(overview());
-      await fixture.whenStable();
-      const page = fixture.nativeElement as HTMLElement;
+    it('defaults to Min andel and asks the store for it', async () => {
+      const { page } = await render();
+
+      expect(overviewStore.requested.overview).toEqual([{ month: '2026-11', view: 'mine' }]);
       expect(toggle(page, 'mine')?.getAttribute('aria-pressed')).toBe('true');
       expect(toggle(page, 'full')?.getAttribute('aria-pressed')).toBe('false');
       expect(text(toggle(page, 'mine'))).toBe('Min andel');
       expect(text(toggle(page, 'full'))).toBe('Hela beloppet');
     });
 
-    it('refetches with the other view and remembers the choice on the device', async () => {
-      const { fixture, page, http } = await render();
+    it('shows the other view when it is chosen, and remembers the choice on the device', async () => {
+      const { fixture, page } = await render();
 
       await click(fixture, toggle(page, 'full'));
-      const request = http.expectOne((r) => r.url === '/api/overview');
-      expect(request.request.params.get('view')).toBe('full');
-      request.flush(overview({ totals: totals(0, 200) }));
+      expect(overviewStore.requested.overview.at(-1)).toEqual({ month: '2026-11', view: 'full' });
+      expect(page.querySelector('[aria-busy]')).not.toBeNull();
+      await answer(overview({ totals: totals(0, 200) }), 'full');
       await fixture.whenStable();
       expect(text(page.querySelector('[data-total="spending"] [data-amount]'))).toBe(
         '200,00\u00a0kr',
@@ -547,34 +584,29 @@ describe('OverviewPage', () => {
 
     it('starts in the remembered view', async () => {
       localStorage.setItem('overview-view', 'full');
-      const fixture = TestBed.createComponent(OverviewPage);
-      await fixture.whenStable();
-      const http = TestBed.inject(HttpTestingController);
-      http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement').flush(settlementOf(null));
-      const request = http.expectOne((r) => r.url === '/api/overview');
-      expect(request.request.params.get('view')).toBe('full');
-      request.flush(overview());
-      await fixture.whenStable();
+      await render(overview(), accountsOf([]), null, 'full');
+
+      expect(overviewStore.requested.overview).toEqual([{ month: '2026-11', view: 'full' }]);
     });
 
+    const drillDown = (month: string, id: number, transactions: Transaction[]) =>
+      overviewStore.drillDowns.update((all) => ({
+        ...all,
+        [`${month} ${id}`]: { transactions } satisfies OverviewTransactionsResponse,
+      }));
+
     it('shows din del on shared drill-down rows in Min andel, with real amounts', async () => {
-      const { fixture, page, http } = await render(body());
+      const { fixture, page } = await render(body());
+      drillDown('2026-11', 12, [
+        transaction(1, {
+          amount: { amount: -200, currency: 'SEK' },
+          share: { option: 'half', percent: 50, source: 'account' },
+          ownerPart: -100,
+        }),
+        transaction(2),
+      ]);
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
       await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
-      http
-        .expectOne((r) => r.url === '/api/overview/transactions')
-        .flush({
-          transactions: [
-            transaction(1, {
-              amount: { amount: -200, currency: 'SEK' },
-              share: { option: 'half', percent: 50, source: 'account' },
-              ownerPart: -100,
-            }),
-            transaction(2),
-          ],
-        } satisfies OverviewTransactionsResponse);
-      await fixture.whenStable();
 
       const rows = page.querySelectorAll('li[data-transaction]');
       expect(text(rows[0]?.querySelector('[data-amount]'))).toBe('−200,00\u00a0kr');
@@ -584,24 +616,12 @@ describe('OverviewPage', () => {
 
     it('leaves out din del in Hela beloppet', async () => {
       localStorage.setItem('overview-view', 'full');
-      const fixture = TestBed.createComponent(OverviewPage);
-      await fixture.whenStable();
-      const http = TestBed.inject(HttpTestingController);
-      http.expectOne('/api/accounts').flush(accountsOf([]));
-      http.expectOne('/api/settlement').flush(settlementOf(null));
-      http.expectOne((r) => r.url === '/api/overview').flush(body());
-      await fixture.whenStable();
-      const page = fixture.nativeElement as HTMLElement;
+      const { fixture, page } = await render(body(), accountsOf([]), null, 'full');
+      drillDown('2026-11', 12, [
+        transaction(1, { share: { option: 'half', percent: 50, source: 'account' } }),
+      ]);
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
       await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
-      http
-        .expectOne((r) => r.url === '/api/overview/transactions')
-        .flush({
-          transactions: [
-            transaction(1, { share: { option: 'half', percent: 50, source: 'account' } }),
-          ],
-        } satisfies OverviewTransactionsResponse);
-      await fixture.whenStable();
 
       expect(page.querySelector('[data-own-share]')).toBeNull();
       expect(text(page.querySelector('[data-share-badge]'))).toBe('50/50');
@@ -610,28 +630,28 @@ describe('OverviewPage', () => {
 
   describe('month navigation', () => {
     it('goes back and forth, but not past the current month', async () => {
-      const { fixture, page, http } = await render();
+      const { fixture, page } = await render();
       const previous = () => page.querySelector<HTMLButtonElement>('[data-previous-month]');
       const next = () => page.querySelector<HTMLButtonElement>('[data-next-month]');
       expect(next()?.disabled).toBe(true);
 
       await click(fixture, previous());
-      await answer(http, overview({ month: '2026-10' }));
+      await answer(overview({ month: '2026-10' }));
       expect(text(page.querySelector('[data-month]'))).toBe('oktober 2026');
       expect(next()?.disabled).toBe(false);
 
       await click(fixture, next());
-      await answer(http, overview({ month: '2026-11' }));
+      await answer(overview({ month: '2026-11' }));
       expect(text(page.querySelector('[data-month]'))).toBe('november 2026');
       expect(next()?.disabled).toBe(true);
     });
 
     it('crosses a year boundary', async () => {
       vi.setSystemTime(new Date('2026-01-15T12:00:00'));
-      const { fixture, page, http } = await render(overview({ month: '2026-01' }));
+      const { fixture, page } = await render(overview({ month: '2026-01' }));
 
       await click(fixture, page.querySelector('[data-previous-month]'));
-      await answer(http, overview({ month: '2025-12' }));
+      await answer(overview({ month: '2025-12' }));
 
       expect(text(page.querySelector('[data-month]'))).toBe('december 2025');
     });
@@ -738,16 +758,16 @@ describe('OverviewPage', () => {
     });
 
     it('lists the transactions of a tapped subcategory for that month', async () => {
-      const { fixture, page, http } = await render(body());
+      const { fixture, page } = await render(body());
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
+      expect(overviewStore.requested.drillDown).toEqual([]);
 
       await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
-      const request = http.expectOne((r) => r.url === '/api/overview/transactions');
-      expect(request.request.params.get('month')).toBe('2026-11');
-      expect(request.request.params.get('subcategoryId')).toBe('12');
-      request.flush({
-        transactions: [transaction(1), transaction(2, { date: '2026-11-03' })],
-      } satisfies OverviewTransactionsResponse);
+      expect(overviewStore.requested.drillDown).toEqual([{ month: '2026-11', subcategoryId: 12 }]);
+      expect(page.querySelector('[data-subcategory-row="Livsmedel"] [aria-busy]')).not.toBeNull();
+      overviewStore.drillDowns.set({
+        '2026-11 12': { transactions: [transaction(1), transaction(2, { date: '2026-11-03' })] },
+      });
       await fixture.whenStable();
 
       expect(
@@ -761,24 +781,20 @@ describe('OverviewPage', () => {
     });
 
     it('shows a failure to fetch the transactions of a subcategory', async () => {
-      const { fixture, page, http } = await render(body());
+      const { fixture, page } = await render(body());
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
+      overviewStore.drillDowns.set({ '2026-11 12': 'error' });
       await click(fixture, page.querySelector('[data-subcategory-row="Livsmedel"] button'));
-
-      http
-        .expectOne((r) => r.url === '/api/overview/transactions')
-        .error(new ProgressEvent('error'));
-      await fixture.whenStable();
 
       expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
     });
 
     it('closes what was open when the month changes', async () => {
-      const { fixture, page, http } = await render(body());
+      const { fixture, page } = await render(body());
       await click(fixture, row(page, 'Mat & Dryck')?.querySelector('button') ?? null);
 
       await click(fixture, page.querySelector('[data-previous-month]'));
-      await answer(http, overview({ month: '2026-10', categories: [food] }));
+      await answer(overview({ month: '2026-10', categories: [food] }));
 
       expect(page.querySelector('[data-subcategory-row]')).toBeNull();
     });
@@ -902,7 +918,12 @@ describe('OverviewPage', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         imports: [OverviewPage],
-        providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+        providers: [
+          provideRouter([]),
+          { provide: OverviewStore, useValue: overviewStore },
+          { provide: AccountsStore, useValue: (accountsStore = new FakeAccountsStore()) },
+          { provide: SettlementStore, useValue: settlementStore },
+        ],
       });
 
       const failed = await render(overview({ uncategorised: 1 }), 'error');
