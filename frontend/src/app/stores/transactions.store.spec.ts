@@ -4,7 +4,6 @@ import { type HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Observable } from 'rxjs';
-import { TransactionsService } from '../transactions.service';
 import { EMPTY_FILTERS } from '../pages/transactions/transaction-filters';
 import { Invalidation } from './invalidation';
 import { TransactionsStore } from './transactions.store';
@@ -20,7 +19,6 @@ const manual = {
 } as never;
 
 describe('TransactionsStore mutations', () => {
-  let service: TransactionsService;
   let store: TransactionsStore;
   let http: HttpTestingController;
 
@@ -28,7 +26,6 @@ describe('TransactionsStore mutations', () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
-    service = TestBed.inject(TransactionsService);
     store = TestBed.inject(TransactionsStore);
     http = TestBed.inject(HttpTestingController);
   });
@@ -64,7 +61,7 @@ describe('TransactionsStore mutations', () => {
       call(store).subscribe();
       http.expectOne({ method, url }).flush(response);
       http.expectOne('/api/transactions/review/count').flush({ count: 3 });
-      expect(service.reviewCount()).toBe(3);
+      expect(store.reviewCount()).toBe(3);
       if (name !== 'setCategory') expect(comesBackToKeptList(http)).toBe(false);
     });
   }
@@ -332,6 +329,93 @@ describe('TransactionsStore reads', () => {
           expect(comesBackToKeptList(http)).toBe(false);
         },
       );
+    });
+  });
+
+  describe('the review', () => {
+    const body = (count: number) => ({
+      transactions: [row(1)],
+      replacements: [],
+      count,
+    });
+
+    it('reads what waits for review, and the count with it', async () => {
+      const read = TestBed.runInInjectionContext(() => store.review());
+      await settle();
+      http.expectOne('/api/transactions/review').flush(body(4));
+      await settle();
+
+      expect(read.value()?.transactions.map((t) => t.id)).toEqual([1]);
+      expect(store.reviewCount()).toBe(4);
+      http.expectNone('/api/transactions/review/count');
+    });
+
+    it('is fetched again with the count when a fact moves transactions', async () => {
+      const read = TestBed.runInInjectionContext(() => store.review());
+      await settle();
+      http.expectOne('/api/transactions/review').flush(body(4));
+      await settle();
+
+      TestBed.inject(Invalidation).fire('transactions');
+      await settle();
+      http.expectOne('/api/transactions/review').flush({ ...body(3), transactions: [] });
+      await settle();
+
+      expect(read.value()?.transactions).toEqual([]);
+      expect(store.reviewCount()).toBe(3);
+      // The list's answer is newer than the count request that fired with it.
+      http.match('/api/transactions/review/count').forEach((r) => expect(r.cancelled).toBe(true));
+    });
+
+    it('keeps what it showed when a refresh fails', async () => {
+      const read = TestBed.runInInjectionContext(() => store.review());
+      await settle();
+      http.expectOne('/api/transactions/review').flush(body(1));
+      await settle();
+
+      TestBed.inject(Invalidation).fire('transactions');
+      await settle();
+      http.expectOne('/api/transactions/review').error(new ProgressEvent('error'));
+      await settle();
+
+      expect(read.value()?.transactions).toHaveLength(1);
+      expect(read.failed()).toBe(false);
+    });
+
+    it('says it failed when it cannot be fetched', async () => {
+      const read = TestBed.runInInjectionContext(() => store.review());
+      await settle();
+      http.expectOne('/api/transactions/review').error(new ProgressEvent('error'));
+      await settle();
+
+      expect(read.failed()).toBe(true);
+    });
+  });
+
+  describe('the review count', () => {
+    it('is 0 until it is known, then fetched on request', () => {
+      expect(store.reviewCount()).toBe(0);
+      store.refreshReviewCount();
+      http.expectOne('/api/transactions/review/count').flush({ count: 5 });
+      expect(store.reviewCount()).toBe(5);
+    });
+
+    it('lets only the latest request set it, and keeps it when one fails', () => {
+      store.refreshReviewCount();
+      const older = http.expectOne('/api/transactions/review/count');
+      store.refreshReviewCount();
+      expect(older.cancelled).toBe(true);
+      http.expectOne('/api/transactions/review/count').flush({ count: 2 });
+      store.refreshReviewCount();
+      http.expectOne('/api/transactions/review/count').error(new ProgressEvent('error'));
+      expect(store.reviewCount()).toBe(2);
+    });
+
+    it('goes back to 0 on reset', () => {
+      store.refreshReviewCount();
+      http.expectOne('/api/transactions/review/count').flush({ count: 5 });
+      store.resetReviewCount();
+      expect(store.reviewCount()).toBe(0);
     });
   });
 

@@ -9,6 +9,7 @@ import type {
   Transaction,
   TransactionCategoryResponse,
   TransactionDetails,
+  TransactionReviewResponse,
 } from '@bankapp/shared';
 import type { Observable } from 'rxjs';
 import type { ParamRead } from './kept';
@@ -74,6 +75,32 @@ export class FakeTransactionsStore extends TransactionsStore {
             : undefined,
       ),
     };
+  }
+  /** What the review answers; a test sets it: the response, 'error', or undefined while loading. */
+  readonly reviewAnswer = signal<TransactionReviewResponse | 'error' | undefined>(undefined);
+  /** How many times the review was asked for. */
+  reviewReads = 0;
+  readonly reviewCount = signal(0);
+  review(): ParamRead<TransactionReviewResponse> {
+    this.reviewReads += 1;
+    const answer = this.reviewAnswer;
+    return {
+      value: computed(() => {
+        const a = answer();
+        return a === 'error' ? undefined : a;
+      }),
+      loading: computed(() => answer() === undefined),
+      failed: computed(() => answer() === 'error'),
+      error: computed(() =>
+        answer() === 'error' ? new HttpErrorResponse({ status: 500 }) : undefined,
+      ),
+    };
+  }
+  refreshReviewCount(): void {
+    this.calls.push({ method: 'refreshReviewCount', args: [] });
+  }
+  resetReviewCount(): void {
+    this.reviewCount.set(0);
   }
   get(id: string): Observable<TransactionDetails> {
     return this.recorder.reply('get', id);

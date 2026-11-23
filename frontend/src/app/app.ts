@@ -9,7 +9,7 @@ import { ToastService } from './toast/toast.service';
 import { dateTime } from './formatting/date-time.pipe';
 import { CategoriesService } from './categories.service';
 import { BanksStore } from './stores/banks.store';
-import { TransactionsService } from './transactions.service';
+import { TransactionsStore } from './stores/transactions.store';
 
 interface NavItem {
   readonly path: string;
@@ -406,7 +406,7 @@ export class App {
     this.railMenuOpen.set(false);
   }
 
-  private readonly transactions = inject(TransactionsService);
+  private readonly transactions = inject(TransactionsStore);
   private readonly categories = inject(CategoriesService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
@@ -481,7 +481,7 @@ export class App {
     this.railMenuOpen.set(false);
     this.auth.logout().subscribe({
       next: () => {
-        this.transactions.reviewCount.set(0);
+        this.transactions.resetReviewCount();
         this.syncStatus.reset();
         this.categories.reset();
         void this.router.navigateByUrl('/logga-in');
