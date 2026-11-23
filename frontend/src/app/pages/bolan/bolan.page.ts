@@ -11,7 +11,7 @@ import {
   type MortgageResponse,
   type RecurringDayRequest,
 } from '@bankapp/shared';
-import { type Observable, type Subscription, concat, last } from 'rxjs';
+import { type Observable, concat, last } from 'rxjs';
 import { Callout } from '../../callout/callout';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
@@ -31,7 +31,6 @@ import {
 import { monthTicks } from '../../chart-card/month-ticks';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
-import { MortgageService } from '../../mortgage.service';
 import { MortgageStore } from '../../stores/mortgage.store';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
@@ -776,24 +775,26 @@ const PART_COLOURS = [
   `,
 })
 export class BolanPage {
-  private readonly service = inject(MortgageService);
   private readonly store = inject(MortgageStore);
   private readonly categories = inject(CategoriesService);
   private readonly now = today();
-  private figuresRequest: Subscription | undefined;
+  private readonly mortgageRead = this.store.mortgage();
+  private readonly figuresRead = this.store.figures();
 
-  protected readonly mortgage = signal<MortgageResponse>({ parts: [], entries: [] });
+  protected readonly mortgage = computed<MortgageResponse>(
+    () => this.mortgageRead.value() ?? { parts: [], entries: [] },
+  );
   /** The mortgage has arrived (or failed to), so the page can stop showing placeholders. */
-  protected readonly loaded = signal(false);
+  protected readonly loaded = computed(
+    () => !this.mortgageRead.loading() || this.mortgageRead.failed(),
+  );
   protected readonly parts = computed(() => this.mortgage().parts);
   protected readonly entries = computed(() => this.mortgage().entries);
   protected readonly openParts = computed(() => this.parts().filter((part) => !part.endedOn));
   protected readonly endedParts = computed(() => this.parts().filter((part) => part.endedOn));
-  protected readonly figures = signal<MortgageFiguresResponse>({
-    debts: [],
-    months: [],
-    monthsWithoutPayment: [],
-  });
+  protected readonly figures = computed<MortgageFiguresResponse>(
+    () => this.figuresRead.value() ?? { debts: [], months: [], monthsWithoutPayment: [] },
+  );
   /** The id of Bolån ränta & amortering, for the link from a month with no payment. */
   private readonly subcategoryId = signal<number | null>(null);
   protected readonly newRateId = signal<number | null>(null);
@@ -905,7 +906,17 @@ export class BolanPage {
           ];
     return { title, rows, pct: ((index + 0.5) / this.chartMonths().length) * 100 };
   });
-  protected readonly failed = signal<string | null>(null);
+  /** Why removing an entry failed; saving reports in the form instead. */
+  private readonly actionFailed = signal<string | null>(null);
+  protected readonly failed = computed(
+    () =>
+      this.actionFailed() ??
+      (this.mortgageRead.failed()
+        ? 'Bolånet kunde inte hämtas. Försök igen senare.'
+        : this.figuresRead.failed()
+          ? 'Bolånets siffror kunde inte hämtas. Försök igen senare.'
+          : null),
+  );
   protected readonly busy = signal(false);
   protected readonly panel = signal<Panel | null>(null);
   protected readonly formError = signal<string | null>(null);
@@ -947,17 +958,6 @@ export class BolanPage {
   });
 
   constructor() {
-    this.service.get().subscribe({
-      next: (mortgage) => {
-        this.mortgage.set(mortgage);
-        this.loaded.set(true);
-      },
-      error: () => {
-        this.loaded.set(true);
-        this.failed.set('Bolånet kunde inte hämtas. Försök igen senare.');
-      },
-    });
-    this.loadFigures();
     this.categories.subcategories().subscribe({
       next: (all) =>
         this.subcategoryId.set(
@@ -966,19 +966,6 @@ export class BolanPage {
         ),
       // The note then links to the month's transactions without the category filter.
       error: () => undefined,
-    });
-  }
-
-  /** The figures follow every change to the mortgage, so they are asked for again after one. */
-  private loadFigures(): void {
-    // Only the latest request counts: an older, slower response must not overwrite a newer one.
-    this.figuresRequest?.unsubscribe();
-    this.figuresRequest = this.service.figures().subscribe({
-      next: (figures) => {
-        this.figures.set(figures);
-        this.failed.set(null);
-      },
-      error: () => this.failed.set('Bolånets siffror kunde inte hämtas. Försök igen senare.'),
     });
   }
 
@@ -1174,18 +1161,16 @@ export class BolanPage {
 
   protected deleteEntry(entry: MortgageEntry): void {
     this.busy.set(true);
-    this.failed.set(null);
+    this.actionFailed.set(null);
     this.store.deleteEntry(entry.id).subscribe({
-      next: (mortgage) => {
+      next: () => {
         this.busy.set(false);
         this.deletingEntry.set(null);
-        this.mortgage.set(mortgage);
-        this.loadFigures();
       },
       error: () => {
         this.busy.set(false);
         this.deletingEntry.set(null);
-        this.failed.set('Noteringen kunde inte tas bort. Försök igen senare.');
+        this.actionFailed.set('Noteringen kunde inte tas bort. Försök igen senare.');
       },
     });
   }
@@ -1235,10 +1220,8 @@ export class BolanPage {
     this.formError.set(null);
     this.busy.set(true);
     call.subscribe({
-      next: (mortgage) => {
+      next: () => {
         this.busy.set(false);
-        this.mortgage.set(mortgage);
-        this.loadFigures();
         this.panel.set(null);
         this.editingId.set(null);
         this.newRateId.set(null);
