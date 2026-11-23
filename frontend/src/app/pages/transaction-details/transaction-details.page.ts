@@ -31,6 +31,7 @@ import {
 } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsService } from '../../transactions.service';
+import { Page } from '../../page/page';
 
 type State =
   { status: 'loading' | 'failed' | 'gone' } | { status: 'ready'; details: TransactionDetails };
@@ -69,6 +70,7 @@ function formatOriginal({ amount, currency }: Money): string {
 @Component({
   selector: 'app-transaction-details-page',
   imports: [
+    Page,
     RouterLink,
     MoneyPipe,
     DateHeadingPipe,
@@ -80,13 +82,15 @@ function formatOriginal({ amount, currency }: Money): string {
   // the bottom tabs (z-30).
   host: { class: 'relative', '[class.z-40]': 'editing()' },
   template: `
-    <main class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:py-10">
+    <app-page [title]="state().status === 'gone' ? 'Transaktionen finns inte längre' : undefined">
+      <button page-back type="button" data-back class="btn btn-ghost btn-sm" (click)="back()">
+        ← Transaktioner
+      </button>
       @switch (state().status) {
         @case ('loading') {
           <p aria-live="polite">Hämtar transaktionen…</p>
         }
         @case ('gone') {
-          <h1 class="text-3xl font-semibold tracking-tight">Transaktionen finns inte längre</h1>
           <a routerLink="/transaktioner" class="font-medium underline">Till transaktionerna</a>
         }
         @case ('failed') {
@@ -96,14 +100,6 @@ function formatOriginal({ amount, currency }: Money): string {
         @default {
           @if (details(); as t) {
             @let pending = t.status === 'pending';
-            <button
-              type="button"
-              data-back
-              class="btn btn-ghost btn-sm self-start"
-              (click)="back()"
-            >
-              ← Transaktioner
-            </button>
             <div class="stagger grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
               <div class="flex min-w-0 flex-col gap-5">
                 <section data-summary class="card flex flex-col gap-5 p-5 sm:p-7">
@@ -114,10 +110,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       [pending]="pending"
                       [size]="60"
                     />
-                    <h1
-                      data-description
-                      class="min-w-0 flex-1 text-2xl [overflow-wrap:anywhere] font-semibold tracking-tight sm:text-3xl"
-                    >
+                    <h1 data-description class="page-title min-w-0 flex-1 [overflow-wrap:anywhere]">
                       {{ t.description || 'Transaktion' }}
                     </h1>
                   </div>
@@ -530,7 +523,7 @@ function formatOriginal({ amount, currency }: Money): string {
           }
         }
       }
-    </main>
+    </app-page>
 
     @if (editing()) {
       <app-manual-transaction-sheet

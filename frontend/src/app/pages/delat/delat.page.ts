@@ -26,6 +26,7 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { SHARE_LABELS, SHARE_OPTION_ORDER, householdRatioOn } from '../../share-display';
 import { SharesService } from '../../shares.service';
 import { ToastService } from '../../toast/toast.service';
+import { Page } from '../../page/page';
 
 function isMonth(value: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
@@ -56,6 +57,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
 @Component({
   selector: 'app-delat-page',
   imports: [
+    Page,
     NgTemplateOutlet,
     RouterLink,
     MoneyPipe,
@@ -65,12 +67,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
     MonthField,
   ],
   template: `
-    <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
-      <header>
-        <h1 class="font-display text-3xl font-semibold tracking-tight">Delat</h1>
-        <p class="mt-1 text-muted">Avräkning, hushållsandel och delade underkategorier.</p>
-      </header>
-
+    <app-page title="Delat" subtitle="Avräkning, hushållsandel och delade underkategorier.">
       @if (error(); as message) {
         <p role="alert" class="text-sm text-danger">{{ message }}</p>
       }
@@ -611,7 +608,7 @@ const SHARE_CHOICES: readonly { option: ShareOption; label: string }[] = SHARE_O
           }
         </ul>
       </ng-template>
-    </main>
+    </app-page>
   `,
 })
 export class DelatPage {

@@ -5,6 +5,7 @@ import { ManualSavingsSection } from '../../manual-savings/manual-savings-sectio
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SavingsService } from '../../savings.service';
+import { Page } from '../../page/page';
 
 /** The chart's drawing area, in the SVG's own units. */
 const CHART_WIDTH = 300;
@@ -70,11 +71,9 @@ interface Tip {
 /** Sparande: the savings accounts, connected and manual, and how they change over time. */
 @Component({
   selector: 'app-sparande-page',
-  imports: [ManualSavingsSection, MoneyPipe, NgTemplateOutlet],
+  imports: [Page, ManualSavingsSection, MoneyPipe, NgTemplateOutlet],
   template: `
-    <main class="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:gap-5 sm:p-8">
-      <h1 class="font-display text-2xl font-bold tracking-tight">Sparande</h1>
-
+    <app-page title="Sparande">
       @if (failed()) {
         <p role="alert" class="text-danger">Sparandet kunde inte hämtas. Försök igen senare.</p>
       }
@@ -367,7 +366,7 @@ interface Tip {
       }
 
       <app-manual-savings-section (changed)="load()" />
-    </main>
+    </app-page>
 
     <ng-template #row let-account>
       <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

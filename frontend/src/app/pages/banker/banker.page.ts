@@ -19,6 +19,7 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { SHARE_LABELS } from '../../share-display';
 import { SyncService } from '../../sync.service';
+import { Page } from '../../page/page';
 
 type Loaded = AccountsResponse | { failed: true };
 
@@ -53,61 +54,57 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 @Component({
   selector: 'app-banker-page',
-  imports: [RouterLink, DateTimePipe, MoneyPipe],
+  imports: [RouterLink, DateTimePipe, MoneyPipe, Page],
   host: {
     '(document:keydown.escape)': 'menuOpen.set(null)',
     '(document:click)': 'closeMenuOnOutsideClick($event)',
   },
   template: `
-    <main class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:py-10">
+    <app-page title="Banker">
       @let result = loaded();
-      <header class="flex flex-col items-start gap-4 sm:flex-row sm:justify-between">
-        <div>
-          <h1 class="font-display text-3xl font-semibold tracking-tight">Banker</h1>
-          @if (result && !('failed' in result)) {
-            <p
-              data-sync-status
-              role="status"
-              aria-live="polite"
-              class="mt-1 flex items-center gap-2 text-sm text-muted"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                [class.animate-spin]="result.syncing"
-                class="motion-reduce:animate-none"
-              >
-                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                <path d="M8 16H3v5" />
-              </svg>
-              <span>{{ statusText(result) }}</span>
-            </p>
-          }
-        </div>
-        <div class="flex items-center gap-2">
-          @if (result && !('failed' in result) && result.banks.length > 0) {
-            <button
-              type="button"
-              data-sync
-              class="btn btn-secondary"
-              [disabled]="result.syncing || manualSyncPending()"
-              (click)="updateNow()"
-            >
-              Uppdatera
-            </button>
-          }
-          <a routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
-        </div>
-      </header>
+      @if (result && !('failed' in result)) {
+        <p
+          page-subtitle
+          data-sync-status
+          role="status"
+          aria-live="polite"
+          class="flex items-center gap-2 text-sm text-muted"
+        >
+          <svg
+            aria-hidden="true"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            [class.animate-spin]="result.syncing"
+            class="motion-reduce:animate-none"
+          >
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M8 16H3v5" />
+          </svg>
+          <span>{{ statusText(result) }}</span>
+        </p>
+      }
+      <div page-actions class="flex items-center gap-2">
+        @if (result && !('failed' in result) && result.banks.length > 0) {
+          <button
+            type="button"
+            data-sync
+            class="btn btn-secondary"
+            [disabled]="result.syncing || manualSyncPending()"
+            (click)="updateNow()"
+          >
+            Uppdatera
+          </button>
+        }
+        <a routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
+      </div>
 
       @if (!result) {
         <p aria-live="polite">Hämtar konton…</p>
@@ -514,7 +511,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
           </div>
         </details>
       }
-    </main>
+    </app-page>
   `,
 })
 export class BankerPage {

@@ -104,6 +104,19 @@
 }
 
 @layer components {
+  /* The title of every page (the h1 already gets the display font) */
+  .page-title {
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+  @media (min-width: 40rem) {
+    .page-title {
+      font-size: 30px;
+    }
+  }
+
   /* Cards */
   .card {
     background: var(--color-surface-1);
