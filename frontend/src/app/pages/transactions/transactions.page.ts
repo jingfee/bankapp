@@ -18,6 +18,7 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
 import { ToastService } from '../../toast/toast.service';
+import { Page } from '../../page/page';
 import { MANUAL_LABEL } from '../../share-display';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { TransactionsService } from '../../transactions.service';
@@ -48,25 +49,23 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 @Component({
   selector: 'app-transactions-page',
-  imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe, ManualTransactionSheet],
+  imports: [TransactionList, RouterLink, FilterPanel, MoneyPipe, ManualTransactionSheet, Page],
   // The routed page is its own stacking context (see `router-outlet + *`), so while the filter
   // panel or the add form is open it must rise above the bottom tabs (z-30),
   // otherwise they would cover the panel's footer.
   host: { class: 'relative', '[class.z-40]': 'panelOpen() || adding()' },
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-10">
-      <header class="flex items-center justify-between gap-3">
-        <h1 class="text-3xl font-semibold tracking-tight">Transaktioner</h1>
-        <a
-          routerLink="/transaktioner/ny"
-          queryParamsHandling="preserve"
-          data-add
-          class="btn btn-secondary btn-sm flex-none whitespace-nowrap"
-          aria-label="Lägg till manuell transaktion"
-          ><span class="max-[359px]:hidden">+ Manuell</span
-          ><span class="min-[360px]:hidden" aria-hidden="true">+</span></a
-        >
-      </header>
+    <app-page width="narrow" title="Transaktioner">
+      <a
+        page-actions
+        routerLink="/transaktioner/ny"
+        queryParamsHandling="preserve"
+        data-add
+        class="btn btn-secondary btn-sm flex-none whitespace-nowrap"
+        aria-label="Lägg till manuell transaktion"
+        ><span class="max-[359px]:hidden">+ Manuell</span
+        ><span class="min-[360px]:hidden" aria-hidden="true">+</span></a
+      >
 
       <div class="flex gap-2">
         <label class="field min-w-0 flex-1">
@@ -227,7 +226,7 @@ const SEARCH_DEBOUNCE_MS = 250;
           }
         }
       }
-    </main>
+    </app-page>
 
     @if (adding()) {
       <app-manual-transaction-sheet (saved)="onAdded()" (closed)="closeSheet()" />

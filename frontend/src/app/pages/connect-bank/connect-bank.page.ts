@@ -6,22 +6,17 @@ import type { Bank } from '@bankapp/shared';
 import { catchError, map, of } from 'rxjs';
 import { BanksService } from '../../banks.service';
 import { ConnectionsService } from '../../connections.service';
+import { Page } from '../../page/page';
 import { Redirector } from '../../redirector';
 
 type Loaded = { banks: Bank[] } | { failed: true };
 
 @Component({
   selector: 'app-connect-bank-page',
-  imports: [RouterLink],
+  imports: [RouterLink, Page],
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <header>
-        <a routerLink="/" class="text-sm text-zinc-500 hover:underline dark:text-zinc-400"
-          >← Bankapp</a
-        >
-        <h1 class="mt-2 text-3xl font-semibold tracking-tight">Anslut bank</h1>
-        <p class="mt-1 text-zinc-600 dark:text-zinc-400">Välj den bank du vill ansluta.</p>
-      </header>
+    <app-page width="narrow" title="Anslut bank" subtitle="Välj den bank du vill ansluta.">
+      <a page-back routerLink="/banker" class="text-sm text-muted hover:underline">← Banker</a>
 
       <label class="flex flex-col gap-1 text-sm font-medium">
         Sök bank
@@ -82,7 +77,7 @@ type Loaded = { banks: Bank[] } | { failed: true };
           </ul>
         }
       }
-    </main>
+    </app-page>
   `,
 })
 export class ConnectBankPage {

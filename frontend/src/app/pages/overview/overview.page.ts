@@ -21,6 +21,7 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { OverviewService } from '../../overview.service';
 import { SettlementService } from '../../settlement.service';
 import { TransactionList } from '../../transaction-list/transaction-list';
+import { Page } from '../../page/page';
 
 type Status = 'loading' | 'ready' | 'failed';
 type TotalKind = keyof OverviewTotals;
@@ -157,7 +158,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 /** One calendar month: income, spending and net, and where the money went. */
 @Component({
   selector: 'app-overview-page',
-  imports: [NgTemplateOutlet, RouterLink, MoneyPipe, CategoryBar, TransactionList],
+  imports: [Page, NgTemplateOutlet, RouterLink, MoneyPipe, CategoryBar, TransactionList],
   template: `
     <ng-template #tileBody let-tile>
       <span class="text-[11px] font-semibold tracking-wider text-muted uppercase">{{
@@ -172,54 +173,50 @@ function bars<T extends { id: number; name: string; total: number }>(
       <span data-change class="text-xs leading-snug text-muted">{{ tile.line }}</span>
     </ng-template>
 
-    <main class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:py-10">
-      <header class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            data-previous-month
-            aria-label="Föregående månad"
-            class="btn btn-ghost size-10 px-0 text-2xl"
-            (click)="go(-1)"
-          >
-            ‹
-          </button>
-          <h1
-            data-month
-            class="text-center text-2xl font-semibold tracking-tight whitespace-nowrap capitalize sm:text-3xl"
-          >
-            {{ monthTitle() }}
-          </h1>
-          <button
-            type="button"
-            data-next-month
-            aria-label="Nästa månad"
-            class="btn btn-ghost size-10 px-0 text-2xl"
-            [disabled]="!canGoForward()"
-            (click)="go(1)"
-          >
-            ›
-          </button>
-        </div>
-
-        <div
-          role="group"
-          aria-label="Visa"
-          data-view-toggle
-          class="segmented w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none"
+    <app-page>
+      <div page-title class="flex items-center gap-1">
+        <button
+          type="button"
+          data-previous-month
+          aria-label="Föregående månad"
+          class="btn btn-ghost size-10 px-0 text-2xl"
+          (click)="go(-1)"
         >
-          @for (option of views; track option.view) {
-            <button
-              type="button"
-              [attr.data-view]="option.view"
-              [attr.aria-pressed]="view() === option.view"
-              (click)="setView(option.view)"
-            >
-              {{ option.label }}
-            </button>
-          }
-        </div>
-      </header>
+          ‹
+        </button>
+        <h1 data-month class="page-title text-center whitespace-nowrap capitalize">
+          {{ monthTitle() }}
+        </h1>
+        <button
+          type="button"
+          data-next-month
+          aria-label="Nästa månad"
+          class="btn btn-ghost size-10 px-0 text-2xl"
+          [disabled]="!canGoForward()"
+          (click)="go(1)"
+        >
+          ›
+        </button>
+      </div>
+
+      <div
+        page-actions
+        role="group"
+        aria-label="Visa"
+        data-view-toggle
+        class="segmented w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none"
+      >
+        @for (option of views; track option.view) {
+          <button
+            type="button"
+            [attr.data-view]="option.view"
+            [attr.aria-pressed]="view() === option.view"
+            (click)="setView(option.view)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
 
       @if (banner(); as b) {
         <p
@@ -608,7 +605,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           }
         }
       }
-    </main>
+    </app-page>
   `,
 })
 export class OverviewPage {

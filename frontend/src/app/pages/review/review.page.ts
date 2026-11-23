@@ -16,6 +16,7 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { accountLabel } from '../../share-display';
 import { TransactionsService } from '../../transactions.service';
 import { similarUpdatedNote } from '../../similar-updated-note';
+import { Page } from '../../page/page';
 
 type Status = 'loading' | 'ready' | 'failed';
 
@@ -34,9 +35,15 @@ const COLLAPSE_MS = 450;
     TransactionCategoryBadge,
     CategoryIconComponent,
     CategoryPickerComponent,
+    Page,
   ],
   template: `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8 sm:py-10">
+    <app-page width="narrow" title="Att granska">
+      @if (status() === 'ready' && remaining() > 0) {
+        <p page-subtitle data-remaining class="text-sm text-muted" aria-live="polite">
+          {{ remaining() }} kvar att bekräfta
+        </p>
+      }
       @switch (status()) {
         @case ('loading') {
           <p aria-live="polite">Hämtar transaktioner att granska…</p>
@@ -46,14 +53,6 @@ const COLLAPSE_MS = 450;
         }
         @default {
           <header class="flex flex-col gap-3">
-            <div class="flex items-baseline justify-between gap-3">
-              <h1 class="font-display text-3xl font-semibold tracking-tight">Att granska</h1>
-              @if (remaining() > 0) {
-                <p data-remaining class="text-sm text-muted" aria-live="polite">
-                  {{ remaining() }} kvar att bekräfta
-                </p>
-              }
-            </div>
             @if (total() > 0 && !finished()) {
               <div
                 data-progress
@@ -301,7 +300,7 @@ const COLLAPSE_MS = 450;
           }
         }
       }
-    </main>
+    </app-page>
   `,
 })
 export class ReviewPage {

@@ -18,6 +18,7 @@ import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MortgageService } from '../../mortgage.service';
+import { Page } from '../../page/page';
 import {
   type ChartMode,
   type Range,
@@ -63,11 +64,9 @@ const PART_COLOURS = [
  */
 @Component({
   selector: 'app-bolan-page',
-  imports: [DateField, MoneyPipe, NgTemplateOutlet, RouterLink],
+  imports: [Page, DateField, MoneyPipe, NgTemplateOutlet, RouterLink],
   template: `
-    <main class="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:gap-5 sm:p-8">
-      <h1 class="font-display text-2xl font-bold tracking-tight">Bolån</h1>
-
+    <app-page title="Bolån">
       @if (failed(); as message) {
         <p role="alert" class="text-danger">{{ message }}</p>
       }
@@ -684,7 +683,7 @@ const PART_COLOURS = [
           </ul>
         </section>
       }
-    </main>
+    </app-page>
 
     <ng-template #days>
       <label class="flex flex-col gap-1 text-sm text-muted">
