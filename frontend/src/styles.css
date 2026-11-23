@@ -1,11 +1,5 @@
 @import 'tailwindcss';
 
-/*
- * The app is dark only. Existing pages still carry `dark:` classes next to their light ones, so the
- * `dark` variant is always on instead of following the operating system's colour scheme.
- */
-@custom-variant dark (&);
-
 /* Self-hosted, so the fonts work offline in the PWA. Swedish needs only latin and latin-ext. */
 @font-face {
   font-family: 'Inter';
@@ -71,15 +65,6 @@
   --color-warning: #ffb547;
   --color-danger: #ff7a7a;
   --color-pending: #7dd3fc;
-
-  /* Pages not yet redesigned use Tailwind's zinc scale; line it up with the dark theme. */
-  --color-zinc-950: #0a0c11;
-  --color-zinc-900: #12151c;
-  --color-zinc-800: #20252f;
-  --color-zinc-700: #2d3340;
-  --color-zinc-400: #8e95a6;
-  --color-zinc-300: #c3c8d4;
-  --color-zinc-100: #edeff5;
 }
 
 @layer base {

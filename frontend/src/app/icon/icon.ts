@@ -4,7 +4,9 @@ import type { IconNode } from 'lucide';
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
+  CircleCheck,
   Ellipsis,
   Inbox,
   Info,
@@ -22,7 +24,9 @@ import {
 const ICONS = {
   check: Check,
   'chevron-down': ChevronDown,
+  'chevron-right': ChevronRight,
   'circle-alert': CircleAlert,
+  'circle-check': CircleCheck,
   ellipsis: Ellipsis,
   inbox: Inbox,
   info: Info,

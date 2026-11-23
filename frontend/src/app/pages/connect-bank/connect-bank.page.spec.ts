@@ -8,6 +8,7 @@ import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { Bank, BanksResponse, StartConnectionResponse } from '@bankapp/shared';
+import type { AccountsResponse } from '@bankapp/shared';
 import { Redirector } from '../../redirector';
 import { ConnectBankPage } from './connect-bank.page';
 
@@ -35,16 +36,22 @@ describe('ConnectBankPage', () => {
     { name: 'Swedbank', logoUrl: null, beta: false },
   ];
 
+  let accountsResponse: Partial<AccountsResponse>;
+  beforeEach(() => (accountsResponse = { banks: [] }));
+
   async function render(respond: (request: TestRequest) => void) {
     const fixture = TestBed.createComponent(ConnectBankPage);
     await fixture.whenStable();
     respond(TestBed.inject(HttpTestingController).expectOne('/api/banks'));
+    TestBed.inject(HttpTestingController).expectOne('/api/accounts').flush(accountsResponse);
     await fixture.whenStable();
     const page = fixture.nativeElement as HTMLElement;
     return {
       page,
       names: () =>
-        Array.from(page.querySelectorAll('li')).map((li) => li.textContent?.trim() ?? ''),
+        Array.from(page.querySelectorAll('li [data-bank-name]')).map(
+          (name) => name.textContent?.trim() ?? '',
+        ),
       async choose(name: string) {
         const button = Array.from(page.querySelectorAll('button')).find(
           (candidate) => candidate.textContent?.trim() === name,
@@ -67,9 +74,34 @@ describe('ConnectBankPage', () => {
     const { page, names } = await render(withBanks);
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Anslut bank');
-    expect(names()).toEqual(['Northmill Beta', 'Skandia', 'Swedbank']);
+    expect(names()).toEqual(['Northmill', 'Skandia', 'Swedbank']);
     expect(page.querySelectorAll('li')[0]?.textContent).toContain('Beta');
     expect(page.textContent?.match(/Beta/g)).toHaveLength(1);
+  });
+
+  it('shows a monogram when a bank has no logo and the logo when it has one', async () => {
+    const { page } = await render(withBanks);
+
+    const rows = page.querySelectorAll('li');
+    expect(rows[0]?.querySelector('[data-monogram]')?.textContent?.trim()).toBe('N');
+    expect(rows[1]?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://logos.example/skandia.png',
+    );
+    expect(rows[1]?.querySelector('[data-monogram]')).toBeNull();
+    expect(page.querySelectorAll('li > button')).toHaveLength(3);
+  });
+
+  it('marks banks that already have an active connection', async () => {
+    accountsResponse = {
+      banks: [{ bank: 'Skandia', status: 'active', accounts: [], closedAccounts: [] }],
+    } as unknown as Partial<AccountsResponse>;
+    const { page } = await render(withBanks);
+
+    const marked = Array.from(page.querySelectorAll('li')).filter((li) =>
+      li.querySelector('[data-connected]'),
+    );
+    expect(marked.map((li) => li.textContent)).toEqual([expect.stringContaining('Skandia')]);
+    expect(marked[0]?.textContent).toContain('Ansluten');
   });
 
   it('filters the banks as the owner types, ignoring case', async () => {
