@@ -1,18 +1,8 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { CATEGORY_PALETTE, type Category, type Money, type Transaction } from '@bankapp/shared';
-import {
-  type Subscription,
-  Subject,
-  catchError,
-  debounceTime,
-  distinctUntilChanged,
-  map,
-  of,
-  switchMap,
-} from 'rxjs';
-import { AccountsService } from '../../accounts.service';
+import { CATEGORY_PALETTE, type Category } from '@bankapp/shared';
+import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, tap } from 'rxjs';
 import { CategoriesService } from '../../categories.service';
 import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -26,7 +16,8 @@ import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 import { MANUAL_LABEL } from '../../share-display';
 import { TransactionList } from '../../transaction-list/transaction-list';
-import { TransactionsService } from '../../transactions.service';
+import { AccountsStore } from '../../stores/accounts.store';
+import { TransactionsStore, type TransactionListRequest } from '../../stores/transactions.store';
 import { FilterPanel, type PanelAccount } from './filter-panel';
 import {
   AMOUNT_PRESETS,
@@ -34,12 +25,11 @@ import {
   type TransactionFilters,
   activeFilterCount,
   filtersFromParams,
+  filtersKey,
   filtersToParams,
   periodPresets,
   samePeriod,
 } from './transaction-filters';
-
-type Status = 'loading' | 'ready' | 'failed';
 
 interface ActiveChip {
   key: string;
@@ -220,13 +210,13 @@ const SEARCH_DEBOUNCE_MS = 250;
           @if (moreFailed()) {
             <app-callout variant="danger">Fler transaktioner kunde inte hämtas.</app-callout>
           }
-          @if (cursor() !== null) {
+          @if (hasMore()) {
             <button
               type="button"
               data-more
               class="btn btn-secondary w-full"
               [disabled]="loadingMore()"
-              (click)="loadMore()"
+              (click)="list.loadMore()"
             >
               Visa fler
             </button>
@@ -257,10 +247,10 @@ const SEARCH_DEBOUNCE_MS = 250;
   `,
 })
 export class TransactionsPage {
-  private readonly service = inject(TransactionsService);
+  private readonly store = inject(TransactionsStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
-  private readonly accountsService = inject(AccountsService);
+  private readonly accountsStore = inject(AccountsStore);
   private readonly categoriesService = inject(CategoriesService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly toast = inject(ToastService);
@@ -271,20 +261,29 @@ export class TransactionsPage {
     { initialValue: false },
   );
 
-  protected readonly status = signal<Status>('loading');
-  protected readonly cursor = signal<string | null>(null);
-  protected readonly loadingMore = signal(false);
-  protected readonly moreFailed = signal(false);
-  protected readonly transactions = signal<Transaction[]>([]);
-  protected readonly count = signal(0);
-  protected readonly sum = signal<Money | null>(null);
+  /** What the list is asked for; the store follows it, and keeps the list for the way back. */
+  private readonly request = signal<TransactionListRequest | undefined>(undefined);
+  private readonly list = this.store.list(this.request);
+  protected readonly status = this.list.status;
+  protected readonly transactions = this.list.transactions;
+  protected readonly count = this.list.count;
+  protected readonly sum = this.list.sum;
+  protected readonly hasMore = this.list.hasMore;
+  protected readonly loadingMore = this.list.loadingMore;
+  protected readonly moreFailed = this.list.moreFailed;
 
   protected readonly filters = signal<TransactionFilters>(EMPTY_FILTERS);
   protected readonly searchText = signal('');
   protected readonly panelOpen = signal(false);
   /** The owner picked Välj datum, so the date inputs show before a date is chosen. */
   protected readonly customDates = signal(false);
-  protected readonly accounts = signal<PanelAccount[]>([]);
+  protected readonly accounts = computed<PanelAccount[]>(() =>
+    (this.accountsStore.accounts()?.banks ?? []).flatMap((bank) =>
+      [...bank.accounts, ...bank.closedAccounts]
+        .filter((account) => !account.hidden && !account.savings)
+        .map((account) => ({ id: account.id, label: account.name })),
+    ),
+  );
   protected readonly categories = signal<Category[]>([]);
   private lookupsLoaded = false;
 
@@ -367,7 +366,6 @@ export class TransactionsPage {
   private readonly typed = new Subject<string>();
   /** The filters the URL is heading for, so a change made before it has loaded builds on the last one. */
   private target = EMPTY_FILTERS;
-  private moreRequest: Subscription | undefined;
 
   constructor() {
     this.typed
@@ -377,13 +375,10 @@ export class TransactionsPage {
     this.route.queryParamMap
       .pipe(
         map(filtersFromParams),
-        distinctUntilChanged((a, b) => queryOf(a) === queryOf(b)),
-        switchMap((filters) => {
+        distinctUntilChanged((a, b) => filtersKey(a) === filtersKey(b)),
+        tap((filters) => {
           this.filters.set(filters);
           this.target = filters;
-          // A next page of the previous filters must not be added to this list.
-          this.moreRequest?.unsubscribe();
-          this.loadingMore.set(false);
           if (filters.q !== this.searchText().trim()) this.searchText.set(filters.q);
           if (
             filters.accounts.length > 0 ||
@@ -391,67 +386,21 @@ export class TransactionsPage {
             filters.subcategories.length > 0
           )
             this.loadLookups();
-          return this.load(filters);
+          // Coming back with the browser's back button, the list is shown as it was left so the
+          // router can restore the scroll position; any other visit loads it afresh.
+          this.request.set({
+            filters,
+            restore: this.router.currentNavigation()?.trigger === 'popstate',
+          });
         }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe();
   }
 
-  /** Loads the first page, or shows the list as it was left when coming back to it. */
-  private load(filters: TransactionFilters) {
-    const key = queryOf(filters);
-    // Coming back with the browser's back button, show the list as it was left so the router
-    // can restore the scroll position; any other visit loads it afresh.
-    const left = this.service.listed;
-    if (
-      left !== null &&
-      left.key === key &&
-      this.router.currentNavigation()?.trigger === 'popstate'
-    ) {
-      this.transactions.set(left.transactions);
-      this.cursor.set(left.cursor);
-      this.count.set(left.count);
-      this.sum.set(left.sum);
-      this.status.set('ready');
-      return of(null);
-    }
-    if (this.transactions().length === 0) this.status.set('loading');
-    this.moreFailed.set(false);
-    return this.service.list(undefined, filters).pipe(
-      map((page) => {
-        this.transactions.set(page.transactions);
-        this.cursor.set(page.nextCursor);
-        this.count.set(page.count);
-        this.sum.set(page.sum);
-        this.remember();
-        this.status.set('ready');
-        return page;
-      }),
-      catchError(() => {
-        this.status.set('failed');
-        return of(null);
-      }),
-    );
-  }
-
   private loadLookups(): void {
     if (this.lookupsLoaded) return;
     this.lookupsLoaded = true;
-    this.accountsService
-      .list()
-      .pipe(
-        map((response) =>
-          response.banks.flatMap((bank) =>
-            [...bank.accounts, ...bank.closedAccounts]
-              .filter((account) => !account.hidden && !account.savings)
-              .map((account) => ({ id: account.id, label: account.name })),
-          ),
-        ),
-        catchError(() => of([])),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((accounts) => this.accounts.set(accounts));
     this.categoriesService
       .list()
       .pipe(
@@ -465,11 +414,10 @@ export class TransactionsPage {
     void this.router.navigate(['/transaktioner'], { queryParamsHandling: 'preserve' });
   }
 
-  /** The new transaction belongs in the list, so the list is fetched again. */
+  /** The new transaction is a `transactions` fact, so the store fetches the list again itself. */
   protected onAdded(): void {
     this.toast.show('Transaktionen sparades');
     this.closeSheet();
-    this.load(this.filters()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
   }
 
   protected closePanel(): void {
@@ -518,37 +466,6 @@ export class TransactionsPage {
     if (key === 'custom') this.loadLookups();
   }
 
-  protected loadMore(): void {
-    const before = this.cursor();
-    if (before === null || this.loadingMore()) return;
-    this.loadingMore.set(true);
-    this.moreFailed.set(false);
-    this.moreRequest = this.service.list(before, this.filters()).subscribe({
-      next: (page) => {
-        this.transactions.update((shown) => [...shown, ...page.transactions]);
-        this.cursor.set(page.nextCursor);
-        this.count.set(page.count);
-        this.sum.set(page.sum);
-        this.remember();
-        this.loadingMore.set(false);
-      },
-      error: () => {
-        this.moreFailed.set(true);
-        this.loadingMore.set(false);
-      },
-    });
-  }
-
-  private remember(): void {
-    this.service.listed = {
-      key: queryOf(this.filters()),
-      transactions: this.transactions(),
-      cursor: this.cursor(),
-      count: this.count(),
-      sum: this.sum(),
-    };
-  }
-
   private periodLabel(f: TransactionFilters): string {
     if (samePeriod(this.presets.last7, f)) return 'Senaste 7 dagarna';
     if (samePeriod(this.presets.month, f)) return this.monthLabel;
@@ -562,8 +479,4 @@ export class TransactionsPage {
     if (f.min !== '' && f.max !== '') return `${f.min}–${f.max} kr`;
     return f.min !== '' ? `Minst ${f.min} kr` : `Högst ${f.max} kr`;
   }
-}
-
-function queryOf(filters: TransactionFilters): string {
-  return new URLSearchParams(filtersToParams(filters)).toString();
 }

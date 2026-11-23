@@ -21,7 +21,7 @@ export abstract class SharesStore {
   abstract readonly loading: Signal<boolean>;
   /** True when either could not be fetched and there is nothing older to show for it. */
   abstract readonly failed: Signal<boolean>;
-  /** Starts fetching the ratio and the shares, for as long as a page shows them. */
+  /** Starts fetching the ratio and the shares, for as long as a page shows them; every call needs its own `deactivate`. */
   abstract activate(): void;
   /** Stops fetching and forgets them. */
   abstract deactivate(): void;
@@ -37,7 +37,9 @@ export class HttpSharesStore extends SharesStore {
   private readonly http = inject(HttpClient);
   private readonly invalidation = inject(Invalidation);
 
-  private readonly active = signal(false);
+  /** Pages showing the shares; a page opened before the previous one closes must not lose them. */
+  private readonly users = signal(0);
+  private readonly active = computed(() => this.users() > 0);
   private readonly ratioResource = httpResource<HouseholdRatioResponse>(() =>
     this.active() ? '/api/household-ratio' : undefined,
   );
@@ -69,11 +71,11 @@ export class HttpSharesStore extends SharesStore {
   }
 
   activate(): void {
-    this.active.set(true);
+    this.users.update((n) => n + 1);
   }
 
   deactivate(): void {
-    this.active.set(false);
+    this.users.update((n) => Math.max(0, n - 1));
   }
 
   setHouseholdRatio(entries: HouseholdRatioEntry[]): Observable<HouseholdRatioEntry[]> {

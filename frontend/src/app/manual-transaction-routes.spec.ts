@@ -72,9 +72,10 @@ describe('the manual transaction form over its page', () => {
   });
 
   const page = () => harness.routeNativeElement as HTMLElement;
+  // whenStable would wait for the reads that are still open, so let the effects and promises run.
   const settle = async () => {
     harness.detectChanges();
-    await harness.fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve));
     harness.detectChanges();
   };
   const emptyList = () =>

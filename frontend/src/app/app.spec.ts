@@ -18,6 +18,8 @@ import { FakeSettlementStore } from './stores/settlement.store.fake';
 import { SharesStore } from './stores/shares.store';
 import { FakeSharesStore } from './stores/shares.store.fake';
 import { BanksStore } from './stores/banks.store';
+import { TransactionsStore } from './stores/transactions.store';
+import { FakeTransactionsStore } from './stores/transactions.store.fake';
 import { ToastService } from './toast/toast.service';
 
 describe('App', () => {
@@ -25,10 +27,12 @@ describe('App', () => {
   const signedIn = { check: () => of(true), logout: () => of(undefined) };
 
   let overview: FakeOverviewStore;
+  let transactions: FakeTransactionsStore;
 
   beforeEach(() => {
     accounts = new FakeAccountsStore();
     overview = new FakeOverviewStore();
+    transactions = new FakeTransactionsStore();
     TestBed.configureTestingModule({
       imports: [App],
       providers: [
@@ -38,6 +42,7 @@ describe('App', () => {
         { provide: OverviewStore, useValue: overview },
         { provide: SettlementStore, useValue: new FakeSettlementStore() },
         { provide: SharesStore, useValue: new FakeSharesStore() },
+        { provide: TransactionsStore, useValue: transactions },
         provideRouter(routes),
         // Signed in; the guard and the login page have their own tests.
         { provide: AuthService, useValue: signedIn },
@@ -418,7 +423,8 @@ describe('App', () => {
     await harness.navigateByUrl('/transaktioner');
     expect(TestBed.inject(Router).url).toBe('/transaktioner');
     expect(title.getTitle()).toBe('Transaktioner – Bankapp');
-    expect(http.match((r) => r.url === '/api/transactions').length).toBeGreaterThan(0);
+    TestBed.tick();
+    expect(transactions.listRequests.length).toBeGreaterThan(0);
     expect(http.match((r) => r.url === '/api/accounts')).toHaveLength(0);
     http.match(() => true);
   });

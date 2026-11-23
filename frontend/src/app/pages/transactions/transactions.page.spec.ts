@@ -1,27 +1,41 @@
 import { of } from 'rxjs';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import {
   CATEGORY_PALETTE,
+  type AccountsResponse,
   type Category,
   type Transaction,
   type TransactionsResponse,
 } from '@bankapp/shared';
 import { LUCIDE_ICONS } from '../../category-icon/lucide-icons';
-import { TransactionsService } from '../../transactions.service';
+import { CategoriesService } from '../../categories.service';
+import { AccountsStore } from '../../stores/accounts.store';
+import { FakeAccountsStore } from '../../stores/accounts.store.fake';
+import { TransactionsStore } from '../../stores/transactions.store';
+import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
+import { EMPTY_FILTERS } from './transaction-filters';
 import { TransactionsPage } from './transactions.page';
 
 describe('TransactionsPage', () => {
+  let store: FakeTransactionsStore;
+  let accountsStore: FakeAccountsStore;
+  let categories: Partial<Category>[];
+
   beforeEach(() => {
+    categories = [];
+    store = new FakeTransactionsStore();
+    accountsStore = new FakeAccountsStore();
     TestBed.configureTestingModule({
       imports: [TransactionsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideRouter([]),
+        { provide: TransactionsStore, useValue: store },
+        { provide: AccountsStore, useValue: accountsStore },
+        { provide: CategoriesService, useValue: { list: () => of(categories) } },
+      ],
     });
   });
-
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   const transaction = (id: number, overrides: Partial<Transaction> = {}): Transaction => ({
     id,
@@ -47,16 +61,27 @@ describe('TransactionsPage', () => {
     sum: null,
   });
 
+  /** Says what the store has loaded for the list. */
+  function show(body: TransactionsResponse | 'error') {
+    if (body === 'error') {
+      store.listed.status.set('failed');
+      return;
+    }
+    store.listed.transactions.set(body.transactions);
+    store.listed.count.set(body.count);
+    store.listed.sum.set(body.sum);
+    store.listed.hasMore.set(body.nextCursor !== null);
+    store.listed.status.set('ready');
+  }
+
+  /** What the page last asked the store for. */
+  const lastRequest = () => store.listRequests.at(-1)!;
+
   async function render(body: TransactionsResponse | 'error') {
+    show(body);
     const fixture = TestBed.createComponent(TransactionsPage);
     await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    const request = http.expectOne((r) => r.url === '/api/transactions');
-    expect(request.request.params.has('before')).toBe(false);
-    if (body === 'error') request.error(new ProgressEvent('error'));
-    else request.flush(body);
-    await fixture.whenStable();
-    return { fixture, page: fixture.nativeElement as HTMLElement, http };
+    return { fixture, page: fixture.nativeElement as HTMLElement };
   }
 
   const rows = (page: HTMLElement) =>
@@ -177,38 +202,20 @@ describe('TransactionsPage', () => {
     ]);
   });
 
-  it('shows the list as it was left, without fetching, when coming back with the back button', async () => {
-    const service = TestBed.inject(TransactionsService);
-    service.listed = {
-      key: '',
-      transactions: [transaction(9)],
-      cursor: '2026-11-10:9',
-      count: 1,
-      sum: null,
-    };
+  it('asks the store to restore the list, not to load it afresh, when coming back with the back button', async () => {
     vi.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
       trigger: 'popstate',
     } as ReturnType<Router['currentNavigation']>);
 
-    const fixture = TestBed.createComponent(TransactionsPage);
-    await fixture.whenStable();
-    await fixture.whenStable();
+    await render(response([transaction(9)], '2026-11-10:9'));
 
-    const page = fixture.nativeElement as HTMLElement;
-    expect(rows(page).map((row) => row.text)).toEqual(['Köp 9']);
-    expect(page.querySelector('[data-more]')).not.toBeNull();
+    expect(lastRequest()).toEqual({ filters: EMPTY_FILTERS, restore: true });
   });
 
-  it('remembers what it loaded for the way back', async () => {
-    await render(response([transaction(1)], '2026-11-10:1'));
+  it('asks for the list afresh on any other visit', async () => {
+    await render(response([transaction(1)]));
 
-    expect(TestBed.inject(TransactionsService).listed).toEqual({
-      key: '',
-      transactions: [transaction(1)],
-      cursor: '2026-11-10:1',
-      count: 1,
-      sum: null,
-    });
+    expect(lastRequest()).toEqual({ filters: EMPTY_FILTERS, restore: false });
   });
 
   it('marks pending transactions as Reserverad and no others', async () => {
@@ -249,17 +256,19 @@ describe('TransactionsPage', () => {
   });
 
   describe('a long history', () => {
-    it('loads the next page on request, continuing a day already shown, until there are no more', async () => {
-      const { fixture, page, http } = await render(
+    it('offers the next page while there is one, and asks the store for it', async () => {
+      const { fixture, page } = await render(
         response([transaction(3, { date: '2026-11-10' }), transaction(2)], '2026-11-10:2'),
       );
-      expect(rows(page)).toHaveLength(2);
 
       (page.querySelector('button[data-more]') as HTMLButtonElement).click();
-      const next = http.expectOne(
-        (r) => r.url === '/api/transactions' && r.params.get('before') === '2026-11-10:2',
-      );
-      next.flush(response([transaction(1, { date: '2026-11-10' })]));
+      expect(store.calls).toContainEqual({ method: 'loadMore', args: [] });
+
+      store.listed.transactions.update((shown) => [
+        ...shown,
+        transaction(1, { date: '2026-11-10' }),
+      ]);
+      store.listed.hasMore.set(false);
       await fixture.whenStable();
 
       expect(rows(page).map((row) => row.text)).toEqual(['Köp 3', 'Köp 2', 'Köp 1']);
@@ -267,13 +276,17 @@ describe('TransactionsPage', () => {
       expect(page.querySelector('button[data-more]')).toBeNull();
     });
 
-    it('keeps what is shown and offers a retry when the next page fails', async () => {
-      const { fixture, page, http } = await render(response([transaction(1)], '2026-11-10:1'));
+    it('disables the button while the next page is on its way', async () => {
+      const { fixture, page } = await render(response([transaction(1)], '2026-11-10:1'));
+      store.listed.loadingMore.set(true);
+      await fixture.whenStable();
 
-      (page.querySelector('button[data-more]') as HTMLButtonElement).click();
-      http
-        .expectOne((r) => r.params.get('before') === '2026-11-10:1')
-        .error(new ProgressEvent('error'));
+      expect((page.querySelector('button[data-more]') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('keeps what is shown and offers a retry when the next page fails', async () => {
+      const { fixture, page } = await render(response([transaction(1)], '2026-11-10:1'));
+      store.listed.moreFailed.set(true);
       await fixture.whenStable();
 
       expect(rows(page)).toHaveLength(1);
@@ -290,8 +303,7 @@ describe('TransactionsPage', () => {
         queryParamMap: of(convertToParamMap({})),
       },
     });
-    const { fixture, http } = await render(response([transaction(1)]));
-    http.match(() => true);
+    const { fixture } = await render(response([transaction(1)]));
 
     expect((fixture.nativeElement as HTMLElement).classList.contains('z-40')).toBe(true);
 
@@ -433,12 +445,18 @@ describe('TransactionsPage', () => {
     });
   });
   describe('search and filters', () => {
-    const lookups = (
-      http: HttpTestingController,
-      accounts: { id: number; name: string; hidden?: boolean }[] = [],
-      categories: Partial<Category>[] = [],
-    ) => {
-      http.expectOne('/api/accounts').flush({
+    const food: Partial<Category> = {
+      id: 4,
+      name: 'Mat & Dryck',
+      colour: 'green',
+      icon: 'shopping-basket',
+      subcategories: [],
+    };
+
+    const accountsResponse = (
+      accounts: { id: number; name: string; hidden?: boolean }[],
+    ): AccountsResponse =>
+      ({
         banks: [
           {
             bank: 'Swedbank',
@@ -451,31 +469,18 @@ describe('TransactionsPage', () => {
         removedBanks: [],
         syncing: null,
         lastSync: null,
-      });
-      http.expectOne('/api/categories').flush({ categories });
-    };
-
-    const food: Partial<Category> = {
-      id: 4,
-      name: 'Mat & Dryck',
-      colour: 'green',
-      icon: 'shopping-basket',
-      subcategories: [],
-    };
-
-    const listRequest = (http: HttpTestingController) =>
-      http.expectOne((r) => r.url === '/api/transactions');
+      }) as unknown as AccountsResponse;
 
     async function visit(query: Record<string, string>, body = response([transaction(1)])) {
+      show(body);
       await TestBed.inject(Router).navigate([], { queryParams: query });
       const fixture = TestBed.createComponent(TransactionsPage);
       await fixture.whenStable();
-      const http = TestBed.inject(HttpTestingController);
-      return { fixture, http, page: fixture.nativeElement as HTMLElement, body };
+      return { fixture, page: fixture.nativeElement as HTMLElement };
     }
 
-    it('sends the filters in the URL to the server', async () => {
-      const { fixture, http, body } = await visit({
+    it('asks the store for the filters in the URL', async () => {
+      await visit({
         q: 'ica',
         from: '2026-11-01',
         to: '2026-11-30',
@@ -485,37 +490,30 @@ describe('TransactionsPage', () => {
         min: '100',
         max: '500',
       });
-      const request = listRequest(http);
-      expect(
-        Object.fromEntries(
-          request.request.params.keys().map((k) => [k, request.request.params.get(k)]),
-        ),
-      ).toEqual({
+
+      expect(lastRequest().filters).toEqual({
+        ...EMPTY_FILTERS,
         q: 'ica',
         from: '2026-11-01',
         to: '2026-11-30',
-        accounts: '3,manual',
-        categories: '4,none',
+        accounts: ['3', 'manual'],
+        categories: ['4', 'none'],
         kind: 'out',
         min: '100',
         max: '500',
       });
-      request.flush(body);
-      lookups(http, [{ id: 3, name: 'Coop Mastercard' }], [food]);
-      await fixture.whenStable();
     });
 
     it('shows each active filter as a removable chip, and a count on the Filter button', async () => {
-      const { fixture, http, page } = await visit({
+      categories = [food];
+      accountsStore.accounts.set(accountsResponse([{ id: 3, name: 'Coop Mastercard' }]));
+      const { fixture, page } = await visit({
         accounts: '3',
         categories: '4',
         kind: 'out',
         min: '100',
         max: '500',
       });
-      listRequest(http).flush(response([transaction(1)]));
-      lookups(http, [{ id: 3, name: 'Coop Mastercard' }], [food]);
-      await fixture.whenStable();
 
       const chips = Array.from(page.querySelectorAll('[data-active-chip]'));
       expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
@@ -529,23 +527,41 @@ describe('TransactionsPage', () => {
 
       (chips[0] as HTMLButtonElement).click();
       await fixture.whenStable();
-      const again = listRequest(http);
-      expect(again.request.params.has('kind')).toBe(false);
-      expect(again.request.params.get('categories')).toBe('4');
-      again.flush(response([transaction(1)]));
-      await fixture.whenStable();
+      expect(lastRequest().filters.kind).toBe('');
+      expect(lastRequest().filters.categories).toEqual(['4']);
       expect(page.querySelector('[data-filter-count]')?.textContent?.trim()).toBe('3');
     });
 
-    it('shows how many transactions match and what they add up to', async () => {
-      const { fixture, http, page } = await visit({ kind: 'out' });
-      listRequest(http).flush({
-        transactions: [transaction(1)],
-        nextCursor: null,
-        count: 18,
-        sum: { amount: -13274, currency: 'SEK' },
-      });
+    it('does not offer hidden or savings accounts as filters', async () => {
+      accountsStore.accounts.set(
+        accountsResponse([
+          { id: 3, name: 'Coop Mastercard' },
+          { id: 5, name: 'Dolt', hidden: true },
+        ]),
+      );
+      const { fixture, page } = await visit({});
+
+      (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
       await fixture.whenStable();
+
+      const panel = document.querySelector('[data-filter-panel]') as HTMLElement;
+      expect(
+        Array.from(panel.querySelectorAll('[data-section="konton"] label')).map((l) =>
+          l.textContent?.trim(),
+        ),
+      ).toEqual(['Coop Mastercard', 'Manuell']);
+    });
+
+    it('shows how many transactions match and what they add up to', async () => {
+      const { page } = await visit(
+        { kind: 'out' },
+        {
+          transactions: [transaction(1)],
+          nextCursor: null,
+          count: 18,
+          sum: { amount: -13274, currency: 'SEK' },
+        },
+      );
 
       expect(page.querySelector('[data-result]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
         '18 transaktioner · −13 274,00 kr',
@@ -553,25 +569,21 @@ describe('TransactionsPage', () => {
     });
 
     it('says so when nothing matches, and clears the filters', async () => {
-      const { fixture, http, page } = await visit({ q: 'xyz' });
-      listRequest(http).flush(response([]));
-      await fixture.whenStable();
+      const { fixture, page } = await visit({ q: 'xyz' }, response([]));
 
       expect(page.querySelector('[data-no-results]')?.textContent).toContain('Inga transaktioner');
       (page.querySelector('[data-clear-filters]') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      const all = listRequest(http);
-      expect(all.request.params.keys()).toEqual([]);
-      all.flush(response([transaction(1)]));
+      expect(lastRequest().filters).toEqual(EMPTY_FILTERS);
+      show(response([transaction(1)]));
       await fixture.whenStable();
       expect(page.querySelector('[data-no-results]')).toBeNull();
     });
 
     it('searches after a pause in typing, and keeps the search in the URL', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([transaction(1)]));
-      await fixture.whenStable();
+      const { fixture, page } = await visit({});
+      const asked = store.listRequests.length;
       const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
       const input = page.querySelector('[data-search]') as HTMLInputElement;
@@ -581,26 +593,21 @@ describe('TransactionsPage', () => {
       input.value = 'ica';
       input.dispatchEvent(new Event('input'));
       await pause(100);
-      http.expectNone('/api/transactions');
+      expect(store.listRequests).toHaveLength(asked);
       await pause(250);
       await fixture.whenStable();
 
-      const request = listRequest(http);
-      expect(request.request.params.get('q')).toBe('ica');
-      request.flush(response([transaction(1)]));
+      expect(lastRequest().filters.q).toBe('ica');
       expect(TestBed.inject(Router).url).toBe('/?q=ica');
-      await fixture.whenStable();
 
       (page.querySelector('[data-clear-search]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      listRequest(http).flush(response([transaction(1)]));
+      expect(lastRequest().filters.q).toBe('');
       expect(TestBed.inject(Router).url).toBe('/');
     });
 
     it('offers the quick periods', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([transaction(1)]));
-      await fixture.whenStable();
+      const { fixture, page } = await visit({});
 
       expect(
         Array.from(page.querySelectorAll('[data-period]')).map((c) => c.textContent?.trim()),
@@ -615,73 +622,51 @@ describe('TransactionsPage', () => {
 
       (page.querySelector('[data-period="last7"]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      const request = listRequest(http);
-      expect(request.request.params.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(request.request.params.has('to')).toBe(false);
-      request.flush(response([transaction(1)]));
+      expect(lastRequest().filters.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(lastRequest().filters.to).toBe('');
     });
 
     it('lifts the page above the bottom tab bar (z-40 over z-30) while the filter panel is open', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([transaction(1)]));
-      await fixture.whenStable();
+      const { fixture, page } = await visit({});
       const raised = () => (fixture.nativeElement as HTMLElement).classList.contains('z-40');
       expect(raised()).toBe(false);
 
       (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
-      await fixture.whenStable();
-      lookups(http);
       await fixture.whenStable();
 
       expect(raised()).toBe(true);
     });
 
     it('opens a panel whose changes narrow the list', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([transaction(1)]));
-      await fixture.whenStable();
+      categories = [food];
+      accountsStore.accounts.set(accountsResponse([{ id: 3, name: 'Coop Mastercard' }]));
+      const { fixture, page } = await visit({});
 
       (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      lookups(
-        http,
-        [
-          { id: 3, name: 'Coop Mastercard' },
-          { id: 5, name: 'Dolt', hidden: true },
-        ],
-        [food],
-      );
-      await fixture.whenStable();
 
       const panel = document.querySelector('[data-filter-panel]') as HTMLElement;
-      expect(
-        Array.from(panel.querySelectorAll('[data-section="konton"] label')).map((l) =>
-          l.textContent?.trim(),
-        ),
-      ).toEqual(['Coop Mastercard', 'Manuell']);
       expect(panel.querySelector('[data-category="none"]')?.textContent).toContain(
         'Okategoriserad',
       );
 
       (panel.querySelector('[data-kind="out"]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      listRequest(http).flush(response([transaction(1)]));
       (panel.querySelector('[data-account="3"]') as HTMLInputElement).click();
       await fixture.whenStable();
-      listRequest(http).flush(response([transaction(1)]));
       (panel.querySelector('[data-category="4"]') as HTMLButtonElement).click();
       await fixture.whenStable();
-      listRequest(http).flush(response([transaction(1)]));
       (panel.querySelector('[data-amount-preset]:nth-of-type(2)') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      const request = listRequest(http);
-      expect(request.request.params.get('kind')).toBe('out');
-      expect(request.request.params.get('accounts')).toBe('3');
-      expect(request.request.params.get('categories')).toBe('4');
-      expect(request.request.params.get('min')).toBe('100');
-      expect(request.request.params.get('max')).toBe('500');
-      request.flush({ transactions: [transaction(1)], nextCursor: null, count: 7, sum: null });
+      expect(lastRequest().filters).toMatchObject({
+        kind: 'out',
+        accounts: ['3'],
+        categories: ['4'],
+        min: '100',
+        max: '500',
+      });
+      show({ transactions: [transaction(1)], nextCursor: null, count: 7, sum: null });
       await fixture.whenStable();
 
       expect(panel.querySelector('[data-show]')?.textContent?.trim()).toBe('Visa 7 transaktioner');
@@ -691,11 +676,8 @@ describe('TransactionsPage', () => {
     });
 
     it('shows date inputs when Välj datum is picked in the panel', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([transaction(1)]));
+      const { fixture, page } = await visit({});
       (page.querySelector('[data-filter-button]') as HTMLButtonElement).click();
-      await fixture.whenStable();
-      lookups(http);
       await fixture.whenStable();
       const panel = document.querySelector('[data-filter-panel]') as HTMLElement;
       expect(panel.querySelector('[data-from]')).toBeNull();
@@ -707,44 +689,11 @@ describe('TransactionsPage', () => {
       from.dispatchEvent(new Event('change'));
       await fixture.whenStable();
 
-      expect(listRequest(http).request.params.get('from')).toBe('2026-11-01');
-    });
-
-    it('pages with the filters', async () => {
-      const { fixture, http, page } = await visit({ q: 'ica' });
-      listRequest(http).flush(response([transaction(2)], '2026-11-10:2'));
-      await fixture.whenStable();
-
-      (page.querySelector('button[data-more]') as HTMLButtonElement).click();
-      const next = http.expectOne((r) => r.params.get('before') === '2026-11-10:2');
-      expect(next.request.params.get('q')).toBe('ica');
-      next.flush(response([transaction(1)]));
-      await fixture.whenStable();
-    });
-
-    it('only shows the list as it was left for the same filters', async () => {
-      const service = TestBed.inject(TransactionsService);
-      service.listed = {
-        key: 'q=other',
-        transactions: [transaction(9)],
-        cursor: null,
-        count: 1,
-        sum: null,
-      };
-      vi.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
-        trigger: 'popstate',
-      } as ReturnType<Router['currentNavigation']>);
-      const { fixture, http, page } = await visit({ q: 'ica' });
-
-      listRequest(http).flush(response([transaction(1)]));
-      await fixture.whenStable();
-      expect(rows(page).map((row) => row.text)).toEqual(['Köp 1']);
+      expect(lastRequest().filters.from).toBe('2026-11-01');
     });
 
     it('links to the manual transaction form', async () => {
-      const { fixture, http, page } = await visit({});
-      listRequest(http).flush(response([]));
-      await fixture.whenStable();
+      const { page } = await visit({}, response([]));
 
       expect(page.querySelector('[data-add]')?.getAttribute('href')).toBe('/transaktioner/ny');
     });
