@@ -12,6 +12,9 @@ import {
 } from '@bankapp/shared';
 import { type Observable, type Subscription, concat, last } from 'rxjs';
 import { Callout } from '../../callout/callout';
+import { Confirm } from '../../confirm/confirm';
+import { Menu, MenuItem } from '../../menu/menu';
+import { Sheet } from '../../sheet/sheet';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Icon } from '../../icon/icon';
 import { CategoriesService } from '../../categories.service';
@@ -75,8 +78,12 @@ const PART_COLOURS = [
     NgTemplateOutlet,
     RouterLink,
     Callout,
+    Confirm,
     Disclosure,
     Icon,
+    Menu,
+    MenuItem,
+    Sheet,
     Skeleton,
   ],
   template: `
@@ -323,7 +330,7 @@ const PART_COLOURS = [
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="card-title">Lånedelar</h2>
           <div class="flex flex-wrap gap-2">
-            @if (openParts().length > 0 && panel()?.kind !== 'entry') {
+            @if (openParts().length > 0) {
               <button
                 type="button"
                 data-new-entry
@@ -333,89 +340,17 @@ const PART_COLOURS = [
                 Ny bolånenotering
               </button>
             }
-            @if (panel()?.kind !== 'add-part') {
-              <button
-                type="button"
-                data-add-part
-                class="btn btn-sm btn-secondary"
-                (click)="startAddPart()"
-              >
-                <app-icon name="plus" [size]="16" />
-                {{ parts().length === 0 ? 'Lägg till bolån' : 'Lägg till lånedel' }}
-              </button>
-            }
+            <button
+              type="button"
+              data-add-part
+              class="btn btn-sm btn-secondary"
+              (click)="startAddPart()"
+            >
+              <app-icon name="plus" [size]="16" />
+              {{ parts().length === 0 ? 'Lägg till bolån' : 'Lägg till lånedel' }}
+            </button>
           </div>
         </div>
-
-        @if (panel()?.kind === 'add-part') {
-          <form
-            data-part-form
-            class="flex flex-col gap-4"
-            (submit)="$event.preventDefault(); addPart()"
-          >
-            <div class="grid gap-3 sm:grid-cols-2">
-              <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
-                Namn
-                <span class="field"
-                  ><input
-                    data-name
-                    class="field-control"
-                    placeholder="Del 1 – 3 mån"
-                    [value]="name()"
-                    (input)="name.set(value($event))"
-                /></span>
-              </label>
-              <label class="flex flex-col gap-1 text-sm text-muted">
-                Startdatum
-                <app-date-field [value]="date()" (valueChange)="date.set($event)" />
-              </label>
-              <label class="flex flex-col gap-1 text-sm text-muted">
-                Kvarvarande skuld
-                <span class="field">
-                  <input
-                    data-debt
-                    type="text"
-                    inputmode="decimal"
-                    class="field-control"
-                    [value]="debt()"
-                    (input)="debt.set(value($event))"
-                  />
-                  <span class="field-suffix">kr</span>
-                </span>
-              </label>
-              <label class="flex flex-col gap-1 text-sm text-muted">
-                Ränta
-                <span class="field">
-                  <input
-                    data-rate
-                    type="text"
-                    inputmode="decimal"
-                    class="field-control"
-                    [value]="rate()"
-                    (input)="rate.set(value($event))"
-                  />
-                  <span class="field-suffix">%</span>
-                </span>
-              </label>
-              <label class="flex flex-col gap-1 text-sm text-muted">
-                Amortering per månad
-                <span class="field">
-                  <input
-                    data-amortisation
-                    type="text"
-                    inputmode="decimal"
-                    class="field-control"
-                    [value]="amount()"
-                    (input)="amount.set(value($event))"
-                  />
-                  <span class="field-suffix">kr</span>
-                </span>
-              </label>
-              <ng-container *ngTemplateOutlet="days" />
-            </div>
-            <ng-container *ngTemplateOutlet="formActions; context: { save: 'Spara lånedel' }" />
-          </form>
-        }
 
         <ul class="flex flex-col divide-y divide-line">
           @for (part of openParts(); track part.id) {
@@ -472,167 +407,42 @@ const PART_COLOURS = [
                       class="mt-1 flex flex-wrap items-center gap-3 rounded-[10px] bg-surface-2 px-3 py-2 text-sm"
                     >
                       <span>Dags att ange ny ränta för {{ part.name }}</span>
-                      @if (newRateId() !== part.id) {
-                        <button
-                          type="button"
-                          data-new-rate
-                          class="btn btn-sm btn-secondary"
-                          (click)="startNewRate(part)"
-                        >
-                          Ny ränta
-                        </button>
-                      }
+                      <button
+                        type="button"
+                        data-new-rate
+                        class="btn btn-sm btn-secondary"
+                        (click)="startNewRate(part)"
+                      >
+                        Ny ränta
+                      </button>
                     </div>
                   }
                 </div>
-                @if (!part.endedOn && editingId() !== part.id) {
-                  <button
-                    type="button"
-                    data-edit
-                    class="btn btn-sm btn-secondary flex-none"
-                    (click)="startEdit(part)"
-                  >
-                    Ändra
-                  </button>
+                @if (!part.endedOn) {
+                  <app-menu [label]="'Åtgärder för ' + part.name">
+                    <button appMenuItem type="button" data-edit (click)="startEdit(part)">
+                      Ändra
+                    </button>
+                    <button
+                      appMenuItem
+                      type="button"
+                      data-new-rate-item
+                      (click)="startNewRate(part)"
+                    >
+                      Ny ränta
+                    </button>
+                    <button
+                      appMenuItem
+                      type="button"
+                      data-end
+                      [danger]="true"
+                      (click)="startEnd(part)"
+                    >
+                      Avsluta lånedel…
+                    </button>
+                  </app-menu>
                 }
               </div>
-
-              @if (newRateId() === part.id) {
-                <form
-                  data-new-rate-form
-                  class="flex flex-col gap-3"
-                  (submit)="$event.preventDefault(); saveNewRate(part)"
-                >
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Ny ränta
-                      <span class="field">
-                        <input
-                          data-rate
-                          type="text"
-                          inputmode="decimal"
-                          class="field-control"
-                          [value]="rate()"
-                          (input)="rate.set(value($event))"
-                        />
-                        <span class="field-suffix">%</span>
-                      </span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Gäller från
-                      <app-date-field
-                        data-rate-from
-                        [value]="rateFrom()"
-                        (valueChange)="rateFrom.set($event)"
-                      />
-                    </label>
-                  </div>
-                  <p class="text-xs text-muted">Samma ränta som förut går också bra.</p>
-                  <ng-container *ngTemplateOutlet="formActions; context: { save: 'Spara ränta' }" />
-                </form>
-              }
-
-              @if (editingId() === part.id) {
-                <form
-                  data-part-panel
-                  class="flex flex-col gap-4"
-                  (submit)="$event.preventDefault(); saveEdit(part)"
-                >
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
-                      Namn
-                      <span class="field"
-                        ><input
-                          data-name
-                          class="field-control"
-                          [value]="name()"
-                          (input)="name.set(value($event))"
-                      /></span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Ränta
-                      <span class="field">
-                        <input
-                          data-rate
-                          type="text"
-                          inputmode="decimal"
-                          class="field-control"
-                          [value]="rate()"
-                          (input)="rate.set(value($event)); rateTouched.set(true)"
-                        />
-                        <span class="field-suffix">%</span>
-                      </span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Gäller från
-                      <app-date-field
-                        data-rate-from
-                        [value]="rateFrom()"
-                        (valueChange)="rateFrom.set($event); rateTouched.set(true)"
-                      />
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Amortering per månad
-                      <span class="field">
-                        <input
-                          data-amortisation
-                          type="text"
-                          inputmode="decimal"
-                          class="field-control"
-                          [value]="amount()"
-                          (input)="amount.set(value($event)); amountTouched.set(true)"
-                        />
-                        <span class="field-suffix">kr</span>
-                      </span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Gäller från
-                      <app-date-field
-                        data-amortisation-from
-                        [value]="amountFrom()"
-                        (valueChange)="amountFrom.set($event); amountTouched.set(true)"
-                      />
-                    </label>
-                    <ng-container *ngTemplateOutlet="days" />
-                  </div>
-                  <p class="text-xs text-muted">
-                    Ränta och amortering sparas som en ny ändring bara om du rör dem. Samma ränta
-                    igen noteras också.
-                  </p>
-                  @if (ending()) {
-                    <div
-                      data-end-row
-                      class="flex flex-col gap-2 rounded-[10px] border border-line-strong p-3"
-                    >
-                      <label class="flex flex-col gap-1 text-sm text-muted">
-                        Avslutad den
-                        <app-date-field [value]="endDate()" (valueChange)="endDate.set($event)" />
-                      </label>
-                      <div class="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          data-confirm-end
-                          class="btn btn-sm btn-secondary"
-                          [disabled]="busy()"
-                          (click)="endPart(part)"
-                        >
-                          Avsluta lånedelen
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-sm btn-ghost"
-                          (click)="ending.set(false)"
-                        >
-                          Behåll
-                        </button>
-                      </div>
-                    </div>
-                  }
-                  <ng-container
-                    *ngTemplateOutlet="formActions; context: { save: 'Spara', end: true }"
-                  />
-                </form>
-              }
             </li>
           }
         </ul>
@@ -660,41 +470,6 @@ const PART_COLOURS = [
         }
       </section>
 
-      @if (panel()?.kind === 'entry') {
-        <section class="card flex flex-col gap-4 p-4 sm:p-5">
-          <h2 class="card-title">Bolånenotering</h2>
-          <form
-            data-entry-form
-            class="flex flex-col gap-4"
-            (submit)="$event.preventDefault(); saveEntry()"
-          >
-            <div class="grid gap-3 sm:grid-cols-2">
-              <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
-                Datum
-                <app-date-field data-entry-date [value]="date()" (valueChange)="date.set($event)" />
-              </label>
-              @for (part of entryParts(); track part.id) {
-                <label class="flex flex-col gap-1 text-sm text-muted">
-                  {{ part.name }}
-                  <span class="field">
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      class="field-control"
-                      [attr.data-entry-debt]="part.id"
-                      [value]="debts()[part.id] ?? ''"
-                      (input)="setDebt(part.id, value($event))"
-                    />
-                    <span class="field-suffix">kr</span>
-                  </span>
-                </label>
-              }
-            </div>
-            <ng-container *ngTemplateOutlet="formActions; context: { save: 'Spara notering' }" />
-          </form>
-        </section>
-      }
-
       @if (entries().length > 0) {
         <section class="card flex flex-col gap-3 p-4 sm:p-5">
           <h2 class="card-title">Noteringar</h2>
@@ -710,31 +485,312 @@ const PART_COLOURS = [
                     </span>
                   }
                 </span>
-                <span class="flex flex-none gap-1">
-                  <button
-                    type="button"
-                    data-edit-entry
-                    class="btn btn-sm btn-ghost"
-                    (click)="startEntry(entry)"
-                  >
+                <app-menu [label]="'Åtgärder för noteringen ' + entry.date">
+                  <button appMenuItem type="button" data-edit-entry (click)="startEntry(entry)">
                     Ändra
                   </button>
                   <button
+                    appMenuItem
                     type="button"
                     data-delete-entry
-                    class="btn btn-sm btn-danger-soft"
+                    [danger]="true"
                     [disabled]="busy()"
-                    (click)="deleteEntry(entry)"
+                    (click)="deletingEntry.set(entry)"
                   >
-                    Ta bort
+                    Ta bort…
                   </button>
-                </span>
+                </app-menu>
               </li>
             }
           </ul>
         </section>
       }
     </app-page>
+
+    @if (panel()?.kind === 'add-part') {
+      <app-sheet
+        data-part-form
+        [heading]="parts().length === 0 ? 'Lägg till bolån' : 'Lägg till lånedel'"
+        [dismissible]="!busy()"
+        (closed)="cancel()"
+        (submitted)="addPart()"
+      >
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
+            Namn
+            <span class="field"
+              ><input
+                data-name
+                data-autofocus
+                class="field-control"
+                placeholder="Del 1 – 3 mån"
+                [value]="name()"
+                (input)="name.set(value($event))"
+            /></span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Startdatum
+            <app-date-field [value]="date()" (valueChange)="date.set($event)" />
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Kvarvarande skuld
+            <span class="field">
+              <input
+                data-debt
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="debt()"
+                (input)="debt.set(value($event))"
+              />
+              <span class="field-suffix">kr</span>
+            </span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Ränta
+            <span class="field">
+              <input
+                data-rate
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="rate()"
+                (input)="rate.set(value($event))"
+              />
+              <span class="field-suffix">%</span>
+            </span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Amortering per månad
+            <span class="field">
+              <input
+                data-amortisation
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="amount()"
+                (input)="amount.set(value($event))"
+              />
+              <span class="field-suffix">kr</span>
+            </span>
+          </label>
+          <ng-container *ngTemplateOutlet="days" />
+        </div>
+        @if (formError(); as message) {
+          <app-callout data-form-error variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
+          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+            Spara lånedel
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (newRatePart(); as part) {
+      <app-sheet
+        data-new-rate-form
+        [heading]="'Ny ränta för ' + part.name"
+        [dismissible]="!busy()"
+        (closed)="cancel()"
+        (submitted)="saveNewRate(part)"
+      >
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Ny ränta
+            <span class="field">
+              <input
+                data-rate
+                data-autofocus
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="rate()"
+                (input)="rate.set(value($event))"
+              />
+              <span class="field-suffix">%</span>
+            </span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Gäller från
+            <app-date-field
+              data-rate-from
+              [value]="rateFrom()"
+              (valueChange)="rateFrom.set($event)"
+            />
+          </label>
+        </div>
+        <p class="text-xs text-muted">Samma ränta som förut går också bra.</p>
+        @if (formError(); as message) {
+          <app-callout data-form-error variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
+          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+            Spara ränta
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (editingPart(); as part) {
+      <app-sheet
+        data-part-panel
+        [heading]="'Ändra ' + part.name"
+        [dismissible]="!busy()"
+        (closed)="cancel()"
+        (submitted)="saveEdit(part)"
+      >
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
+            Namn
+            <span class="field"
+              ><input
+                data-name
+                data-autofocus
+                class="field-control"
+                [value]="name()"
+                (input)="name.set(value($event))"
+            /></span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Ränta
+            <span class="field">
+              <input
+                data-rate
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="rate()"
+                (input)="rate.set(value($event)); rateTouched.set(true)"
+              />
+              <span class="field-suffix">%</span>
+            </span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Gäller från
+            <app-date-field
+              data-rate-from
+              [value]="rateFrom()"
+              (valueChange)="rateFrom.set($event); rateTouched.set(true)"
+            />
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Amortering per månad
+            <span class="field">
+              <input
+                data-amortisation
+                type="text"
+                inputmode="decimal"
+                class="field-control"
+                [value]="amount()"
+                (input)="amount.set(value($event)); amountTouched.set(true)"
+              />
+              <span class="field-suffix">kr</span>
+            </span>
+          </label>
+          <label class="flex flex-col gap-1 text-sm text-muted">
+            Gäller från
+            <app-date-field
+              data-amortisation-from
+              [value]="amountFrom()"
+              (valueChange)="amountFrom.set($event); amountTouched.set(true)"
+            />
+          </label>
+          <ng-container *ngTemplateOutlet="days" />
+        </div>
+        <p class="text-xs text-muted">
+          Ränta och amortering sparas som en ny ändring bara om du rör dem. Samma ränta igen noteras
+          också.
+        </p>
+        @if (formError(); as message) {
+          <app-callout data-form-error variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
+          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+            Spara
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (panel(); as open) {
+      @if (open.kind === 'entry') {
+        <app-sheet
+          data-entry-form
+          [heading]="open.entry ? 'Ändra bolånenotering' : 'Ny bolånenotering'"
+          [dismissible]="!busy()"
+          (closed)="cancel()"
+          (submitted)="saveEntry()"
+        >
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="flex flex-col gap-1 text-sm text-muted sm:col-span-2">
+              Datum
+              <app-date-field data-entry-date [value]="date()" (valueChange)="date.set($event)" />
+            </label>
+            @for (part of entryParts(); track part.id) {
+              <label class="flex flex-col gap-1 text-sm text-muted">
+                {{ part.name }}
+                <span class="field">
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    class="field-control"
+                    [attr.data-entry-debt]="part.id"
+                    [value]="debts()[part.id] ?? ''"
+                    (input)="setDebt(part.id, value($event))"
+                  />
+                  <span class="field-suffix">kr</span>
+                </span>
+              </label>
+            }
+          </div>
+          @if (formError(); as message) {
+            <app-callout data-form-error variant="danger">{{ message }}</app-callout>
+          }
+          <ng-container sheet-footer>
+            <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">
+              Avbryt
+            </button>
+            <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+              Spara notering
+            </button>
+          </ng-container>
+        </app-sheet>
+      }
+    }
+
+    @if (deletingEntry(); as entry) {
+      <app-confirm
+        heading="Ta bort bolånenoteringen?"
+        [message]="'Noteringen ' + entry.date + ' tas bort.'"
+        confirmLabel="Ta bort"
+        [busy]="busy()"
+        (confirmed)="deleteEntry(entry)"
+        (cancelled)="deletingEntry.set(null)"
+      />
+    }
+
+    @if (endingPart(); as part) {
+      <app-confirm
+        [heading]="'Avsluta ' + part.name + '?'"
+        message="Lånedelen räknas inte längre med i skulden och ränteberäkningen från och med dagen den avslutades."
+        confirmLabel="Avsluta lånedelen"
+        [busy]="busy()"
+        (confirmed)="endPart(part)"
+        (cancelled)="endingPart.set(null)"
+      >
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Avslutad den
+          <app-date-field data-end-date [value]="endDate()" (valueChange)="endDate.set($event)" />
+        </label>
+        @if (formError(); as message) {
+          <app-callout data-form-error variant="danger">{{ message }}</app-callout>
+        }
+      </app-confirm>
+    }
 
     <ng-template #days>
       <label class="flex flex-col gap-1 text-sm text-muted">
@@ -777,23 +833,6 @@ const PART_COLOURS = [
           <span class="field-suffix">mån</span>
         </span>
       </label>
-    </ng-template>
-
-    <ng-template #formActions let-save="save" let-end="end">
-      @if (formError(); as message) {
-        <app-callout data-form-error variant="danger">{{ message }}</app-callout>
-      }
-      <div class="flex flex-wrap items-center gap-2">
-        <button type="submit" data-save class="btn btn-primary" [disabled]="busy()">
-          {{ save }}
-        </button>
-        <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
-        @if (end && !ending()) {
-          <button type="button" data-end class="btn btn-ghost ml-auto" (click)="ending.set(true)">
-            Avsluta lånedel…
-          </button>
-        }
-      </div>
     </ng-template>
   `,
 })
@@ -920,7 +959,16 @@ export class BolanPage {
   protected readonly name = signal('');
   protected readonly date = signal(today());
   protected readonly editingId = signal<number | null>(null);
-  protected readonly ending = signal(false);
+  /** The part the owner is ending, awaiting confirmation with a date. */
+  protected readonly endingPart = signal<LoanPart | null>(null);
+  /** The entry the owner is removing, awaiting confirmation. */
+  protected readonly deletingEntry = signal<MortgageEntry | null>(null);
+  protected readonly newRatePart = computed(
+    () => this.parts().find((part) => part.id === this.newRateId()) ?? null,
+  );
+  protected readonly editingPart = computed(
+    () => this.parts().find((part) => part.id === this.editingId()) ?? null,
+  );
   protected readonly endDate = signal(today());
   protected readonly rateFrom = signal(today());
   protected readonly amountFrom = signal(today());
@@ -1147,6 +1195,11 @@ export class BolanPage {
     this.submit(concat(...calls).pipe(last()));
   }
 
+  protected startEnd(part: LoanPart): void {
+    this.reset();
+    this.endingPart.set(part);
+  }
+
   protected endPart(part: LoanPart): void {
     if (this.endDate() === '' || this.endDate() > today()) {
       return this.formError.set('Ange ett datum som inte ligger i framtiden.');
@@ -1178,17 +1231,18 @@ export class BolanPage {
   }
 
   protected deleteEntry(entry: MortgageEntry): void {
-    if (!confirm(`Ta bort bolånenoteringen ${entry.date}?`)) return;
     this.busy.set(true);
     this.failed.set(null);
     this.service.deleteEntry(entry.id).subscribe({
       next: (mortgage) => {
         this.busy.set(false);
+        this.deletingEntry.set(null);
         this.mortgage.set(mortgage);
         this.loadFigures();
       },
       error: () => {
         this.busy.set(false);
+        this.deletingEntry.set(null);
         this.failed.set('Noteringen kunde inte tas bort. Försök igen senare.');
       },
     });
@@ -1218,7 +1272,8 @@ export class BolanPage {
     this.panel.set(null);
     this.editingId.set(null);
     this.newRateId.set(null);
-    this.ending.set(false);
+    this.endingPart.set(null);
+    this.deletingEntry.set(null);
     this.endDate.set(today());
     this.rateFrom.set(today());
     this.amountFrom.set(today());
@@ -1245,7 +1300,8 @@ export class BolanPage {
         this.panel.set(null);
         this.editingId.set(null);
         this.newRateId.set(null);
-        this.ending.set(false);
+        this.endingPart.set(null);
+        this.deletingEntry.set(null);
       },
       error: (error: unknown) => {
         this.busy.set(false);

@@ -98,7 +98,8 @@ describe('BolanPage', () => {
     http.expectOne(FIGURES_URL).flush(figures);
     http.expectOne('/api/categories').flush({ categories: CATEGORIES });
     await fixture.whenStable();
-    const root = fixture.nativeElement as HTMLElement;
+    // Sheets and confirmations open in <body>, outside the page.
+    const root = document.body;
     const click = async (selector: string) => {
       root.querySelector<HTMLElement>(selector)!.click();
       await fixture.whenStable();
@@ -109,7 +110,9 @@ describe('BolanPage', () => {
       input.dispatchEvent(new Event('input'));
       await fixture.whenStable();
     };
-    return { fixture, http, root, click, type };
+    /** Opens the ⋯ menu of the first element matching `scope`. */
+    const openMenu = (scope: string) => click(`${scope} [data-menu-trigger]`);
+    return { fixture, http, root, click, type, openMenu };
   }
 
   it('shows each part with its rate, amortisation and next days', async () => {
@@ -151,14 +154,21 @@ describe('BolanPage', () => {
     http.expectNone('/api/mortgage/parts');
   });
 
-  it('has one Ändra button per part instead of one per action', async () => {
-    const { root } = await render();
+  it('has one menu per part instead of one button per action', async () => {
+    const { root, openMenu } = await render();
     expect(root.querySelectorAll('[data-part="1"] button')).toHaveLength(1);
-    expect(root.querySelector('[data-part="1"] [data-edit]')).not.toBeNull();
+    await openMenu('[data-part="1"]');
+    const items = Array.from(root.querySelectorAll('[data-part="1"] [role="menuitem"]'));
+    expect(items.map((i) => i.textContent?.trim())).toEqual([
+      'Ändra',
+      'Ny ränta',
+      'Avsluta lånedel…',
+    ]);
   });
 
   it('sends a new rate only when the rate was touched', async () => {
-    const { http, click, type } = await render();
+    const { http, click, type, openMenu } = await render();
+    await openMenu('[data-part="1"]');
     await click('[data-part="1"] [data-edit]');
     await type('[data-part-panel] [data-rate]', '4,25');
     await click('[data-part-panel] [data-save]');
@@ -174,7 +184,8 @@ describe('BolanPage', () => {
   });
 
   it('renames without recording a rate change', async () => {
-    const { http, click, type } = await render();
+    const { http, click, type, openMenu } = await render();
+    await openMenu('[data-part="1"]');
     await click('[data-part="1"] [data-edit]');
     await type('[data-part-panel] [data-name]', 'Del A');
     await click('[data-part-panel] [data-save]');
@@ -185,7 +196,8 @@ describe('BolanPage', () => {
   });
 
   it('refuses an interval of 0 when editing', async () => {
-    const { http, root, click, type } = await render();
+    const { http, root, click, type, openMenu } = await render();
+    await openMenu('[data-part="1"]');
     await click('[data-part="1"] [data-edit]');
     await type('[data-part-panel] [data-rate-interval]', '0');
     await click('[data-part-panel] [data-save]');
@@ -193,11 +205,13 @@ describe('BolanPage', () => {
     http.expectNone('/api/mortgage/parts/1');
   });
 
-  it('ends a part from inside the edit form', async () => {
-    const { http, click } = await render();
-    await click('[data-part="1"] [data-edit]');
-    await click('[data-part-panel] [data-end]');
-    await click('[data-confirm-end]');
+  it('ends a part from its menu after confirming with a date', async () => {
+    const { http, root, click, openMenu } = await render();
+    await openMenu('[data-part="1"]');
+    await click('[data-part="1"] [data-end]');
+    http.expectNone('/api/mortgage/parts/1/end');
+    expect(root.querySelector('[role=alertdialog] [data-end-date]')).not.toBeNull();
+    await click('[role=alertdialog] [data-confirm]');
     const request = http.expectOne('/api/mortgage/parts/1/end');
     expect(request.request.body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     request.flush(MORTGAGE);
@@ -222,9 +236,14 @@ describe('BolanPage', () => {
   });
 
   it('deletes an entry after confirming', async () => {
-    const { http, click } = await render();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { http, root, click, openMenu } = await render();
+    await openMenu('[data-entry]');
     await click('[data-delete-entry]');
+    http.expectNone('/api/mortgage/entries/9');
+    expect(root.querySelector('[role=alertdialog] [data-title]')?.textContent).toContain(
+      'Ta bort bolånenoteringen?',
+    );
+    await click('[role=alertdialog] [data-confirm]');
     const request = http.expectOne('/api/mortgage/entries/9');
     expect(request.request.method).toBe('DELETE');
     request.flush({ ...MORTGAGE, entries: [] });
@@ -431,9 +450,10 @@ describe('BolanPage', () => {
   });
 
   it('reloads the figures after a change', async () => {
-    const { http, click } = await render();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { http, click, openMenu } = await render();
+    await openMenu('[data-entry]');
     await click('[data-delete-entry]');
+    await click('[role=alertdialog] [data-confirm]');
     http.expectOne('/api/mortgage/entries/9').flush({ ...MORTGAGE, entries: [] });
     http.expectOne(FIGURES_URL).flush(FIGURES);
   });

@@ -1,8 +1,11 @@
-import { Component, inject, output, signal } from '@angular/core';
+import { Component, computed, inject, output, signal } from '@angular/core';
 import type { BalanceEntry, ManualSavingsAccount } from '@bankapp/shared';
 import { type Observable, catchError, map, of } from 'rxjs';
 import { today } from '../dates';
 import { Callout } from '../callout/callout';
+import { Confirm } from '../confirm/confirm';
+import { Menu, MenuItem } from '../menu/menu';
+import { Sheet } from '../sheet/sheet';
 import { Empty } from '../empty/empty';
 import { Icon } from '../icon/icon';
 import { DateField } from '../date-field/date-field';
@@ -13,68 +16,28 @@ import { ManualSavingsService } from '../manual-savings.service';
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
 @Component({
   selector: 'app-manual-savings-section',
-  imports: [DateField, MoneyPipe, Callout, Empty, Icon],
+  imports: [DateField, MoneyPipe, Callout, Confirm, Empty, Icon, Menu, MenuItem, Sheet],
   template: `
     <section data-manual-savings class="card flex flex-col gap-4 p-4 sm:p-5">
       <div class="flex items-center justify-between gap-3">
         <h2 class="card-title">Manuella sparkonton</h2>
-        @if (!adding()) {
-          <button
-            type="button"
-            data-open-add-account
-            class="btn btn-sm btn-secondary"
-            (click)="openAdd()"
-          >
-            <app-icon name="plus" [size]="16" />
-            Lägg till sparkonto
-          </button>
-        }
+        <button
+          type="button"
+          data-open-add-account
+          class="btn btn-sm btn-secondary"
+          (click)="openAdd()"
+        >
+          <app-icon name="plus" [size]="16" />
+          Lägg till sparkonto
+        </button>
       </div>
 
       @if (failed(); as message) {
         <app-callout variant="danger">{{ message }}</app-callout>
       }
 
-      @if (adding()) {
-        <form
-          data-account-form
-          class="flex flex-wrap items-end gap-3"
-          (submit)="$event.preventDefault(); createAccount()"
-        >
-          <label class="flex flex-col gap-1 text-sm text-muted">
-            Namn
-            <span class="field"
-              ><input
-                data-account-name-input
-                class="field-control"
-                [value]="name()"
-                (input)="name.set(value($event))"
-            /></span>
-          </label>
-          <label class="flex flex-col gap-1 text-sm text-muted">
-            Bank eller förvaltare (valfritt)
-            <span class="field"
-              ><input
-                data-institution-input
-                class="field-control"
-                [value]="institution()"
-                (input)="institution.set(value($event))"
-            /></span>
-          </label>
-          <button
-            type="submit"
-            data-save-account
-            class="btn btn-primary"
-            [disabled]="busy() || name().trim() === ''"
-          >
-            Spara
-          </button>
-          <button type="button" class="btn btn-ghost" (click)="closeAdd()">Avbryt</button>
-        </form>
-      }
-
       @let list = accounts();
-      @if (list.length === 0 && !adding()) {
+      @if (list.length === 0) {
         <app-empty
           icon="piggy-bank"
           text="Inga manuella sparkonton ännu. Lägg till t.ex. en ISK och ange saldot då och då."
@@ -87,188 +50,55 @@ import { ManualSavingsService } from '../manual-savings.service';
             [attr.data-manual-account]="account.id"
           >
             <div class="flex items-start justify-between gap-3">
-              @if (renamingId() === account.id) {
-                <form
-                  data-rename-form
-                  class="flex flex-wrap items-end gap-2"
-                  (submit)="$event.preventDefault(); rename(account)"
-                >
-                  <span class="field"
-                    ><input
-                      data-rename-input
-                      class="field-control"
-                      aria-label="Namn"
-                      [value]="name()"
-                      (input)="name.set(value($event))"
-                  /></span>
-                  <span class="field"
-                    ><input
-                      class="field-control"
-                      aria-label="Bank eller förvaltare"
-                      [value]="institution()"
-                      (input)="institution.set(value($event))"
-                  /></span>
-                  <button
-                    type="submit"
-                    data-save-rename
-                    class="btn btn-sm btn-primary"
-                    [disabled]="busy() || name().trim() === ''"
-                  >
-                    Spara
-                  </button>
-                  <button type="button" class="btn btn-sm btn-ghost" (click)="renamingId.set(null)">
-                    Avbryt
-                  </button>
-                </form>
-              } @else {
-                <span class="flex min-w-0 flex-col">
-                  <span data-manual-name class="truncate font-medium">{{ account.name }}</span>
-                  <span class="text-sm text-muted">
-                    {{ account.institution ?? 'Sparkonto' }}
-                    @if (account.closedOn) {
-                      · <span data-closed>Avslutat {{ account.closedOn }}</span>
-                    } @else if (account.balance === null) {
-                      · <span>Ingen saldonotering ännu</span>
-                    }
-                  </span>
-                </span>
-                <span class="flex flex-none flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    data-rename
-                    class="btn btn-sm btn-secondary"
-                    (click)="startRename(account)"
-                  >
-                    Byt namn
-                  </button>
+              <span class="flex min-w-0 flex-col">
+                <span data-manual-name class="truncate font-medium">{{ account.name }}</span>
+                <span class="text-sm text-muted">
+                  {{ account.institution ?? 'Sparkonto' }}
                   @if (account.closedOn) {
-                    <button
-                      type="button"
-                      data-reopen
-                      class="btn btn-sm btn-secondary"
-                      [disabled]="busy()"
-                      (click)="reopen(account)"
-                    >
-                      Öppna igen
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      data-close
-                      class="btn btn-sm btn-secondary"
-                      (click)="closingId.set(account.id); closeDate.set(today())"
-                    >
-                      Avsluta
-                    </button>
+                    · <span data-closed>Avslutat {{ account.closedOn }}</span>
+                  } @else if (account.balance === null) {
+                    · <span>Ingen saldonotering ännu</span>
                   }
                 </span>
-              }
+              </span>
+              <app-menu [label]="'Åtgärder för ' + account.name">
+                <button appMenuItem type="button" data-rename (click)="startRename(account)">
+                  Byt namn
+                </button>
+                @if (account.closedOn) {
+                  <button
+                    appMenuItem
+                    type="button"
+                    data-reopen
+                    [disabled]="busy()"
+                    (click)="reopen(account)"
+                  >
+                    Öppna igen
+                  </button>
+                } @else {
+                  <button
+                    appMenuItem
+                    type="button"
+                    data-close
+                    (click)="closingId.set(account.id); closeDate.set(today())"
+                  >
+                    Avsluta…
+                  </button>
+                }
+              </app-menu>
             </div>
 
-            @if (closingId() === account.id) {
-              <form
-                data-close-form
-                class="flex flex-wrap items-end gap-3"
-                (submit)="$event.preventDefault(); close(account)"
-              >
-                <label class="flex flex-col gap-1 text-sm text-muted">
-                  Avslutat den
-                  <app-date-field [value]="closeDate()" (valueChange)="closeDate.set($event)" />
-                </label>
-                <button
-                  type="submit"
-                  data-confirm-close
-                  class="btn btn-primary"
-                  [disabled]="busy() || closeDate() === ''"
-                >
-                  Avsluta konto
-                </button>
-                <button type="button" class="btn btn-ghost" (click)="closingId.set(null)">
-                  Avbryt
-                </button>
-              </form>
-            }
-
             @if (!account.closedOn) {
-              @if (entryFormFor() === account.id) {
-                <form
-                  data-entry-form
-                  class="flex flex-col gap-3"
-                  (submit)="$event.preventDefault(); saveEntry(account)"
+              <div>
+                <button
+                  type="button"
+                  data-new-entry
+                  class="btn btn-sm btn-secondary"
+                  (click)="startEntry(account)"
                 >
-                  <div class="flex flex-wrap items-end gap-3">
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Datum
-                      <app-date-field
-                        data-entry-date
-                        [value]="entryDate()"
-                        (valueChange)="entryDate.set($event)"
-                      />
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Saldo
-                      <span class="field">
-                        <input
-                          type="text"
-                          inputmode="decimal"
-                          data-entry-balance
-                          class="field-control"
-                          [value]="entryBalance()"
-                          (input)="entryBalance.set(value($event))"
-                        />
-                        <span class="field-suffix">kr</span>
-                      </span>
-                    </label>
-                    <label class="flex flex-col gap-1 text-sm text-muted">
-                      Insatt (valfritt)
-                      <span class="field">
-                        <input
-                          type="text"
-                          inputmode="decimal"
-                          data-entry-deposits
-                          class="field-control"
-                          [value]="entryDeposits()"
-                          (input)="entryDeposits.set(value($event))"
-                        />
-                        <span class="field-suffix">kr</span>
-                      </span>
-                      <span class="text-xs">Som det står hos banken</span>
-                    </label>
-                  </div>
-                  @if (entryError(); as message) {
-                    <app-callout data-entry-error variant="danger">{{ message }}</app-callout>
-                  }
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      type="submit"
-                      data-save-entry
-                      class="btn btn-primary"
-                      [disabled]="busy()"
-                    >
-                      Spara
-                    </button>
-                    <button
-                      type="button"
-                      data-cancel-entry
-                      class="btn btn-ghost"
-                      (click)="entryFormFor.set(null)"
-                    >
-                      Avbryt
-                    </button>
-                  </div>
-                </form>
-              } @else {
-                <div>
-                  <button
-                    type="button"
-                    data-new-entry
-                    class="btn btn-sm btn-secondary"
-                    (click)="startEntry(account)"
-                  >
-                    Ny saldonotering
-                  </button>
-                </div>
-              }
+                  Ny saldonotering
+                </button>
+              </div>
             }
 
             @if (account.entries.length > 0) {
@@ -285,25 +115,26 @@ import { ManualSavingsService } from '../manual-savings.service';
                         }
                       </span>
                     </span>
-                    <span class="flex flex-none gap-2">
+                    <app-menu [label]="'Åtgärder för saldonoteringen ' + entry.date">
                       <button
+                        appMenuItem
                         type="button"
                         data-edit-entry
-                        class="btn btn-sm btn-ghost"
                         (click)="startEntry(account, entry)"
                       >
                         Ändra
                       </button>
                       <button
+                        appMenuItem
                         type="button"
                         data-delete-entry
-                        class="btn btn-sm btn-danger-soft"
+                        [danger]="true"
                         [disabled]="busy()"
-                        (click)="deleteEntry(account, entry)"
+                        (click)="deleting.set({ account, entry })"
                       >
-                        Ta bort
+                        Ta bort…
                       </button>
-                    </span>
+                    </app-menu>
                   </li>
                 }
               </ul>
@@ -312,6 +143,161 @@ import { ManualSavingsService } from '../manual-savings.service';
         }
       </ul>
     </section>
+
+    @if (adding() || renamingAccount()) {
+      <app-sheet
+        data-account-form
+        [heading]="renamingAccount() ? 'Byt namn' : 'Lägg till sparkonto'"
+        [dismissible]="!busy()"
+        (closed)="closeAccountForm()"
+        (submitted)="saveAccount()"
+      >
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Namn
+          <span class="field"
+            ><input
+              data-account-name-input
+              data-rename-input
+              data-autofocus
+              class="field-control"
+              [value]="name()"
+              (input)="name.set(value($event))"
+          /></span>
+        </label>
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Bank eller förvaltare (valfritt)
+          <span class="field"
+            ><input
+              data-institution-input
+              class="field-control"
+              [value]="institution()"
+              (input)="institution.set(value($event))"
+          /></span>
+        </label>
+        @if (failed(); as message) {
+          <app-callout variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" class="btn btn-ghost" (click)="closeAccountForm()">Avbryt</button>
+          <button
+            type="submit"
+            data-save-account
+            data-save-rename
+            class="btn btn-primary flex-1"
+            [disabled]="busy() || name().trim() === ''"
+          >
+            Spara
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (closingAccount(); as account) {
+      <app-sheet
+        data-close-form
+        [heading]="'Avsluta ' + account.name"
+        [dismissible]="!busy()"
+        (closed)="closingId.set(null)"
+        (submitted)="close(account)"
+      >
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Avslutat den
+          <app-date-field [value]="closeDate()" (valueChange)="closeDate.set($event)" />
+        </label>
+        @if (failed(); as message) {
+          <app-callout variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button type="button" class="btn btn-ghost" (click)="closingId.set(null)">Avbryt</button>
+          <button
+            type="submit"
+            data-confirm-close
+            class="btn btn-primary flex-1"
+            [disabled]="busy() || closeDate() === ''"
+          >
+            Avsluta konto
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (entryAccount(); as account) {
+      <app-sheet
+        data-entry-form
+        [heading]="editingEntry() ? 'Ändra saldonotering' : 'Ny saldonotering'"
+        [dismissible]="!busy()"
+        (closed)="entryFormFor.set(null)"
+        (submitted)="saveEntry(account)"
+      >
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Datum
+          <app-date-field
+            data-entry-date
+            [value]="entryDate()"
+            (valueChange)="entryDate.set($event)"
+          />
+        </label>
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Saldo
+          <span class="field">
+            <input
+              type="text"
+              inputmode="decimal"
+              data-entry-balance
+              data-autofocus
+              class="field-control"
+              [value]="entryBalance()"
+              (input)="entryBalance.set(value($event))"
+            />
+            <span class="field-suffix">kr</span>
+          </span>
+        </label>
+        <label class="flex flex-col gap-1 text-sm text-muted">
+          Insatt (valfritt)
+          <span class="field">
+            <input
+              type="text"
+              inputmode="decimal"
+              data-entry-deposits
+              class="field-control"
+              [value]="entryDeposits()"
+              (input)="entryDeposits.set(value($event))"
+            />
+            <span class="field-suffix">kr</span>
+          </span>
+          <span class="text-xs">Som det står hos banken</span>
+        </label>
+        @if (entryError(); as message) {
+          <app-callout data-entry-error variant="danger">{{ message }}</app-callout>
+        }
+        <ng-container sheet-footer>
+          <button
+            type="button"
+            data-cancel-entry
+            class="btn btn-ghost"
+            (click)="entryFormFor.set(null)"
+          >
+            Avbryt
+          </button>
+          <button type="submit" data-save-entry class="btn btn-primary flex-1" [disabled]="busy()">
+            Spara
+          </button>
+        </ng-container>
+      </app-sheet>
+    }
+
+    @if (deleting(); as pending) {
+      <app-confirm
+        heading="Ta bort saldonoteringen?"
+        [message]="
+          'Saldonoteringen ' + pending.entry.date + ' på ' + pending.account.name + ' tas bort.'
+        "
+        confirmLabel="Ta bort"
+        [busy]="busy()"
+        (confirmed)="deleteEntry(pending.account, pending.entry)"
+        (cancelled)="deleting.set(null)"
+      />
+    }
   `,
 })
 export class ManualSavingsSection {
@@ -334,7 +320,22 @@ export class ManualSavingsSection {
 
   protected readonly entryFormFor = signal<number | null>(null);
   /** The entry being corrected, or null when a new one is being made. */
-  private editing: BalanceEntry | null = null;
+  protected readonly editingEntry = signal<BalanceEntry | null>(null);
+  /** The entry waiting for the owner to confirm its removal. */
+  protected readonly deleting = signal<{
+    account: ManualSavingsAccount;
+    entry: BalanceEntry;
+  } | null>(null);
+
+  protected readonly renamingAccount = computed(
+    () => this.accounts().find((a) => a.id === this.renamingId()) ?? null,
+  );
+  protected readonly closingAccount = computed(
+    () => this.accounts().find((a) => a.id === this.closingId()) ?? null,
+  );
+  protected readonly entryAccount = computed(
+    () => this.accounts().find((a) => a.id === this.entryFormFor()) ?? null,
+  );
   protected readonly entryDate = signal(today());
   protected readonly entryBalance = signal('');
   protected readonly entryDeposits = signal('');
@@ -376,19 +377,30 @@ export class ManualSavingsSection {
     this.name.set('');
     this.institution.set('');
     this.renamingId.set(null);
+    this.failed.set(null);
     this.adding.set(true);
   }
 
-  protected closeAdd(): void {
+  protected closeAccountForm(): void {
     this.name.set('');
     this.institution.set('');
+    this.failed.set(null);
     this.adding.set(false);
+    this.renamingId.set(null);
+  }
+
+  /** The account sheet adds a new account, or renames the one it was opened for. */
+  protected saveAccount(): void {
+    const account = this.renamingAccount();
+    if (account === null) this.createAccount();
+    else this.rename(account);
   }
 
   protected startRename(account: ManualSavingsAccount): void {
     this.name.set(account.name);
     this.institution.set(account.institution ?? '');
     this.adding.set(false);
+    this.failed.set(null);
     this.renamingId.set(account.id);
   }
 
@@ -425,7 +437,7 @@ export class ManualSavingsSection {
 
   /** Opens the entry form for a new entry, or for correcting `entry`. */
   protected startEntry(account: ManualSavingsAccount, entry: BalanceEntry | null = null): void {
-    this.editing = entry;
+    this.editingEntry.set(entry);
     this.entryError.set(null);
     this.entryDate.set(entry?.date ?? today());
     this.entryBalance.set(entry ? formatAmountInput(entry.balance) : '');
@@ -455,7 +467,7 @@ export class ManualSavingsSection {
     }
     this.entryError.set(null);
     const request = { date: this.entryDate(), balance, netDeposits };
-    const editing = this.editing;
+    const editing = this.editingEntry();
     this.busy.set(true);
     (editing
       ? this.service.updateEntry(account.id, editing.id, request)
@@ -478,11 +490,14 @@ export class ManualSavingsSection {
   }
 
   protected deleteEntry(account: ManualSavingsAccount, entry: BalanceEntry): void {
-    if (!confirm(`Ta bort saldonoteringen ${entry.date}?`)) return;
     this.run(
       this.service.deleteEntry(account.id, entry.id),
-      (updated) => this.replace(updated),
+      (updated) => {
+        this.replace(updated);
+        this.deleting.set(null);
+      },
       'Saldonoteringen kunde inte tas bort. Försök igen senare.',
+      () => this.deleting.set(null),
     );
   }
 
@@ -495,7 +510,12 @@ export class ManualSavingsSection {
     this.changed.emit();
   }
 
-  private run<T>(call: Observable<T>, done: (result: T) => void, message: string): void {
+  private run<T>(
+    call: Observable<T>,
+    done: (result: T) => void,
+    message: string,
+    failedToo?: () => void,
+  ): void {
     this.busy.set(true);
     this.failed.set(null);
     call.subscribe({
@@ -506,6 +526,7 @@ export class ManualSavingsSection {
       error: () => {
         this.busy.set(false);
         this.failed.set(message);
+        failedToo?.();
       },
     });
   }

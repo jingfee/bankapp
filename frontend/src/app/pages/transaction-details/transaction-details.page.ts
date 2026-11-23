@@ -15,6 +15,10 @@ import type {
   TransactionDetails,
 } from '@bankapp/shared';
 import { Callout } from '../../callout/callout';
+import { Confirm } from '../../confirm/confirm';
+import { Menu, MenuItem } from '../../menu/menu';
+import { Sheet } from '../../sheet/sheet';
+import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { CategoriesService } from '../../categories.service';
 import { CategoryTiles } from '../../category-tiles/category-tiles';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
@@ -81,10 +85,12 @@ function formatOriginal({ amount, currency }: Money): string {
     Disclosure,
     Icon,
     Skeleton,
+    Confirm,
+    Menu,
+    MenuItem,
+    Sheet,
+    ShortDatePipe,
   ],
-  // The routed page is its own stacking context, so while the form is open it must rise above
-  // the bottom tabs (z-30).
-  host: { class: 'relative', '[class.z-40]': 'editing()' },
   template: `
     <app-page [title]="state().status === 'gone' ? 'Transaktionen finns inte längre' : undefined">
       <button page-back type="button" data-back class="btn btn-ghost btn-sm" (click)="back()">
@@ -122,6 +128,22 @@ function formatOriginal({ amount, currency }: Money): string {
                     <h1 data-description class="page-title min-w-0 flex-1 [overflow-wrap:anywhere]">
                       {{ t.description || 'Transaktion' }}
                     </h1>
+                    @if (t.account === null) {
+                      <app-menu data-manual-actions label="Åtgärder för transaktionen">
+                        <a appMenuItem data-edit [routerLink]="['/transaktioner', t.id, 'redigera']"
+                          >Redigera</a
+                        >
+                        <button
+                          appMenuItem
+                          type="button"
+                          data-delete
+                          [danger]="true"
+                          (click)="confirmingDelete.set(true)"
+                        >
+                          Ta bort…
+                        </button>
+                      </app-menu>
+                    }
                   </div>
                   <p
                     data-amount
@@ -164,52 +186,10 @@ function formatOriginal({ amount, currency }: Money): string {
                       </dd>
                     }
                   </dl>
-                  @if (t.account === null) {
-                    <div
-                      data-manual-actions
-                      class="flex flex-wrap items-center gap-2 border-t border-line pt-5"
+                  @if (deleteError()) {
+                    <app-callout variant="danger"
+                      >Transaktionen kunde inte tas bort. Försök igen.</app-callout
                     >
-                      <a
-                        data-edit
-                        [routerLink]="['/transaktioner', t.id, 'redigera']"
-                        class="btn btn-secondary btn-sm"
-                        >Redigera</a
-                      >
-                      @if (confirmingDelete()) {
-                        <span class="text-sm">Ta bort transaktionen?</span>
-                        <button
-                          type="button"
-                          data-confirm-delete
-                          class="btn btn-danger btn-sm"
-                          [disabled]="saving()"
-                          (click)="deleteManual(t.id)"
-                        >
-                          Ja, ta bort
-                        </button>
-                        <button
-                          type="button"
-                          data-cancel-delete
-                          class="btn btn-ghost btn-sm"
-                          (click)="confirmingDelete.set(false)"
-                        >
-                          Avbryt
-                        </button>
-                      } @else {
-                        <button
-                          type="button"
-                          data-delete
-                          class="btn btn-danger-soft btn-sm"
-                          (click)="confirmingDelete.set(true)"
-                        >
-                          Ta bort
-                        </button>
-                      }
-                      @if (deleteError()) {
-                        <app-callout variant="danger" class="w-full"
-                          >Transaktionen kunde inte tas bort. Försök igen.</app-callout
-                        >
-                      }
-                    </div>
                   }
                 </section>
               </div>
@@ -407,72 +387,11 @@ function formatOriginal({ amount, currency }: Money): string {
                       type="button"
                       data-offset-toggle
                       class="btn btn-secondary btn-sm self-start"
-                      [attr.aria-expanded]="offsetting()"
+                      aria-haspopup="dialog"
                       (click)="toggleOffset()"
                     >
-                      {{ offsetting() ? 'Stäng' : 'Kvitta mot ett köp' }}
+                      Kvitta mot ett köp
                     </button>
-                    @if (offsetting()) {
-                      <div class="expand-in flex flex-col gap-3">
-                        <label class="field">
-                          <app-icon class="field-icon" name="search" [size]="20" />
-                          <input
-                            data-offset-search
-                            type="search"
-                            placeholder="Sök köp"
-                            aria-label="Sök köp"
-                            class="field-control"
-                            [value]="offsetSearch()"
-                            (input)="searchOffsets($any($event.target).value)"
-                          />
-                          @if (offsetSearch() !== '') {
-                            <button
-                              type="button"
-                              data-clear-offset-search
-                              aria-label="Rensa sökning"
-                              class="field-icon"
-                              (click)="searchOffsets('')"
-                            >
-                              <app-icon name="x" />
-                            </button>
-                          }
-                        </label>
-                        @if (offsetCandidates(); as candidates) {
-                          @if (candidates.length === 0) {
-                            <p data-offset-empty class="text-sm text-muted">
-                              {{
-                                offsetSearch().trim()
-                                  ? 'Inga träffar'
-                                  : 'Inga troliga köp. Sök efter ett.'
-                              }}
-                            </p>
-                          }
-                          <ul class="flex flex-col gap-1">
-                            @for (candidate of candidates; track candidate.id) {
-                              <li>
-                                <button
-                                  type="button"
-                                  [attr.data-offset-candidate]="candidate.id"
-                                  class="tx-row flex w-full justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
-                                  [disabled]="saving()"
-                                  (click)="setOffset(candidate.id)"
-                                >
-                                  <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
-                                    <span class="font-medium">{{ candidate.description }}</span>
-                                    <span class="text-sm text-muted">{{ candidate.date }}</span>
-                                  </span>
-                                  <span class="amount shrink-0">{{
-                                    candidate.amount.amount | money: candidate.amount.currency
-                                  }}</span>
-                                </button>
-                              </li>
-                            }
-                          </ul>
-                        } @else {
-                          <div aria-busy="true"><app-skeleton [count]="3" /></div>
-                        }
-                      </div>
-                    }
                   </section>
                 }
 
@@ -525,6 +444,76 @@ function formatOriginal({ amount, currency }: Money): string {
         }
       }
     </app-page>
+
+    @if (confirmingDelete() && details(); as t) {
+      <app-confirm
+        heading="Ta bort transaktionen?"
+        message="Transaktionen tas bort för gott."
+        confirmLabel="Ta bort"
+        [busy]="saving()"
+        (confirmed)="deleteManual(t.id)"
+        (cancelled)="confirmingDelete.set(false)"
+      />
+    }
+
+    @if (offsetting()) {
+      <app-sheet heading="Kvitta mot ett köp" (closed)="offsetting.set(false)">
+        <label class="field">
+          <app-icon class="field-icon" name="search" [size]="20" />
+          <input
+            data-offset-search
+            data-autofocus
+            type="search"
+            placeholder="Sök köp"
+            aria-label="Sök köp"
+            class="field-control"
+            [value]="offsetSearch()"
+            (input)="searchOffsets($any($event.target).value)"
+          />
+          @if (offsetSearch() !== '') {
+            <button
+              type="button"
+              data-clear-offset-search
+              aria-label="Rensa sökning"
+              class="field-icon"
+              (click)="searchOffsets('')"
+            >
+              <app-icon name="x" />
+            </button>
+          }
+        </label>
+        @if (offsetCandidates(); as candidates) {
+          @if (candidates.length === 0) {
+            <p data-offset-empty class="text-sm text-muted">
+              {{ offsetSearch().trim() ? 'Inga träffar' : 'Inga troliga köp. Sök efter ett.' }}
+            </p>
+          }
+          <ul class="flex flex-col gap-1">
+            @for (candidate of candidates; track candidate.id) {
+              <li>
+                <button
+                  type="button"
+                  [attr.data-offset-candidate]="candidate.id"
+                  class="tx-row flex w-full justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
+                  [disabled]="saving()"
+                  (click)="setOffset(candidate.id)"
+                >
+                  <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
+                    <span class="font-medium">{{ candidate.description }}</span>
+                    <span class="text-sm text-muted">{{ candidate.date | dateShort }}</span>
+                  </span>
+                  <span class="amount shrink-0">{{
+                    candidate.amount.amount | money: candidate.amount.currency
+                  }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <div aria-busy="true"><app-skeleton [count]="3" /></div>
+        }
+      </app-sheet>
+    }
 
     @if (editing()) {
       <app-manual-transaction-sheet
@@ -856,6 +845,7 @@ export class TransactionDetailsPage {
       },
       error: () => {
         this.deleteError.set(true);
+        this.confirmingDelete.set(false);
         this.saving.set(false);
       },
     });

@@ -108,6 +108,11 @@ describe('DelatPage', () => {
     input.value = month;
     input.dispatchEvent(new Event('change'));
   };
+  /** Opens the ⋯ menu inside `scope`. */
+  const openMenu = async (fixture: { whenStable(): Promise<unknown> }, scope: Element) => {
+    scope.querySelector<HTMLButtonElement>('[data-menu-trigger]')!.click();
+    await fixture.whenStable();
+  };
   const type = (input: HTMLInputElement, value: string) => {
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -174,15 +179,17 @@ describe('DelatPage', () => {
 
     it('sets the balance from a form that opens inline, per today by default', async () => {
       const { fixture, page, http } = await render();
-      expect(page.querySelector('[data-setting-form]')).toBeNull();
+      expect(document.querySelector('[data-setting-form]')).toBeNull();
 
       page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
       await fixture.whenStable();
-      expect(page.querySelector('[data-as-of] [data-date-text]')!.textContent!.trim()).toBe(today);
-      expect(text(page.querySelector('.field-suffix'))).toBe('kr');
-      type(page.querySelector<HTMLInputElement>('[data-amount]')!, '1 200,50'.replace(' ', ''));
+      expect(document.querySelector('[data-as-of] [data-date-text]')!.textContent!.trim()).toBe(
+        today,
+      );
+      expect(text(document.querySelector('[data-setting-form] .field-suffix'))).toBe('kr');
+      type(document.querySelector<HTMLInputElement>('[data-amount]')!, '1 200,50'.replace(' ', ''));
       await fixture.whenStable();
-      page.querySelector<HTMLButtonElement>('[data-save-balance]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-save-balance]')!.click();
 
       const post = http.expectOne('/api/settlement/balance-settings');
       expect(post.request.body).toEqual({ amount: 1200.5, asOf: today });
@@ -190,7 +197,7 @@ describe('DelatPage', () => {
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-balance]'))).toBe('1 200,50 kr');
-      expect(page.querySelector('[data-setting-form]')).toBeNull();
+      expect(document.querySelector('[data-setting-form]')).toBeNull();
     });
   });
 
@@ -333,15 +340,15 @@ describe('DelatPage', () => {
     const { fixture, page } = await render();
     page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
     await fixture.whenStable();
-    type(page.querySelector<HTMLInputElement>('[data-amount]')!, '500');
+    type(document.querySelector<HTMLInputElement>('[data-amount]')!, '500');
     await fixture.whenStable();
 
-    page.querySelector<HTMLButtonElement>('[data-cancel-setting]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-cancel-setting]')!.click();
     await fixture.whenStable();
-    expect(page.querySelector('[data-setting-form]')).toBeNull();
+    expect(document.querySelector('[data-setting-form]')).toBeNull();
     page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
     await fixture.whenStable();
-    expect(page.querySelector<HTMLInputElement>('[data-amount]')!.value).toBe('');
+    expect(document.querySelector<HTMLInputElement>('[data-amount]')!.value).toBe('');
   });
 
   describe('closing a month', () => {
@@ -372,8 +379,10 @@ describe('DelatPage', () => {
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
 
-      expect(text(page.querySelector('[data-closing-date] [data-date-text]'))).toBe('2026-10-28');
-      expect(text(page.querySelector('[data-next-month] [data-month-text]'))).toBe('2026-11');
+      expect(text(document.querySelector('[data-closing-date] [data-date-text]'))).toBe(
+        '2026-10-28',
+      );
+      expect(text(document.querySelector('[data-next-month] [data-month-text]'))).toBe('2026-11');
     });
 
     it('defaults the closing date to today without a settlement', async () => {
@@ -382,16 +391,16 @@ describe('DelatPage', () => {
       });
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
-      expect(text(page.querySelector('[data-closing-date] [data-date-text]'))).toBe(today);
+      expect(text(document.querySelector('[data-closing-date] [data-date-text]'))).toBe(today);
     });
 
     it('sends the close and shows the new periods', async () => {
       const { fixture, page, http } = await render({ settlement });
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
-      pick(page, '[data-next-month]', '2026-12');
+      pick(document.body, '[data-next-month]', '2026-12');
       await fixture.whenStable();
-      page.querySelector<HTMLButtonElement>('[data-confirm-close]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-confirm-close]')!.click();
 
       const request = http.expectOne('/api/settlement/close');
       expect(request.request.body).toEqual({ closedThrough: '2026-10-28', nextMonth: '2026-12' });
@@ -407,25 +416,28 @@ describe('DelatPage', () => {
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-open-period] h2'))).toBe('December 2026 · pågående');
-      expect(page.querySelector('[data-close-form]')).toBeNull();
+      expect(document.querySelector('[data-close-form]')).toBeNull();
     });
 
     it('does not accept a next month that is not later', async () => {
       const { fixture, page } = await render({ settlement });
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
-      pick(page, '[data-next-month]', '2026-10');
+      pick(document.body, '[data-next-month]', '2026-10');
       await fixture.whenStable();
-      expect(page.querySelector<HTMLButtonElement>('[data-confirm-close]')!.disabled).toBe(true);
+      expect(document.querySelector<HTMLButtonElement>('[data-confirm-close]')!.disabled).toBe(
+        true,
+      );
     });
 
     it('edits the month of the open period', async () => {
       const { fixture, page, http } = await render({ settlement });
+      await openMenu(fixture, page.querySelector('[data-open-period]')!);
       page.querySelector<HTMLButtonElement>('[data-edit-month]')!.click();
       await fixture.whenStable();
-      pick(page, '[data-month-input]', '2026-09');
+      pick(document.body, '[data-month-input]', '2026-09');
       await fixture.whenStable();
-      page.querySelector<HTMLButtonElement>('[data-save-month]')!.click();
+      document.querySelector<HTMLButtonElement>('[data-save-month]')!.click();
       const request = http.expectOne('/api/settlement/month');
       expect(request.request.method).toBe('PUT');
       expect(request.request.body).toEqual({ month: '2026-09' });
@@ -469,7 +481,7 @@ describe('DelatPage', () => {
       it('shows no notice when it is saved', async () => {
         const { page } = await opened(true);
         expect(page.querySelector('[data-report-failed]')).toBeNull();
-        expect(page.querySelector('[data-save-report]')).not.toBeNull();
+        expect(page.querySelector('[data-closed-period] [data-menu-trigger]')).not.toBeNull();
       });
 
       it('can be saved again, which clears the notice', async () => {
@@ -478,6 +490,7 @@ describe('DelatPage', () => {
           'Rapporten kunde inte sparas',
         );
 
+        await openMenu(fixture, page.querySelector('[data-closed-period]')!);
         page.querySelector<HTMLButtonElement>('[data-save-report]')!.click();
         const request = http.expectOne('/api/settlement/periods/2026-10/report');
         expect(request.request.method).toBe('POST');
@@ -505,17 +518,25 @@ describe('DelatPage', () => {
       });
 
       it('offers it on the latest close only, after confirmation', async () => {
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const { fixture, page, http } = await render({ settlement: closedTwice });
         page
           .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
           .click();
         await fixture.whenStable();
+        for (const section of page.querySelectorAll('[data-closed-period]')) {
+          await openMenu(fixture, section);
+        }
         const buttons = page.querySelectorAll('[data-undo-close]');
         expect(buttons).toHaveLength(1);
+        expect(text(buttons[0])).toBe('Ångra avslut…');
 
         (buttons[0] as HTMLButtonElement).click();
-        expect(confirm).toHaveBeenCalled();
+        await fixture.whenStable();
+        http.expectNone('/api/settlement/undo-close');
+        expect(text(document.querySelector('[role=alertdialog] [data-title]'))).toBe(
+          'Ångra avslutet av November 2026?',
+        );
+        (document.querySelector('[role=alertdialog] [data-confirm]') as HTMLButtonElement).click();
         const request = http.expectOne('/api/settlement/undo-close');
         expect(request.request.method).toBe('POST');
         request.flush(
@@ -528,19 +549,22 @@ describe('DelatPage', () => {
         );
         await fixture.whenStable();
         expect(text(page.querySelector('[data-open-period] h2'))).toBe('November 2026 · pågående');
-        confirm.mockRestore();
+        expect(document.querySelector('[role=alertdialog]')).toBeNull();
       });
 
-      it('does nothing when not confirmed', async () => {
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      it('does nothing when cancelled', async () => {
         const { fixture, page } = await render({ settlement: closedTwice });
         page
           .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
           .click();
         await fixture.whenStable();
+        await openMenu(fixture, page.querySelector('[data-closed-period]')!);
         page.querySelector<HTMLButtonElement>('[data-undo-close]')!.click();
+        await fixture.whenStable();
+        (document.querySelector('[role=alertdialog] [data-cancel]') as HTMLButtonElement).click();
+        await fixture.whenStable();
+        expect(document.querySelector('[role=alertdialog]')).toBeNull();
         // afterEach verifies that no request was made.
-        confirm.mockRestore();
       });
     });
   });
@@ -638,10 +662,11 @@ describe('DelatPage', () => {
       });
 
       const entries = page.querySelectorAll('[data-ratio-entry]');
+      await openMenu(fixture, entries[1]!);
       entries[1]!.querySelector<HTMLButtonElement>('[data-edit]')!.click();
       await fixture.whenStable();
-      type(page.querySelector<HTMLInputElement>('[data-edit-percent]')!, '65');
-      page.querySelector<HTMLButtonElement>('[data-save-edit]')!.click();
+      type(document.querySelector<HTMLInputElement>('[data-edit-percent]')!, '65');
+      document.querySelector<HTMLButtonElement>('[data-save-edit]')!.click();
 
       expect(http.expectOne('/api/household-ratio').request.body).toEqual({
         entries: [
@@ -654,13 +679,14 @@ describe('DelatPage', () => {
     it('does not send a percentage outside 1 to 99', async () => {
       const { fixture, page } = await render();
 
+      await openMenu(fixture, page.querySelector('[data-ratio-entry]')!);
       page.querySelector<HTMLButtonElement>('[data-edit]')!.click();
       await fixture.whenStable();
-      type(page.querySelector<HTMLInputElement>('[data-edit-percent]')!, '100');
-      page.querySelector<HTMLButtonElement>('[data-save-edit]')!.click();
+      type(document.querySelector<HTMLInputElement>('[data-edit-percent]')!, '100');
+      document.querySelector<HTMLButtonElement>('[data-save-edit]')!.click();
       await fixture.whenStable();
 
-      expect(text(page.querySelector('[role=alert]'))).toContain('1 och 99');
+      expect(text(document.querySelector('[data-ratio-form] [role=alert]'))).toContain('1 och 99');
     });
 
     it('removes an entry, but never the last one', async () => {
@@ -671,12 +697,18 @@ describe('DelatPage', () => {
         ],
       });
 
-      page.querySelectorAll<HTMLButtonElement>('[data-remove]')[1]!.click();
+      const entries = page.querySelectorAll('[data-ratio-entry]');
+      await openMenu(fixture, entries[1]!);
+      entries[1]!.querySelector<HTMLButtonElement>('[data-remove]')!.click();
+      await fixture.whenStable();
+      http.expectNone('/api/household-ratio');
+      (document.querySelector('[role=alertdialog] [data-confirm]') as HTMLButtonElement).click();
       const put = http.expectOne('/api/household-ratio');
       expect(put.request.body).toEqual({ entries: [{ from: '2026-07-01', percent: 55 }] });
       put.flush(put.request.body);
       await fixture.whenStable();
 
+      await openMenu(fixture, page.querySelector('[data-ratio-entry]')!);
       expect(page.querySelector<HTMLButtonElement>('[data-remove]')!.disabled).toBe(true);
     });
   });

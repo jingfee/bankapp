@@ -32,7 +32,8 @@ describe('ManualSavingsSection', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/manual-savings-accounts').flush({ accounts });
     await fixture.whenStable();
-    const root = fixture.nativeElement as HTMLElement;
+    // Sheets and confirmations open in <body>, outside the section.
+    const root = document.body;
     const click = async (selector: string) => {
       root.querySelector<HTMLElement>(selector)!.click();
       await fixture.whenStable();
@@ -43,7 +44,9 @@ describe('ManualSavingsSection', () => {
       input.dispatchEvent(new Event('input'));
       await fixture.whenStable();
     };
-    return { fixture, http, root, click, type };
+    /** Opens the ⋯ menu of the first element matching `scope`. */
+    const openMenu = (scope: string) => click(`${scope} [data-menu-trigger]`);
+    return { fixture, http, root, click, type, openMenu };
   }
 
   it('lists accounts with their entries newest first, leaving the figures to the Sparande page', async () => {
@@ -93,7 +96,8 @@ describe('ManualSavingsSection', () => {
   });
 
   it('corrects an entry in place, prefilled', async () => {
-    const { http, root, click, type } = await render();
+    const { http, root, click, type, openMenu } = await render();
+    await openMenu('[data-entry]');
     await click('[data-edit-entry]');
     expect(root.querySelector<HTMLInputElement>('[data-entry-balance]')!.value).toBe('409500');
     expect(root.querySelector<HTMLInputElement>('[data-entry-deposits]')!.value).toBe('305000');
@@ -106,7 +110,8 @@ describe('ManualSavingsSection', () => {
   });
 
   it('says so when a day already has an entry', async () => {
-    const { fixture, http, root, click, type } = await render();
+    const { fixture, http, root, click, type, openMenu } = await render();
+    await openMenu('[data-entry]');
     await click('[data-edit-entry]');
     await type('[data-entry-balance]', '1');
     await click('[data-save-entry]');
@@ -129,7 +134,8 @@ describe('ManualSavingsSection', () => {
   });
 
   it('closes an account on a date and reopens a closed one', async () => {
-    const { fixture, http, root, click } = await render();
+    const { fixture, http, root, click, openMenu } = await render();
+    await openMenu('[data-manual-account]');
     await click('[data-close]');
     await click('[data-confirm-close]');
     const close = http.expectOne('/api/manual-savings-accounts/7/close');
@@ -138,7 +144,40 @@ describe('ManualSavingsSection', () => {
     await fixture.whenStable();
     expect(root.querySelector('[data-closed]')).not.toBeNull();
     expect(root.querySelector('[data-new-entry]')).toBeNull();
+    await openMenu('[data-manual-account]');
     await click('[data-reopen]');
     http.expectOne('/api/manual-savings-accounts/7/reopen').flush(ISK);
+  });
+
+  it('renames an account from its menu', async () => {
+    const { http, click, type, openMenu } = await render();
+    await openMenu('[data-manual-account]');
+    await click('[data-rename]');
+    await type('[data-rename-input]', 'Nordnet ISK');
+    await click('[data-save-account]');
+    const request = http.expectOne('/api/manual-savings-accounts/7');
+    expect(request.request.body).toEqual({ name: 'Nordnet ISK', institution: 'Avanza' });
+    request.flush({ ...ISK, name: 'Nordnet ISK' });
+  });
+
+  it('asks before removing an entry, and sends nothing when cancelled', async () => {
+    const { fixture, http, root, click, openMenu } = await render();
+    await openMenu('[data-entry]');
+    await click('[data-delete-entry]');
+    http.expectNone('/api/manual-savings-accounts/7/entries/2');
+    expect(root.querySelector('[role=alertdialog] [data-title]')?.textContent).toContain(
+      'Ta bort saldonoteringen?',
+    );
+    await click('[role=alertdialog] [data-cancel]');
+    expect(root.querySelector('[role=alertdialog]')).toBeNull();
+
+    await openMenu('[data-entry]');
+    await click('[data-delete-entry]');
+    await click('[role=alertdialog] [data-confirm]');
+    const request = http.expectOne('/api/manual-savings-accounts/7/entries/2');
+    expect(request.request.method).toBe('DELETE');
+    request.flush({ ...ISK, entries: [ISK.entries[1]!] });
+    await fixture.whenStable();
+    expect(root.querySelector('[role=alertdialog]')).toBeNull();
   });
 });

@@ -440,7 +440,7 @@ describe('BankerPage', () => {
         lastSync: null,
       } satisfies AccountsResponse);
     const renewButton = async (page: HTMLElement) => {
-      page.querySelector<HTMLButtonElement>('[data-bank-menu]')?.click();
+      page.querySelector<HTMLButtonElement>('[data-bank-menu] [data-menu-trigger]')?.click();
       await TestBed.inject(ApplicationRef).whenStable();
       return Array.from(page.querySelectorAll('button')).find(
         (button) => button.textContent?.trim() === 'Förnya',
@@ -550,13 +550,13 @@ describe('BankerPage', () => {
         lastSync: null,
       });
       const page = await render((request) => request.flush(response(false)));
-      const button = page.querySelector<HTMLButtonElement>('[data-toggle-hidden]');
-      expect(button?.textContent?.trim()).toBe('Visas');
-      expect(button?.getAttribute('aria-label')).toBe('Dölj kontot överallt');
-      expect(button?.getAttribute('title')).toBe('Dölj kontot överallt');
+      const toggle = page.querySelector<HTMLInputElement>('[data-toggle-hidden]');
+      expect(toggle?.getAttribute('role')).toBe('switch');
+      expect(toggle?.classList).toContain('switch');
+      expect(toggle?.checked).toBe(true);
       expect(page.querySelector('[data-hidden-row]')).toBeNull();
 
-      button?.click();
+      toggle?.click();
       const http = TestBed.inject(HttpTestingController);
       const put = http.expectOne('/api/accounts/7/hidden');
       expect(put.request.method).toBe('PUT');
@@ -567,10 +567,7 @@ describe('BankerPage', () => {
       await TestBed.inject(ApplicationRef).whenStable();
 
       expect(page.querySelector('[data-hidden-row]')).not.toBeNull();
-      const after = page.querySelector('[data-toggle-hidden]');
-      expect(after?.textContent?.trim()).toBe('Dolt');
-      expect(after?.getAttribute('aria-label')).toBe('Visa kontot igen');
-      expect(after?.classList).toContain('border-dashed');
+      expect(page.querySelector<HTMLInputElement>('[data-toggle-hidden]')?.checked).toBe(false);
     });
   });
 
@@ -583,9 +580,10 @@ describe('BankerPage', () => {
         lastSync: null,
       });
       const page = await render((request) => request.flush(response(false)));
-      const box = page.querySelector<HTMLButtonElement>('[data-toggle-savings]');
-      expect(box?.textContent?.trim()).toBe('Vanligt konto');
-      expect(box?.getAttribute('title')).toContain('följ bara saldot');
+      const box = page.querySelector<HTMLInputElement>('[data-toggle-savings]');
+      expect(box?.getAttribute('role')).toBe('switch');
+      expect(box?.checked).toBe(false);
+      expect(box?.closest('label')?.getAttribute('title')).toContain('Följ bara saldot');
 
       box?.click();
       const http = TestBed.inject(HttpTestingController);
@@ -597,7 +595,7 @@ describe('BankerPage', () => {
       http.expectOne('/api/accounts').flush(response(true));
       await TestBed.inject(ApplicationRef).whenStable();
 
-      expect(page.querySelector('[data-toggle-savings]')?.textContent?.trim()).toBe('Sparkonto');
+      expect(page.querySelector<HTMLInputElement>('[data-toggle-savings]')?.checked).toBe(true);
       expect(page.querySelector('[data-account-name]')?.parentElement?.textContent).toContain(
         'Sparkonto',
       );
@@ -669,20 +667,27 @@ describe('BankerPage', () => {
       ...overrides,
     });
     const removeButton = async (page: HTMLElement) => {
-      page.querySelector<HTMLButtonElement>('[data-bank-menu]')?.click();
+      page.querySelector<HTMLButtonElement>('[data-bank-menu] [data-menu-trigger]')?.click();
       await TestBed.inject(ApplicationRef).whenStable();
       return page.querySelector<HTMLButtonElement>('[data-remove-bank]');
     };
 
     afterEach(() => vi.restoreAllMocks());
 
+    const dialog = () => document.querySelector('[role=alertdialog]');
+    const confirmButton = () =>
+      document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-confirm]')!;
+
     it('removes the bank after the owner confirms and shows the page again', async () => {
-      const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
       const page = await render((request) => request.flush(response()));
       const http = TestBed.inject(HttpTestingController);
 
       (await removeButton(page))!.click();
-      expect(confirmation.mock.calls[0]![0]).toContain('historiken finns kvar');
+      await TestBed.inject(ApplicationRef).whenStable();
+      expect(dialog()?.textContent).toContain('historiken finns kvar');
+      expect(dialog()?.querySelector('[data-continue-account]')).toBeNull();
+      http.expectNone('/api/connections/Swedbank');
+      confirmButton().click();
       http.expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' }).flush(null);
       await new Promise((resolve) => setTimeout(resolve));
 
@@ -693,6 +698,7 @@ describe('BankerPage', () => {
         }),
       );
       await TestBed.inject(ApplicationRef).whenStable();
+      expect(dialog()).toBeNull();
       expect(page.querySelector('[data-bank]')).toBeNull();
       page
         .querySelector<HTMLButtonElement>('[data-removed-banks] [data-disclosure-toggle]')!
@@ -704,42 +710,66 @@ describe('BankerPage', () => {
     });
 
     it('does nothing when the owner cancels', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(false);
       const page = await render((request) => request.flush(response()));
 
       (await removeButton(page))!.click();
+      await TestBed.inject(ApplicationRef).whenStable();
+      document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-cancel]')!.click();
+      await TestBed.inject(ApplicationRef).whenStable();
 
+      expect(dialog()).toBeNull();
       TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank');
     });
 
-    it('asks per savings account whether to keep following its balance', async () => {
-      const confirmation = vi
-        .spyOn(window, 'confirm')
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(false);
+    describe('with savings accounts', () => {
       const first = { ...account('Sparkonto', 'savings'), id: 7, savings: true };
       const second = { ...account('ISK', 'savings'), id: 8, savings: true };
-      const page = await render((request) =>
-        request.flush(response({ banks: [group('Swedbank', [first, second])] })),
-      );
+      const open = async () => {
+        const page = await render((request) =>
+          request.flush(response({ banks: [group('Swedbank', [first, second])] })),
+        );
+        (await removeButton(page))!.click();
+        await TestBed.inject(ApplicationRef).whenStable();
+        return page;
+      };
+      const boxes = () =>
+        Array.from(
+          document.querySelectorAll<HTMLInputElement>('[role=alertdialog] [data-continue-account]'),
+        );
 
-      (await removeButton(page))!.click();
+      it('asks once, with a checkbox per savings account that is checked by default', async () => {
+        await open();
 
-      expect(confirmation.mock.calls[1]![0]).toContain('Fortsätt följa saldot manuellt?');
-      expect(confirmation.mock.calls[1]![0]).toContain('Sparkonto');
-      expect(confirmation.mock.calls[2]![0]).toContain('ISK');
-      TestBed.inject(HttpTestingController).expectOne({
-        method: 'DELETE',
-        url: '/api/connections/Swedbank?continueManually=7',
+        expect(document.querySelectorAll('[role=alertdialog]')).toHaveLength(1);
+        expect(boxes().map((box) => box.checked)).toEqual([true, true]);
+        expect(dialog()?.textContent).toContain('Sparkonto');
+        expect(dialog()?.textContent).toContain('ISK');
+        confirmButton().click();
+        TestBed.inject(HttpTestingController).expectOne({
+          method: 'DELETE',
+          url: '/api/connections/Swedbank?continueManually=7,8',
+        });
+      });
+
+      it('closes the savings account that was unchecked', async () => {
+        await open();
+
+        boxes()[1]!.click();
+        await TestBed.inject(ApplicationRef).whenStable();
+        confirmButton().click();
+        TestBed.inject(HttpTestingController).expectOne({
+          method: 'DELETE',
+          url: '/api/connections/Swedbank?continueManually=7',
+        });
       });
     });
 
     it('says so when the bank could not be removed', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
       const page = await render((request) => request.flush(response()));
 
       (await removeButton(page))!.click();
+      await TestBed.inject(ApplicationRef).whenStable();
+      confirmButton().click();
       TestBed.inject(HttpTestingController)
         .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank' })
         .flush(null, { status: 500, statusText: 'Error' });
@@ -768,9 +798,12 @@ describe('BankerPage', () => {
       toggle.click();
       await TestBed.inject(ApplicationRef).whenStable();
       const rows = section.querySelectorAll('li');
-      expect(rows[1]?.querySelector('[data-visibility]')?.textContent).toBe('Dolt');
+      const switches = (row: Element) =>
+        row.querySelector<HTMLInputElement>('[data-toggle-hidden]');
+      expect(switches(rows[0]!)?.checked).toBe(true);
+      expect(switches(rows[1]!)?.checked).toBe(false);
 
-      rows[1]!.querySelector<HTMLButtonElement>('[data-toggle-hidden]')!.click();
+      switches(rows[1]!)!.click();
       TestBed.inject(HttpTestingController)
         .expectOne({ method: 'PUT', url: '/api/accounts/2/hidden' })
         .flush(null);
@@ -790,28 +823,26 @@ describe('BankerPage', () => {
         page.querySelector<HTMLButtonElement>('[data-delete-bank]')!.click();
         await TestBed.inject(ApplicationRef).whenStable();
       };
-      const type = async (page: HTMLElement, text: string) => {
-        const input = page.querySelector<HTMLInputElement>('[data-delete-name]')!;
+      const type = async (text: string) => {
+        const input = document.querySelector<HTMLInputElement>('[data-delete-name]')!;
         input.value = text;
         input.dispatchEvent(new Event('input'));
         await TestBed.inject(ApplicationRef).whenStable();
       };
-      const confirm = (page: HTMLElement) =>
-        page.querySelector<HTMLButtonElement>('[data-confirm-delete]')!;
+      const confirm = () => confirmButton();
 
       it('erases the bank once its name is typed', async () => {
         const page = await render((request) => request.flush(removedResponse()));
         const http = TestBed.inject(HttpTestingController);
 
         await open(page);
-        expect(page.querySelector('[data-delete-form]')?.textContent).toContain(
-          'manuellt tas inte bort',
-        );
-        expect(confirm(page).disabled).toBe(true);
-        await type(page, 'Swed');
-        expect(confirm(page).disabled).toBe(true);
-        await type(page, 'Swedbank');
-        confirm(page).click();
+        expect(dialog()?.textContent).toContain('manuellt tas inte bort');
+        expect(dialog()?.querySelector('[data-confirm]')?.classList).toContain('btn-danger');
+        expect(confirm().disabled).toBe(true);
+        await type('Swed');
+        expect(confirm().disabled).toBe(true);
+        await type('Swedbank');
+        confirm().click();
 
         http
           .expectOne({ method: 'DELETE', url: '/api/connections/Swedbank/permanent' })
@@ -824,10 +855,10 @@ describe('BankerPage', () => {
         const page = await render((request) => request.flush(removedResponse()));
 
         await open(page);
-        page.querySelector<HTMLButtonElement>('[data-cancel-delete]')!.click();
+        document.querySelector<HTMLButtonElement>('[role=alertdialog] [data-cancel]')!.click();
         await TestBed.inject(ApplicationRef).whenStable();
 
-        expect(page.querySelector('[data-delete-form]')).toBeNull();
+        expect(dialog()).toBeNull();
         TestBed.inject(HttpTestingController).expectNone('/api/connections/Swedbank/permanent');
       });
 
@@ -835,8 +866,8 @@ describe('BankerPage', () => {
         const page = await render((request) => request.flush(removedResponse()));
 
         await open(page);
-        await type(page, 'Swedbank');
-        confirm(page).click();
+        await type('Swedbank');
+        confirm().click();
         TestBed.inject(HttpTestingController)
           .expectOne('/api/connections/Swedbank/permanent')
           .flush(null, { status: 500, statusText: 'Error' });

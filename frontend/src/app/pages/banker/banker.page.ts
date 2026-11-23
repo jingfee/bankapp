@@ -7,13 +7,14 @@ import {
   type AccountsResponse,
   type BankAccounts,
   type ConnectedAccount,
-  type RemovedBank,
   type ShareOption,
   type SyncSummary,
 } from '@bankapp/shared';
 import { BehaviorSubject, catchError, map, of, switchMap, takeWhile, tap, timer } from 'rxjs';
 import { AccountsService } from '../../accounts.service';
 import { Callout } from '../../callout/callout';
+import { Confirm } from '../../confirm/confirm';
+import { Menu, MenuItem } from '../../menu/menu';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Empty } from '../../empty/empty';
 import { Skeleton } from '../../skeleton/skeleton';
@@ -61,6 +62,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   selector: 'app-banker-page',
   imports: [
     RouterLink,
+    Confirm,
+    Menu,
+    MenuItem,
     DateTimePipe,
     MoneyPipe,
     Page,
@@ -70,10 +74,6 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
     Empty,
     Skeleton,
   ],
-  host: {
-    '(document:keydown.escape)': 'menuOpen.set(null)',
-    '(document:click)': 'closeMenuOnOutsideClick($event)',
-  },
   template: `
     <app-page title="Banker">
       @let result = loaded();
@@ -234,58 +234,29 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     Förnya
                   </button>
                 }
-                <div class="relative flex-none" data-bank-menu-wrap>
-                  <button
-                    type="button"
-                    data-bank-menu
-                    class="btn btn-sm btn-secondary"
-                    aria-haspopup="menu"
-                    [attr.aria-expanded]="menuOpen() === group.bank"
-                    [attr.aria-label]="'Fler val för ' + group.bank"
-                    (click)="toggleMenu(group.bank)"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
+                <app-menu [label]="'Fler val för ' + group.bank" data-bank-menu>
+                  @if (group.status === 'active') {
+                    <button
+                      appMenuItem
+                      type="button"
+                      data-renew
+                      [disabled]="renewing()"
+                      (click)="renew(group.bank, true)"
                     >
-                      <circle cx="5" cy="12" r="1.8" />
-                      <circle cx="12" cy="12" r="1.8" />
-                      <circle cx="19" cy="12" r="1.8" />
-                    </svg>
-                  </button>
-                  @if (menuOpen() === group.bank) {
-                    <div
-                      role="menu"
-                      class="card absolute right-0 top-full z-20 mt-1 flex min-w-40 flex-col p-1 shadow-lg"
-                    >
-                      @if (group.status === 'active') {
-                        <button
-                          type="button"
-                          role="menuitem"
-                          data-renew
-                          class="rounded-lg px-3 py-2 text-left text-sm hover:bg-accent/10"
-                          [disabled]="renewing()"
-                          (click)="menuOpen.set(null); renew(group.bank, true)"
-                        >
-                          Förnya
-                        </button>
-                      }
-                      <button
-                        type="button"
-                        role="menuitem"
-                        data-remove-bank
-                        class="rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-accent/10"
-                        [disabled]="removing()"
-                        (click)="menuOpen.set(null); removeBank(group)"
-                      >
-                        Ta bort bank
-                      </button>
-                    </div>
+                      Förnya
+                    </button>
                   }
-                </div>
+                  <button
+                    appMenuItem
+                    type="button"
+                    data-remove-bank
+                    [danger]="true"
+                    [disabled]="removing()"
+                    (click)="startRemove(group)"
+                  >
+                    Ta bort bank…
+                  </button>
+                </app-menu>
               </div>
 
               <div data-validity [attr.data-status]="group.status">
@@ -356,88 +327,35 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           (changed)="setShare(account, $event)"
                         />
                       </span>
-                      <div class="flex items-center gap-2">
-                        <button
-                          type="button"
+                    </div>
+                    <div class="flex flex-col gap-2">
+                      <label
+                        class="flex items-center justify-between gap-3 text-sm"
+                        title="Följ bara saldot, transaktionerna visas inte"
+                      >
+                        <span>Följ som sparkonto</span>
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          class="switch"
                           data-toggle-savings
-                          class="btn btn-sm btn-secondary"
-                          [class.border-dashed]="!account.savings"
-                          [attr.aria-label]="
-                            account.savings ? 'Sluta följa som sparkonto' : 'Följ som sparkonto'
-                          "
-                          [attr.title]="
-                            account.savings
-                              ? 'Sluta följa som sparkonto'
-                              : 'Följ som sparkonto: följ bara saldot, transaktionerna visas inte'
-                          "
+                          [checked]="account.savings"
                           [disabled]="togglingHidden()"
-                          (click)="setSavings(account.id, !account.savings)"
-                        >
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          >
-                            <path
-                              d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"
-                            />
-                            <path d="M2 9v1c0 1.1.9 2 2 2h1" />
-                            <path d="M16 11h.01" />
-                          </svg>
-                          <span data-savings-state>{{
-                            account.savings ? 'Sparkonto' : 'Vanligt konto'
-                          }}</span>
-                        </button>
-                        <button
-                          type="button"
+                          (change)="setSavings(account.id, !account.savings)"
+                        />
+                      </label>
+                      <label class="flex items-center justify-between gap-3 text-sm">
+                        <span>Visas överallt</span>
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          class="switch"
                           data-toggle-hidden
-                          class="btn btn-sm btn-secondary"
-                          [class.border-dashed]="account.hidden"
-                          [attr.aria-label]="
-                            account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
-                          "
-                          [attr.title]="
-                            account.hidden ? 'Visa kontot igen' : 'Dölj kontot överallt'
-                          "
+                          [checked]="!account.hidden"
                           [disabled]="togglingHidden()"
-                          (click)="setHidden(account.id, !account.hidden)"
-                        >
-                          <svg
-                            aria-hidden="true"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          >
-                            @if (account.hidden) {
-                              <path
-                                d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
-                              />
-                              <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
-                              <path
-                                d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
-                              />
-                              <path d="m2 2 20 20" />
-                            } @else {
-                              <path
-                                d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
-                              />
-                              <circle cx="12" cy="12" r="3" />
-                            }
-                          </svg>
-                          <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
-                        </button>
-                      </div>
+                          (change)="setHidden(account.id, !account.hidden)"
+                        />
+                      </label>
                     </div>
                   </li>
                 }
@@ -488,72 +406,30 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           <span data-account-name class="truncate">{{ account.name }}</span>
                           <span class="text-sm text-muted">{{ typeLabel(account.type) }}</span>
                         </span>
-                        <button
-                          type="button"
-                          data-toggle-hidden
-                          class="btn btn-sm btn-secondary"
-                          [class.border-dashed]="account.hidden"
-                          [disabled]="togglingHidden()"
-                          (click)="setHidden(account.id, !account.hidden)"
-                        >
-                          <span data-visibility>{{ account.hidden ? 'Dolt' : 'Visas' }}</span>
-                        </button>
+                        <label class="flex flex-none items-center gap-3 text-sm">
+                          <span>Visas</span>
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            class="switch"
+                            data-toggle-hidden
+                            [attr.aria-label]="'Visa ' + account.name"
+                            [checked]="!account.hidden"
+                            [disabled]="togglingHidden()"
+                            (change)="setHidden(account.id, !account.hidden)"
+                          />
+                        </label>
                       </li>
                     }
                   </ul>
-                  @if (confirmingDelete() === removed.bank) {
-                    <form
-                      data-delete-form
-                      class="flex flex-col gap-2 rounded-lg border border-line p-3"
-                      (submit)="$event.preventDefault(); deleteBank(removed, name.value)"
-                    >
-                      <p class="text-sm">
-                        {{ removed.bank }} raderas helt och för alltid: banken, dess konton, alla
-                        transaktioner och saldohistoriken. Månader du redan sett och uppgörelsen kan
-                        ändras. Sparkonton som du fortsatt följa manuellt tas inte bort.
-                      </p>
-                      <label class="flex flex-col gap-1 text-sm">
-                        Skriv bankens namn för att bekräfta
-                        <span class="field">
-                          <input
-                            #name
-                            data-delete-name
-                            type="text"
-                            autocomplete="off"
-                            class="field-control"
-                            (input)="typedName.set(name.value)"
-                          />
-                        </span>
-                      </label>
-                      <div class="flex gap-2">
-                        <button
-                          type="submit"
-                          data-confirm-delete
-                          class="btn btn-sm btn-danger"
-                          [disabled]="deleting() || typedName().trim() !== removed.bank"
-                        >
-                          Ta bort helt
-                        </button>
-                        <button
-                          type="button"
-                          data-cancel-delete
-                          class="btn btn-sm btn-secondary"
-                          (click)="confirmingDelete.set(null)"
-                        >
-                          Avbryt
-                        </button>
-                      </div>
-                    </form>
-                  } @else {
-                    <button
-                      type="button"
-                      data-delete-bank
-                      class="btn btn-sm btn-danger-soft self-start"
-                      (click)="startDelete(removed.bank)"
-                    >
-                      Ta bort helt
-                    </button>
-                  }
+                  <button
+                    type="button"
+                    data-delete-bank
+                    class="btn btn-sm btn-danger-soft self-start"
+                    (click)="startDelete(removed.bank)"
+                  >
+                    Ta bort helt…
+                  </button>
                 </section>
               }
             </div>
@@ -561,6 +437,61 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </div>
       }
     </app-page>
+
+    @if (removingBank(); as group) {
+      <app-confirm
+        [heading]="'Ta bort ' + group.bank + '?'"
+        message="Kontona uppdateras inte längre, men historiken finns kvar och du kan ansluta banken igen."
+        confirmLabel="Ta bort bank"
+        [busy]="removing()"
+        (confirmed)="removeBank(group)"
+        (cancelled)="removingBank.set(null)"
+      >
+        @for (account of savingsOf(group); track account.id) {
+          <label class="check-card">
+            <input
+              type="checkbox"
+              class="accent-(--color-accent)"
+              [attr.data-continue-account]="account.id"
+              [checked]="continuing().has(account.id)"
+              (change)="toggleContinue(account.id)"
+            />
+            <span>Fortsätt följa saldot på {{ account.name }} manuellt</span>
+          </label>
+        }
+      </app-confirm>
+    }
+
+    @if (confirmingDelete(); as bank) {
+      <app-confirm
+        [heading]="'Ta bort ' + bank + ' helt?'"
+        [message]="
+          bank +
+          ' raderas helt och för alltid: banken, dess konton, alla transaktioner och saldohistoriken. Månader du redan sett och uppgörelsen kan ändras. Sparkonton som du fortsatt följa manuellt tas inte bort.'
+        "
+        confirmLabel="Ta bort helt"
+        [busy]="deleting()"
+        [confirmDisabled]="typedName().trim() !== bank"
+        (confirmed)="deleteBank(bank)"
+        (cancelled)="confirmingDelete.set(null)"
+      >
+        <label class="flex flex-col gap-1 text-sm">
+          Skriv bankens namn för att bekräfta
+          <span class="field">
+            <input
+              #name
+              data-delete-name
+              data-autofocus
+              type="text"
+              autocomplete="off"
+              class="field-control"
+              [value]="typedName()"
+              (input)="typedName.set(name.value)"
+            />
+          </span>
+        </label>
+      </app-confirm>
+    }
   `,
 })
 export class BankerPage {
@@ -569,7 +500,10 @@ export class BankerPage {
   private readonly syncStatus = inject(SyncStatusService);
   private readonly connections = inject(ConnectionsService);
   private readonly redirector = inject(Redirector);
-  protected readonly menuOpen = signal<string | null>(null);
+  /** The bank the owner is removing, awaiting confirmation. */
+  protected readonly removingBank = signal<BankAccounts | null>(null);
+  /** The savings accounts of that bank that carry on by hand, by id. */
+  protected readonly continuing = signal<ReadonlySet<number>>(new Set());
   protected readonly renewing = signal(false);
   protected readonly renewFailed = signal(false);
   protected readonly removing = signal(false);
@@ -702,16 +636,6 @@ export class BankerPage {
     });
   }
 
-  protected closeMenuOnOutsideClick(event: Event): void {
-    if (this.menuOpen() === null) return;
-    const target = event.target as Element | null;
-    if (!target?.closest('[data-bank-menu-wrap]')) this.menuOpen.set(null);
-  }
-
-  protected toggleMenu(bank: string): void {
-    this.menuOpen.update((open) => (open === bank ? null : bank));
-  }
-
   /** Sends the owner to BankID to renew the bank's connection. */
   protected renew(bank: string, stillActive = false): void {
     this.renewing.set(true);
@@ -725,29 +649,44 @@ export class BankerPage {
     });
   }
 
+  protected savingsOf(group: BankAccounts): ConnectedAccount[] {
+    return group.accounts.filter((account) => account.savings);
+  }
+
+  /** Opens the confirmation; each savings account starts out continuing by hand. */
+  protected startRemove(group: BankAccounts): void {
+    this.continuing.set(new Set(this.savingsOf(group).map((account) => account.id)));
+    this.removingBank.set(group);
+  }
+
+  protected toggleContinue(id: number): void {
+    this.continuing.update((all) => {
+      const next = new Set(all);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
   /**
    * Removes a bank after the owner confirms: it stops syncing, its history stays and it can be
-   * connected again (_Ta bort bank_).
+   * connected again (_Ta bort bank_). Each savings account either carries on by hand or closes
+   * from today.
    */
   protected removeBank(group: BankAccounts): void {
-    const savings = group.accounts.filter((account) => account.savings);
-    const message =
-      `Ta bort ${group.bank}? Kontona uppdateras inte längre, men historiken finns kvar ` +
-      `och du kan ansluta banken igen.`;
-    if (!confirm(message)) return;
-    // Each savings account either carries on by hand or closes from today.
-    const continueManually = savings
-      .filter((account) => confirm(`Fortsätt följa saldot manuellt?\n${account.name}`))
+    const continueManually = this.savingsOf(group)
+      .filter((account) => this.continuing().has(account.id))
       .map((account) => account.id);
     this.removing.set(true);
     this.removeFailed.set(false);
     this.connections.remove(group.bank, continueManually).subscribe({
       next: () => {
         this.removing.set(false);
+        this.removingBank.set(null);
         this.refresh.next();
       },
       error: () => {
         this.removing.set(false);
+        this.removingBank.set(null);
         this.removeFailed.set(true);
       },
     });
@@ -763,11 +702,11 @@ export class BankerPage {
    * Erases a removed bank and everything it brought in, once the owner has typed its name
    * (_Ta bort helt_, ADR 0013).
    */
-  protected deleteBank(removed: RemovedBank, typed: string): void {
-    if (typed.trim() !== removed.bank) return;
+  protected deleteBank(bank: string): void {
+    if (this.typedName().trim() !== bank) return;
     this.deleting.set(true);
     this.deleteFailed.set(false);
-    this.connections.deleteForGood(removed.bank).subscribe({
+    this.connections.deleteForGood(bank).subscribe({
       next: () => {
         this.deleting.set(false);
         this.confirmingDelete.set(null);
@@ -775,6 +714,7 @@ export class BankerPage {
       },
       error: () => {
         this.deleting.set(false);
+        this.confirmingDelete.set(null);
         this.deleteFailed.set(true);
       },
     });
