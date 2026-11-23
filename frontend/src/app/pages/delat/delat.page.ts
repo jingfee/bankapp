@@ -1,6 +1,6 @@
 import { ShortDatePipe, shortDate } from '../../formatting/short-date.pipe';
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -28,14 +28,12 @@ import { DateField } from '../../date-field/date-field';
 import { MonthField } from '../../month-field/month-field';
 import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
-import { SettlementService } from '../../settlement.service';
 import { SettlementStore } from '../../stores/settlement.store';
 import { SharesStore } from '../../stores/shares.store';
 import { today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
 import { ShareControl } from '../../share-control/share-control';
 import { SHARE_LABELS, householdRatioOn } from '../../share-display';
-import { SharesService } from '../../shares.service';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
 
@@ -48,6 +46,8 @@ interface Loaded {
 }
 
 type State = Loaded | { failed: true };
+
+const NO_SETTLEMENT: SettlementResponse = { balance: null, periods: [], balanceSettings: [] };
 
 /** A shared subcategory as a row of the list. */
 interface SharedRow {
@@ -106,7 +106,13 @@ interface SharedRow {
           <div class="flex min-w-0 flex-col gap-4">
             <section data-balance-card class="card glow-violet flex flex-col gap-4 p-5 sm:p-6">
               <h2 class="eyebrow">Avräkningssaldo</h2>
-              @if (settlement().balance === null) {
+              @if (settlementFailed()) {
+                <app-callout variant="danger"
+                  >Avräkningen kunde inte hämtas. Försök igen senare.</app-callout
+                >
+              } @else if (settlementLoading()) {
+                <app-skeleton shape="card" />
+              } @else if (settlement().balance === null) {
                 <div data-switch-help>
                   <h3 class="card-title">Ställ in saldot för att börja</h3>
                   <p class="mt-2 text-sm text-muted">
@@ -124,26 +130,28 @@ interface SharedRow {
                 </div>
               }
 
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-open-setting
-                  class="btn btn-secondary btn-sm"
-                  (click)="settingOpen.set(true)"
-                >
-                  Ställ in saldo
-                </button>
-                @if (open(); as period) {
+              @if (!settlementFailed() && !settlementLoading()) {
+                <div class="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    data-close-month
+                    data-open-setting
                     class="btn btn-secondary btn-sm"
-                    (click)="startClosing(period)"
+                    (click)="settingOpen.set(true)"
                   >
-                    Avsluta {{ monthOnly(period.month).toLowerCase() }}
+                    Ställ in saldo
                   </button>
-                }
-              </div>
+                  @if (open(); as period) {
+                    <button
+                      type="button"
+                      data-close-month
+                      class="btn btn-secondary btn-sm"
+                      (click)="startClosing(period)"
+                    >
+                      Avsluta {{ monthOnly(period.month).toLowerCase() }}
+                    </button>
+                  }
+                </div>
+              }
               @if (settingOpen()) {
                 <app-sheet
                   data-setting-form
@@ -418,77 +426,87 @@ interface SharedRow {
           <div class="flex min-w-0 flex-col gap-4">
             <section data-ratio-card class="card flex flex-col gap-4 p-5 sm:p-6">
               <h2 class="eyebrow">Hushållsandel</h2>
-              @if (current()) {
-                <p data-ratio-heading class="amount text-4xl">
-                  {{ sliderValue() }}/{{ 100 - sliderValue() }}
-                </p>
+              @if (sharesFailed()) {
+                <app-callout variant="danger"
+                  >Hushållsandelen kunde inte hämtas. Försök igen senare.</app-callout
+                >
+              } @else if (sharesLoading()) {
+                <app-skeleton shape="card" />
               } @else {
-                <p data-ratio-heading class="card-title">Ingen hushållsandel inställd</p>
-              }
-              <input
-                type="range"
-                data-slider
-                class="slider"
-                min="1"
-                max="99"
-                aria-label="Din andel i procent"
-                [value]="sliderValue()"
-                [style.--fill.%]="sliderValue()"
-                (input)="slider.set(+value($event))"
-              />
-              @if (sliderChanged()) {
-                <div class="expand-in flex flex-wrap items-center justify-between gap-3">
-                  <p data-slider-note class="text-sm text-muted">
-                    Gäller från {{ todayText() }}. Tidigare månader ändras inte.
+                @if (current()) {
+                  <p data-ratio-heading class="amount text-4xl">
+                    {{ sliderValue() }}/{{ 100 - sliderValue() }}
                   </p>
-                  <button
-                    type="button"
-                    data-save-slider
-                    class="btn btn-primary btn-sm"
-                    [disabled]="saving()"
-                    (click)="saveSlider()"
-                  >
-                    Spara
-                  </button>
-                </div>
-              }
-
-              <ul class="divide-y divide-line">
-                @for (entry of history(); track entry.from) {
-                  <li
-                    data-ratio-entry
-                    class="flex flex-wrap items-center justify-between gap-2 py-2"
-                  >
-                    <span class="text-sm">
-                      <span class="font-medium">{{ entry.percent }}/{{ 100 - entry.percent }}</span>
-                      <span class="text-muted"> · från {{ entry.from | shortDate }}</span>
-                    </span>
-                    <app-menu
-                      label="Åtgärder för hushållsandelen från {{ entry.from | shortDate }}"
-                    >
-                      <button
-                        appMenuItem
-                        type="button"
-                        data-edit
-                        [disabled]="saving()"
-                        (click)="startEdit(entry)"
-                      >
-                        Ändra
-                      </button>
-                      <button
-                        appMenuItem
-                        type="button"
-                        data-remove
-                        [danger]="true"
-                        [disabled]="saving() || ratio().length === 1"
-                        (click)="removing.set(entry)"
-                      >
-                        Ta bort…
-                      </button>
-                    </app-menu>
-                  </li>
+                } @else {
+                  <p data-ratio-heading class="card-title">Ingen hushållsandel inställd</p>
                 }
-              </ul>
+                <input
+                  type="range"
+                  data-slider
+                  class="slider"
+                  min="1"
+                  max="99"
+                  aria-label="Din andel i procent"
+                  [value]="sliderValue()"
+                  [style.--fill.%]="sliderValue()"
+                  (input)="slider.set(+value($event))"
+                />
+                @if (sliderChanged()) {
+                  <div class="expand-in flex flex-wrap items-center justify-between gap-3">
+                    <p data-slider-note class="text-sm text-muted">
+                      Gäller från {{ todayText() }}. Tidigare månader ändras inte.
+                    </p>
+                    <button
+                      type="button"
+                      data-save-slider
+                      class="btn btn-primary btn-sm"
+                      [disabled]="saving()"
+                      (click)="saveSlider()"
+                    >
+                      Spara
+                    </button>
+                  </div>
+                }
+
+                <ul class="divide-y divide-line">
+                  @for (entry of history(); track entry.from) {
+                    <li
+                      data-ratio-entry
+                      class="flex flex-wrap items-center justify-between gap-2 py-2"
+                    >
+                      <span class="text-sm">
+                        <span class="font-medium"
+                          >{{ entry.percent }}/{{ 100 - entry.percent }}</span
+                        >
+                        <span class="text-muted"> · från {{ entry.from | shortDate }}</span>
+                      </span>
+                      <app-menu
+                        label="Åtgärder för hushållsandelen från {{ entry.from | shortDate }}"
+                      >
+                        <button
+                          appMenuItem
+                          type="button"
+                          data-edit
+                          [disabled]="saving()"
+                          (click)="startEdit(entry)"
+                        >
+                          Ändra
+                        </button>
+                        <button
+                          appMenuItem
+                          type="button"
+                          data-remove
+                          [danger]="true"
+                          [disabled]="saving() || ratio().length === 1"
+                          (click)="removing.set(entry)"
+                        >
+                          Ta bort…
+                        </button>
+                      </app-menu>
+                    </li>
+                  }
+                </ul>
+              }
             </section>
 
             <section data-shared-card class="card flex flex-col gap-4 p-4 sm:p-5">
@@ -505,40 +523,48 @@ interface SharedRow {
                   Lägg till
                 </button>
               </div>
-              <p class="text-sm text-muted">
-                Alla andra underkategorier räknas som Jag (100 %). Ett kontos eller en transaktions
-                egen andel går före.
-              </p>
+              @if (sharesFailed()) {
+                <app-callout variant="danger"
+                  >De delade underkategorierna kunde inte hämtas. Försök igen senare.</app-callout
+                >
+              } @else if (sharesLoading()) {
+                <app-skeleton shape="card" />
+              } @else {
+                <p class="text-sm text-muted">
+                  Alla andra underkategorier räknas som Jag (100 %). Ett kontos eller en
+                  transaktions egen andel går före.
+                </p>
 
-              @if (picking()) {
-                <app-category-tiles [categories]="pickable()" (picked)="add($event)" />
-              }
-
-              <ul class="flex flex-col divide-y divide-line">
-                @for (row of sharedRows(); track row.subcategory.id) {
-                  <li data-shared class="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-                    <app-category-icon
-                      [icon]="row.subcategory.icon"
-                      [colour]="row.category.colour"
-                      [size]="28"
-                    />
-                    <span class="min-w-0 flex-1 basis-40">
-                      <span data-name class="block truncate text-sm font-medium">{{
-                        row.subcategory.name
-                      }}</span>
-                      <span class="text-xs text-muted">{{ row.category.name }}</span>
-                    </span>
-                    <app-share-control
-                      class="order-last w-full sm:order-none sm:w-auto"
-                      [label]="'Andel för ' + row.subcategory.name"
-                      [value]="row.share"
-                      [disabled]="saving()"
-                      [householdDisabled]="ratio().length === 0"
-                      (changed)="setShare(row.subcategory, $event)"
-                    />
-                  </li>
+                @if (picking()) {
+                  <app-category-tiles [categories]="pickable()" (picked)="add($event)" />
                 }
-              </ul>
+
+                <ul class="flex flex-col divide-y divide-line">
+                  @for (row of sharedRows(); track row.subcategory.id) {
+                    <li data-shared class="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+                      <app-category-icon
+                        [icon]="row.subcategory.icon"
+                        [colour]="row.category.colour"
+                        [size]="28"
+                      />
+                      <span class="min-w-0 flex-1 basis-40">
+                        <span data-name class="block truncate text-sm font-medium">{{
+                          row.subcategory.name
+                        }}</span>
+                        <span class="text-xs text-muted">{{ row.category.name }}</span>
+                      </span>
+                      <app-share-control
+                        class="order-last w-full sm:order-none sm:w-auto"
+                        [label]="'Andel för ' + row.subcategory.name"
+                        [value]="row.share"
+                        [disabled]="saving()"
+                        [householdDisabled]="ratio().length === 0"
+                        (changed)="setShare(row.subcategory, $event)"
+                      />
+                    </li>
+                  }
+                </ul>
+              }
             </section>
           </div>
         </div>
@@ -653,8 +679,6 @@ interface SharedRow {
 })
 export class DelatPage {
   private readonly categoriesService = inject(CategoriesService);
-  private readonly shares = inject(SharesService);
-  private readonly settlementService = inject(SettlementService);
   private readonly settlementStore = inject(SettlementStore);
   private readonly sharesStore = inject(SharesStore);
   private readonly toast = inject(ToastService);
@@ -669,11 +693,14 @@ export class DelatPage {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly settlement = signal<SettlementResponse>({
-    balance: null,
-    periods: [],
-    balanceSettings: [],
-  });
+  /** The settlement as the store reads it; empty until it arrives, so the page can lean on it. */
+  protected readonly settlement = computed<SettlementResponse>(
+    () => this.settlementStore.settlement() ?? NO_SETTLEMENT,
+  );
+  protected readonly settlementFailed = this.settlementStore.failed;
+  protected readonly settlementLoading = this.settlementStore.loading;
+  protected readonly sharesFailed = this.sharesStore.failed;
+  protected readonly sharesLoading = this.sharesStore.loading;
   protected readonly settingOpen = signal(false);
   protected readonly amount = signal('');
   protected readonly amountValid = computed(() => parseAmount(this.amount()) !== null);
@@ -690,7 +717,9 @@ export class DelatPage {
   protected readonly closingDate = signal('');
   protected readonly nextMonth = signal('');
 
-  protected readonly ratio = signal<HouseholdRatioEntry[]>([]);
+  protected readonly ratio = computed(() =>
+    [...(this.sharesStore.householdRatio() ?? [])].sort((a, b) => a.from.localeCompare(b.from)),
+  );
   protected readonly slider = signal<number | null>(null);
   protected readonly editing = signal<string | null>(null);
   /** The ratio entry being removed, awaiting confirmation. */
@@ -701,7 +730,12 @@ export class DelatPage {
   protected readonly editPercent = signal('');
 
   /** The share of each subcategory that is not Jag. */
-  private readonly subcategoryShares = signal(new Map<number, ShareOption>());
+  private readonly subcategoryShares = computed(
+    () =>
+      new Map<number, ShareOption>(
+        (this.sharesStore.subcategoryShares() ?? []).map((s) => [s.subcategoryId, s.share]),
+      ),
+  );
   private readonly categories = signal<Category[]>([]);
   private readonly allSubcategories = signal<CategorisedSubcategory[]>([]);
   protected readonly picking = signal(false);
@@ -710,14 +744,8 @@ export class DelatPage {
     forkJoin({
       categories: this.categoriesService.list(),
       subcategories: this.categoriesService.subcategories(),
-      shares: this.shares.subcategoryShares(),
-      ratio: this.shares.householdRatio(),
-      settlement: this.settlementService.get(),
     }).pipe(
-      map(({ categories, subcategories, shares, ratio, settlement }): State => {
-        this.subcategoryShares.set(new Map(shares.map((s) => [s.subcategoryId, s.share])));
-        this.ratio.set([...ratio].sort((a, b) => a.from.localeCompare(b.from)));
-        this.settlement.set(settlement);
+      map(({ categories, subcategories }): State => {
         this.categories.set(categories);
         this.allSubcategories.set(subcategories);
         return { categories };
@@ -726,6 +754,15 @@ export class DelatPage {
     ),
     { initialValue: undefined },
   );
+
+  constructor() {
+    this.settlementStore.activate();
+    this.sharesStore.activate();
+    inject(DestroyRef).onDestroy(() => {
+      this.settlementStore.deactivate();
+      this.sharesStore.deactivate();
+    });
+  }
 
   protected readonly balanceAmount = computed(() => Math.abs(this.settlement().balance ?? 0));
   protected readonly balanceDirection = computed(() =>
@@ -866,8 +903,7 @@ export class DelatPage {
     this.saving.set(true);
     this.error.set(null);
     request.subscribe({
-      next: (response) => {
-        this.settlement.set(response);
+      next: () => {
         done?.();
         this.saving.set(false);
       },
@@ -904,8 +940,7 @@ export class DelatPage {
     this.saving.set(true);
     this.error.set(null);
     this.settlementStore.setBalance({ amount, asOf: this.asOf() }).subscribe({
-      next: (response) => {
-        this.settlement.set(response);
+      next: () => {
         this.amount.set('');
         this.asOf.set(today());
         this.settingOpen.set(false);
@@ -969,10 +1004,8 @@ export class DelatPage {
     this.sharesStore
       .setHouseholdRatio([...entries].sort((a, b) => a.from.localeCompare(b.from)))
       .subscribe({
-        next: (saved) => {
+        next: () => {
           this.saving.set(false);
-          this.ratio.set(saved);
-          this.refreshSettlement();
           done?.();
         },
         error: () => {
@@ -981,13 +1014,6 @@ export class DelatPage {
           this.error.set('Hushållsandelen kunde inte sparas. Försök igen senare.');
         },
       });
-  }
-
-  /** The ratio and the shares drive the balance, so it is fetched again after they change. */
-  private refreshSettlement(): void {
-    this.settlementService.get().subscribe({
-      next: (response) => this.settlement.set(response),
-    });
   }
 
   /** A subcategory picked in the picker is shared 50/50 to begin with. */
@@ -1013,13 +1039,6 @@ export class DelatPage {
     this.sharesStore.setSubcategoryShare(id, option).subscribe({
       next: () => {
         this.saving.set(false);
-        this.subcategoryShares.update((shares) => {
-          const next = new Map(shares);
-          if (option === 'me') next.delete(id);
-          else next.set(id, option);
-          return next;
-        });
-        this.refreshSettlement();
         done?.();
       },
       error: (error: unknown) => {

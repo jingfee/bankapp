@@ -44,7 +44,7 @@ export const ALL_READS: readonly Read[] = [
 export const INVALIDATION_MAP: Readonly<Record<Fact, readonly Read[]>> = {
   transactions: TRANSACTIONS,
   accounts: ['accounts', 'savings', ...TRANSACTIONS],
-  shares: ['transactionList', 'listed', 'transactionDetails', 'overview', 'settlement'],
+  shares: ['shares', 'transactionList', 'listed', 'transactionDetails', 'overview', 'settlement'],
   banks: ALL_READS,
   settlement: ['settlement', 'overview'],
   mortgage: ['mortgage', 'mortgageFigures'],

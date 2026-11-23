@@ -1,34 +1,60 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type {
   CategoriesResponse,
+  Category,
   HouseholdRatioEntry,
   SettlementPeriod,
   SettlementResponse,
   SubcategoryShare,
 } from '@bankapp/shared';
+import { type Observable, map, of, throwError } from 'rxjs';
 import { routes } from '../../app.routes';
+import { CategoriesService } from '../../categories.service';
+import { SettlementStore } from '../../stores/settlement.store';
+import { FakeSettlementStore } from '../../stores/settlement.store.fake';
+import { SharesStore } from '../../stores/shares.store';
+import { FakeSharesStore } from '../../stores/shares.store.fake';
 import { ToastService } from '../../toast/toast.service';
 import { DelatPage } from './delat.page';
 
 describe('DelatPage', () => {
+  let settlementStore: FakeSettlementStore;
+  let sharesStore: FakeSharesStore;
+  let categoriesRead: () => Observable<Category[]>;
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-15T12:00:00'));
+    settlementStore = new FakeSettlementStore();
+    sharesStore = new FakeSharesStore();
+    categoriesRead = () => of(categories.categories);
     TestBed.configureTestingModule({
       imports: [DelatPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideRouter([]),
+        { provide: SettlementStore, useValue: settlementStore },
+        { provide: SharesStore, useValue: sharesStore },
+        {
+          provide: CategoriesService,
+          useValue: {
+            list: () => categoriesRead(),
+            subcategories: () =>
+              categoriesRead().pipe(
+                map((all) =>
+                  all.flatMap((category) =>
+                    category.subcategories.map((subcategory) => ({ category, subcategory })),
+                  ),
+                ),
+              ),
+          },
+        },
+      ],
     });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    const http = TestBed.inject(HttpTestingController);
-    // Changing a ratio or share fetches the balance again; most tests don't look at it.
-    for (const refresh of http.match('/api/settlement')) refresh.flush(settlementOf());
-    http.verify();
   });
 
   const categories: CategoriesResponse = {
@@ -89,20 +115,21 @@ describe('DelatPage', () => {
     } = {},
   ) {
     const {
-      ratio = [{ from: '2026-01-01', percent: 60 }],
-      shares = [{ subcategoryId: 10, share: 'household' }],
-      settlement = settlementOf(),
+      ratio = 'ratio' in options ? undefined : [{ from: '2026-01-01', percent: 60 }],
+      shares = 'shares' in options ? undefined : [{ subcategoryId: 10, share: 'household' }],
+      settlement = 'settlement' in options ? undefined : settlementOf(),
     } = options;
+    settlementStore.settlement.set(settlement);
+    sharesStore.householdRatio.set(ratio);
+    sharesStore.subcategoryShares.set(shares);
     const fixture = TestBed.createComponent(DelatPage);
     await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/categories').flush(categories);
-    http.expectOne('/api/subcategory-shares').flush({ shares });
-    http.expectOne('/api/household-ratio').flush({ entries: ratio });
-    http.expectOne('/api/settlement').flush(settlement);
-    await fixture.whenStable();
-    return { fixture, page: fixture.nativeElement as HTMLElement, http };
+    return { fixture, page: fixture.nativeElement as HTMLElement };
   }
+
+  /** The arguments of each call to a store method, in order. */
+  const callsTo = (store: FakeSettlementStore | FakeSharesStore, method: string) =>
+    store.calls.filter((call) => call.method === method).map((call) => call.args);
 
   const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
   /** Picks a month in a month field. */
@@ -129,16 +156,50 @@ describe('DelatPage', () => {
   });
 
   it('says when it cannot be fetched', async () => {
+    categoriesRead = () => throwError(() => new Error('down'));
     const fixture = TestBed.createComponent(DelatPage);
-    await fixture.whenStable();
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/subcategory-shares').flush({ shares: [] });
-    http.expectOne('/api/household-ratio').flush({ entries: [] });
-    http.expectOne('/api/settlement').flush(settlementOf());
-    http.expectOne('/api/categories').error(new ProgressEvent('error'));
     await fixture.whenStable();
 
     expect((fixture.nativeElement as HTMLElement).querySelector('[role=alert]')).not.toBeNull();
+  });
+
+  it('follows the settlement and the shares only while it is open', async () => {
+    const { fixture } = await render();
+    expect(callsTo(settlementStore, 'activate')).toHaveLength(1);
+    expect(callsTo(sharesStore, 'activate')).toHaveLength(1);
+
+    fixture.destroy();
+    expect(callsTo(settlementStore, 'deactivate')).toHaveLength(1);
+    expect(callsTo(sharesStore, 'deactivate')).toHaveLength(1);
+  });
+
+  it('still shows the household ratio and the shared subcategories when the settlement cannot be fetched', async () => {
+    settlementStore.failed.set(true);
+    const { page } = await render({ settlement: undefined });
+
+    expect(text(page.querySelector('[data-balance-card] [role=alert]'))).toContain(
+      'Avräkningen kunde inte hämtas',
+    );
+    expect(page.querySelector('[data-switch-help]')).toBeNull();
+    expect(text(page.querySelector('[data-ratio-heading]'))).toBe('60/40');
+    expect(page.querySelectorAll('[data-shared]')).toHaveLength(1);
+  });
+
+  it('still shows the settlement when the shares cannot be fetched', async () => {
+    sharesStore.failed.set(true);
+    const { page } = await render({
+      settlement: settlementOf({ balance: 312 }),
+      ratio: undefined,
+      shares: undefined,
+    });
+
+    expect(text(page.querySelector('[data-balance]'))).toBe('312,00 kr');
+    expect(text(page.querySelector('[data-ratio-card] [role=alert]'))).toContain(
+      'kunde inte hämtas',
+    );
+    expect(text(page.querySelector('[data-shared-card] [role=alert]'))).toContain(
+      'kunde inte hämtas',
+    );
   });
 
   describe('the settlement balance', () => {
@@ -181,7 +242,7 @@ describe('DelatPage', () => {
     });
 
     it('sets the balance from a form that opens inline, per today by default', async () => {
-      const { fixture, page, http } = await render();
+      const { fixture, page } = await render();
       expect(document.querySelector('[data-setting-form]')).toBeNull();
 
       page.querySelector<HTMLButtonElement>('[data-open-setting]')!.click();
@@ -194,9 +255,9 @@ describe('DelatPage', () => {
       await fixture.whenStable();
       document.querySelector<HTMLButtonElement>('[data-save-balance]')!.click();
 
-      const post = http.expectOne('/api/settlement/balance-settings');
-      expect(post.request.body).toEqual({ amount: 1200.5, asOf: today });
-      post.flush(settlementOf({ balance: 1200.5 }));
+      expect(callsTo(settlementStore, 'setBalance')).toEqual([[{ amount: 1200.5, asOf: today }]]);
+      // The settlement fact refreshes what the page shows.
+      settlementStore.settlement.set(settlementOf({ balance: 1200.5 }));
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-balance]'))).toBe('1 200,50 kr');
@@ -398,16 +459,17 @@ describe('DelatPage', () => {
     });
 
     it('sends the close and shows the new periods', async () => {
-      const { fixture, page, http } = await render({ settlement });
+      const { fixture, page } = await render({ settlement });
       page.querySelector<HTMLButtonElement>('[data-close-month]')!.click();
       await fixture.whenStable();
       pick(document.body, '[data-next-month]', '2026-12');
       await fixture.whenStable();
       document.querySelector<HTMLButtonElement>('[data-confirm-close]')!.click();
 
-      const request = http.expectOne('/api/settlement/close');
-      expect(request.request.body).toEqual({ closedThrough: '2026-10-28', nextMonth: '2026-12' });
-      request.flush(
+      expect(callsTo(settlementStore, 'close')).toEqual([
+        [{ closedThrough: '2026-10-28', nextMonth: '2026-12' }],
+      ]);
+      settlementStore.settlement.set(
         settlementOf({
           balance: 80,
           periods: [
@@ -434,17 +496,17 @@ describe('DelatPage', () => {
     });
 
     it('edits the month of the open period', async () => {
-      const { fixture, page, http } = await render({ settlement });
+      const { fixture, page } = await render({ settlement });
       await openMenu(fixture, page.querySelector('[data-open-period]')!);
       page.querySelector<HTMLButtonElement>('[data-edit-month]')!.click();
       await fixture.whenStable();
       pick(document.body, '[data-month-input]', '2026-09');
       await fixture.whenStable();
       document.querySelector<HTMLButtonElement>('[data-save-month]')!.click();
-      const request = http.expectOne('/api/settlement/month');
-      expect(request.request.method).toBe('PUT');
-      expect(request.request.body).toEqual({ month: '2026-09' });
-      request.flush(settlementOf({ balance: 80, periods: [period({ month: '2026-09' })] }));
+      expect(callsTo(settlementStore, 'setOpenMonth')).toEqual([[{ month: '2026-09' }]]);
+      settlementStore.settlement.set(
+        settlementOf({ balance: 80, periods: [period({ month: '2026-09' })] }),
+      );
       await fixture.whenStable();
       expect(text(page.querySelector('[data-open-period] h2'))).toBe('September 2026 · pågående');
     });
@@ -488,16 +550,15 @@ describe('DelatPage', () => {
       });
 
       it('can be saved again, which clears the notice', async () => {
-        const { fixture, page, http } = await opened(false);
+        const { fixture, page } = await opened(false);
         expect(text(page.querySelector('[data-report-failed]'))).toBe(
           'Rapporten kunde inte sparas',
         );
 
         await openMenu(fixture, page.querySelector('[data-closed-period]')!);
         page.querySelector<HTMLButtonElement>('[data-save-report]')!.click();
-        const request = http.expectOne('/api/settlement/periods/2026-10/report');
-        expect(request.request.method).toBe('POST');
-        request.flush(
+        expect(callsTo(settlementStore, 'saveReport')).toEqual([['2026-10']]);
+        settlementStore.settlement.set(
           settlementOf({
             periods: [
               period({ month: '2026-11' }),
@@ -521,7 +582,7 @@ describe('DelatPage', () => {
       });
 
       it('offers it on the latest close only, after confirmation', async () => {
-        const { fixture, page, http } = await render({ settlement: closedTwice });
+        const { fixture, page } = await render({ settlement: closedTwice });
         page
           .querySelector<HTMLButtonElement>('[data-toggle-closed] [data-disclosure-toggle]')!
           .click();
@@ -535,14 +596,13 @@ describe('DelatPage', () => {
 
         (buttons[0] as HTMLButtonElement).click();
         await fixture.whenStable();
-        http.expectNone('/api/settlement/undo-close');
+        expect(callsTo(settlementStore, 'undoClose')).toHaveLength(0);
         expect(text(document.querySelector('[role=alertdialog] [data-title]'))).toBe(
           'Ångra avslutet av November 2026?',
         );
         (document.querySelector('[role=alertdialog] [data-confirm]') as HTMLButtonElement).click();
-        const request = http.expectOne('/api/settlement/undo-close');
-        expect(request.request.method).toBe('POST');
-        request.flush(
+        expect(callsTo(settlementStore, 'undoClose')).toHaveLength(1);
+        settlementStore.settlement.set(
           settlementOf({
             periods: [
               period({ month: '2026-11' }),
@@ -567,7 +627,7 @@ describe('DelatPage', () => {
         (document.querySelector('[role=alertdialog] [data-cancel]') as HTMLButtonElement).click();
         await fixture.whenStable();
         expect(document.querySelector('[role=alertdialog]')).toBeNull();
-        // afterEach verifies that no request was made.
+        expect(callsTo(settlementStore, 'undoClose')).toHaveLength(0);
       });
     });
   });
@@ -597,7 +657,7 @@ describe('DelatPage', () => {
     });
 
     it('reveals what a change means and saves a dated entry from today', async () => {
-      const { fixture, page, http } = await render();
+      const { fixture, page } = await render();
       const slider = page.querySelector<HTMLInputElement>('[data-slider]')!;
       expect(slider.min).toBe('1');
       expect(slider.max).toBe('99');
@@ -612,38 +672,36 @@ describe('DelatPage', () => {
       );
       page.querySelector<HTMLButtonElement>('[data-save-slider]')!.click();
 
-      const put = http.expectOne('/api/household-ratio');
-      expect(put.request.body).toEqual({
-        entries: [
-          { from: '2026-01-01', percent: 60 },
-          { from: today, percent: 50 },
-        ],
-      });
-      put.flush({ entries: put.request.body.entries });
+      const entries = [
+        { from: '2026-01-01', percent: 60 },
+        { from: today, percent: 50 },
+      ];
+      expect(callsTo(sharesStore, 'setHouseholdRatio')).toEqual([[entries]]);
+      // The shares fact refreshes what the page shows.
+      sharesStore.householdRatio.set(entries);
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-ratio-heading]'))).toBe('50/50');
       expect(page.querySelector('[data-slider-note]')).toBeNull();
     });
 
-    it('fetches the balance again, as the ratio drives it', async () => {
-      const { fixture, page, http } = await render({
+    it('shows the balance the settlement read gives after the ratio changes', async () => {
+      const { fixture, page } = await render({
         settlement: settlementOf({ balance: 100 }),
       });
 
       type(page.querySelector<HTMLInputElement>('[data-slider]')!, '50');
       await fixture.whenStable();
       page.querySelector<HTMLButtonElement>('[data-save-slider]')!.click();
-      const put = http.expectOne('/api/household-ratio');
-      put.flush({ entries: put.request.body.entries });
-      http.expectOne('/api/settlement').flush(settlementOf({ balance: 250 }));
+      // The shares fact refreshes the settlement as well.
+      settlementStore.settlement.set(settlementOf({ balance: 250 }));
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-balance]'))).toBe('250,00 kr');
     });
 
     it('replaces an entry that starts today instead of duplicating it', async () => {
-      const { fixture, page, http } = await render({
+      const { fixture, page } = await render({
         ratio: [{ from: today, percent: 60 }],
       });
 
@@ -651,13 +709,11 @@ describe('DelatPage', () => {
       await fixture.whenStable();
       page.querySelector<HTMLButtonElement>('[data-save-slider]')!.click();
 
-      expect(http.expectOne('/api/household-ratio').request.body).toEqual({
-        entries: [{ from: today, percent: 70 }],
-      });
+      expect(callsTo(sharesStore, 'setHouseholdRatio')).toEqual([[[{ from: today, percent: 70 }]]]);
     });
 
     it('edits a past entry', async () => {
-      const { fixture, page, http } = await render({
+      const { fixture, page } = await render({
         ratio: [
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
@@ -671,12 +727,14 @@ describe('DelatPage', () => {
       type(document.querySelector<HTMLInputElement>('[data-edit-percent]')!, '65');
       document.querySelector<HTMLButtonElement>('[data-save-edit]')!.click();
 
-      expect(http.expectOne('/api/household-ratio').request.body).toEqual({
-        entries: [
-          { from: '2026-01-01', percent: 65 },
-          { from: '2026-07-01', percent: 55 },
+      expect(callsTo(sharesStore, 'setHouseholdRatio')).toEqual([
+        [
+          [
+            { from: '2026-01-01', percent: 65 },
+            { from: '2026-07-01', percent: 55 },
+          ],
         ],
-      });
+      ]);
     });
 
     it('does not send a percentage outside 1 to 99', async () => {
@@ -693,7 +751,7 @@ describe('DelatPage', () => {
     });
 
     it('removes an entry, but never the last one', async () => {
-      const { fixture, page, http } = await render({
+      const { fixture, page } = await render({
         ratio: [
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
@@ -704,11 +762,12 @@ describe('DelatPage', () => {
       await openMenu(fixture, entries[1]!);
       entries[1]!.querySelector<HTMLButtonElement>('[data-remove]')!.click();
       await fixture.whenStable();
-      http.expectNone('/api/household-ratio');
+      expect(callsTo(sharesStore, 'setHouseholdRatio')).toHaveLength(0);
       (document.querySelector('[role=alertdialog] [data-confirm]') as HTMLButtonElement).click();
-      const put = http.expectOne('/api/household-ratio');
-      expect(put.request.body).toEqual({ entries: [{ from: '2026-07-01', percent: 55 }] });
-      put.flush(put.request.body);
+      expect(callsTo(sharesStore, 'setHouseholdRatio')).toEqual([
+        [[{ from: '2026-07-01', percent: 55 }]],
+      ]);
+      sharesStore.householdRatio.set([{ from: '2026-07-01', percent: 55 }]);
       await fixture.whenStable();
 
       await openMenu(fixture, page.querySelector('[data-ratio-entry]')!);
@@ -747,7 +806,7 @@ describe('DelatPage', () => {
     });
 
     it('adds a subcategory at 50/50 from the picker, changes it and removes it', async () => {
-      const { fixture, page, http } = await render();
+      const { fixture, page } = await render();
       const toast = TestBed.inject(ToastService);
 
       page.querySelector<HTMLButtonElement>('[data-add-shared]')!.click();
@@ -757,9 +816,11 @@ describe('DelatPage', () => {
       page.querySelector<HTMLButtonElement>('[data-category-tile="2"]')!.click();
       await fixture.whenStable();
       page.querySelector<HTMLButtonElement>('[data-subcategory="20"]')!.click();
-      let put = http.expectOne('/api/subcategories/20/share');
-      expect(put.request.body).toEqual({ share: 'half' });
-      put.flush(null);
+      expect(callsTo(sharesStore, 'setSubcategoryShare')).toEqual([[20, 'half']]);
+      sharesStore.subcategoryShares.set([
+        { subcategoryId: 10, share: 'household' },
+        { subcategoryId: 20, share: 'half' },
+      ]);
       await fixture.whenStable();
       expect(rows(page).map((r) => [text(r.querySelector('[data-name]')), pressed(r)])).toEqual([
         ['Bolån', 'household'],
@@ -768,16 +829,17 @@ describe('DelatPage', () => {
       expect(page.querySelector('[data-picker]')).toBeNull();
 
       rows(page)[1]!.querySelector<HTMLButtonElement>('[data-share=household]')!.click();
-      put = http.expectOne('/api/subcategories/20/share');
-      expect(put.request.body).toEqual({ share: 'household' });
-      put.flush(null);
+      expect(callsTo(sharesStore, 'setSubcategoryShare').at(-1)).toEqual([20, 'household']);
+      sharesStore.subcategoryShares.set([
+        { subcategoryId: 10, share: 'household' },
+        { subcategoryId: 20, share: 'household' },
+      ]);
       await fixture.whenStable();
       expect(pressed(rows(page)[1]!)).toBe('household');
 
       rows(page)[1]!.querySelector<HTMLButtonElement>('[data-share=me]')!.click();
-      put = http.expectOne('/api/subcategories/20/share');
-      expect(put.request.body).toEqual({ share: 'me' });
-      put.flush(null);
+      expect(callsTo(sharesStore, 'setSubcategoryShare').at(-1)).toEqual([20, 'me']);
+      sharesStore.subcategoryShares.set([{ subcategoryId: 10, share: 'household' }]);
       await fixture.whenStable();
       expect(rows(page).length).toBe(1);
       expect(toast.message()).toContain('Restaurang');
@@ -799,15 +861,13 @@ describe('DelatPage', () => {
     });
 
     it('says why when Hushåll is refused', async () => {
-      const { fixture, page, http } = await render({ ratio: [], shares: [] });
+      const { fixture, page } = await render({ ratio: [], shares: [] });
+      sharesStore.failures['setSubcategoryShare'] = { status: 409 };
       page.querySelector<HTMLButtonElement>('[data-add-shared]')!.click();
       await fixture.whenStable();
       page.querySelector<HTMLButtonElement>('[data-category-tile="2"]')!.click();
       await fixture.whenStable();
       page.querySelector<HTMLButtonElement>('[data-subcategory="20"]')!.click();
-      http
-        .expectOne('/api/subcategories/20/share')
-        .flush({}, { status: 409, statusText: 'Conflict' });
       await fixture.whenStable();
 
       expect(text(page.querySelector('[role=alert]'))).toContain('hushållsandel');
