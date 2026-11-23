@@ -162,6 +162,11 @@ describe('ReviewPage', () => {
       await fixture.whenStable();
       http.expectOne('/api/categories').flush(categories);
       await fixture.whenStable();
+      (
+        page.querySelector('li[data-id="13"] [data-category-tile="2"]') as HTMLButtonElement
+      ).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
       (page.querySelector('li[data-id="13"] [data-subcategory="13"]') as HTMLButtonElement).click();
       http
         .expectOne('/api/transactions/13/category')
@@ -272,6 +277,9 @@ describe('ReviewPage', () => {
     await fixture.whenStable();
     http.expectOne('/api/categories').flush(categories);
     await fixture.whenStable();
+    (page.querySelector('li[data-id="1"] [data-category-tile="2"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
     (page.querySelector('li[data-id="1"] [data-subcategory="13"]') as HTMLButtonElement).click();
     const request = http.expectOne('/api/transactions/1/category');
     expect(request.request.body).toEqual({ subcategoryId: 13 });
@@ -294,6 +302,60 @@ describe('ReviewPage', () => {
       .flush({ category: { ...guess, confirmed: true }, updatedSimilar: 0, others: [] });
     await fixture.whenStable();
     expect(ids(page)).toEqual([]);
+  });
+
+  it('preselects the guessed category and marks its subcategory as current', async () => {
+    const { fixture, page, http } = await render({
+      count: 1,
+      transactions: [transaction(2, { category: guess })],
+    });
+    (page.querySelector('li[data-id="2"] [data-change]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    http.expectOne('/api/categories').flush(categories);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      page.querySelector('li[data-id="2"] [data-category-tile="2"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      page.querySelector('li[data-id="2"] [data-subcategory="12"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      page.querySelector('li[data-id="2"] [data-subcategory="13"]')?.getAttribute('aria-pressed'),
+    ).toBe('false');
+  });
+
+  it('searches subcategories by name, and shows a whole category for its name', async () => {
+    const { fixture, page, http } = await render({
+      count: 1,
+      transactions: [transaction(1)],
+    });
+    (page.querySelector('li[data-id="1"] [data-change]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    http.expectOne('/api/categories').flush(categories);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const search = async (query: string) => {
+      const input = page.querySelector(
+        'li[data-id="1"] [data-category-search]',
+      ) as HTMLInputElement;
+      input.value = query;
+      input.dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return Array.from(page.querySelectorAll('li[data-id="1"] [data-subcategory]')).map((e) =>
+        e.getAttribute('data-subcategory'),
+      );
+    };
+
+    expect(await search('REST')).toEqual(['13']);
+    expect(await search('mat')).toEqual(['12', '13']);
+    expect(await search('zzz')).toEqual([]);
+    expect(page.querySelector('[data-picker-empty]')).not.toBeNull();
+    expect(await search('')).toEqual([]);
+    expect(page.querySelector('li[data-id="1"] [data-category-tile="2"]')).not.toBeNull();
   });
 
   it('keeps the row and says so when saving fails', async () => {
