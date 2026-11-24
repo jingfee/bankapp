@@ -5,7 +5,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { transactions } from '../db/schema';
-import { onVisibleAccount, queryTransactions } from './query';
+import { onVisibleAccount, queryTransactions, toListed } from './query';
 import { Replace } from './replace';
 
 /**
@@ -32,7 +32,11 @@ export class Review {
       orderBy: [desc(transactions.date), desc(transactions.id)],
     });
     const replacements = this.replace.suggestions();
-    return { transactions: rows, replacements, count: rows.length + replacements.length };
+    return {
+      transactions: rows.map(toListed),
+      replacements,
+      count: rows.length + replacements.length,
+    };
   }
 
   /** How many transactions are waiting for review, with the suggested replacements. */

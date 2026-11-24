@@ -1,27 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, asc, eq, gte, isNotNull, isNull, or } from 'drizzle-orm';
-import type {
-  CategoryColour,
-  CategoryIcon,
-  CloseMonthRequest,
-  SettlementPeriod,
-  SettlementResponse,
-} from '@bankapp/shared';
+import { asc, eq } from 'drizzle-orm';
+import type { CloseMonthRequest, SettlementPeriod, SettlementResponse } from '@bankapp/shared';
 import { ReportsService } from '../reports/reports.service';
-import { effectiveShares } from '../transactions/shares';
-import { onVisibleAccount } from '../transactions/query';
+import { queryTransactions } from '../transactions/query';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { NoSuchClosedPeriod } from '../domain-errors';
-import {
-  accounts,
-  balanceSettings,
-  categories,
-  settlementMonths,
-  subcategories,
-  transactions,
-} from '../db/schema';
+import { balanceSettings, settlementMonths } from '../db/schema';
 import { roundOre } from '../transactions/owners-part';
 import {
   checkClose,
@@ -197,60 +183,25 @@ export class SettlementService {
    * before an account was first connected are left out; pending and uncategorised ones count.
    */
   private replayTransactions(from: string): ReplayTransaction[] {
-    const rows = this.db
-      .select({
-        transaction: transactions,
-        accountName: accounts.name,
-        connectedOn: accounts.connectedOn,
-        kind: categories.kind,
-        subcategoryName: subcategories.name,
-        categoryName: categories.name,
-        subcategoryIcon: subcategories.icon,
-        categoryColour: categories.colour,
-      })
-      .from(transactions)
-      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(onVisibleAccount(this.db), gte(transactions.date, from), connectedBefore()))
-      .all();
-    const shares = effectiveShares(
-      this.db,
-      rows.map((row) => row.transaction),
-    );
-    return rows.map((row): ReplayTransaction => {
-      const { transaction } = row;
-      const share = shares.get(transaction.id)!;
-      return {
-        id: transaction.id,
-        date: transaction.date,
-        description: transaction.description,
-        amount: transaction.amount,
-        paidBy: transaction.paidBy,
-        status: transaction.status,
-        shareOption: share.option,
-        sharePercent: share.percent,
+    return queryTransactions(this.db, { from, sinceConnected: true }).map(
+      (row): ReplayTransaction => ({
+        id: row.id,
+        date: row.date,
+        description: row.description,
+        amount: row.amount.amount,
+        paidBy: row.paidBy,
+        status: row.status,
+        shareOption: row.share.option,
+        sharePercent: row.share.percent,
         kind: row.kind,
-        categoryName: row.categoryName,
-        subcategoryName: row.subcategoryName,
-        accountName: row.accountName,
-        icon: row.subcategoryIcon as CategoryIcon | null,
-        colour: row.categoryColour as CategoryColour | null,
-      };
-    });
+        categoryName: row.category?.category.name ?? null,
+        subcategoryName: row.category?.subcategory.name ?? null,
+        accountName: row.account?.name ?? null,
+        icon: row.category?.subcategory.icon ?? null,
+        colour: row.category?.category.colour ?? null,
+      }),
+    );
   }
-}
-
-/**
- * Days before an account was first connected are left out, unless the transaction replaces a
- * manual one: it stands in for that and so counts even when dated earlier (ADR 0009).
- */
-function connectedBefore() {
-  return or(
-    isNull(accounts.connectedOn),
-    gte(transactions.date, accounts.connectedOn),
-    isNotNull(transactions.replacesTransactionId),
-  );
 }
 
 /** The day of the earliest balance setting: nothing before it counts. */

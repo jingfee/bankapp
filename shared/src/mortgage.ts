@@ -142,4 +142,6 @@ export interface MortgageFiguresResponse {
   months: MortgageMonth[];
   /** `YYYY-MM` of each ended month since the first entry with no booked payment, oldest first. */
   monthsWithoutPayment: string[];
+  /** The id of Bolån ränta & amortering, whose transactions are the payments; null if it is missing. */
+  paymentsSubcategoryId: number | null;
 }

@@ -1,6 +1,5 @@
-import type { CategoryIcon } from './category-icons';
-import type { CategoryColour } from './category-palette';
-import type { CategoryKind } from './categories';
+import type { CategoryColour, CategoryIcon, CategoryKind } from '@bankapp/shared';
+import { WELL_KNOWN_SUBCATEGORIES } from '../src/well-known-subcategories';
 
 export interface DefaultSubcategory {
   name: string;
@@ -20,9 +19,10 @@ export interface DefaultCategory {
 const other: DefaultSubcategory = { name: 'Övrigt', icon: 'circle-ellipsis' };
 
 /**
- * The categories, in sort order. The owner cannot edit them; migration 0010 seeds the same list (0013 adds to it),
+ * The categories, in sort order. The owner cannot edit them; migration 0010 seeds the same list (0013 and later add to it),
  * and a change here needs a migration and a look at the guessing lists, which refer to
- * subcategories by name (see `guessing/default-subcategory.ts` in the backend).
+ * subcategories by name (see `guessing/default-subcategory.ts`). `categories.spec.ts` checks the
+ * seeded database against it.
  */
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
   {
@@ -32,7 +32,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     icon: 'house',
     fixed: false,
     subcategories: [
-      { name: 'Bolån ränta & amortering', icon: 'key-round' },
+      { name: WELL_KNOWN_SUBCATEGORIES.mortgage.name, icon: 'key-round' },
       { name: 'Hyra & avgift', icon: 'receipt' },
       { name: 'El & värme', icon: 'zap' },
       { name: 'Vatten, avlopp & sopor', icon: 'droplets' },
@@ -204,8 +204,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     subcategories: [
       { name: 'Mellan egna konton', icon: 'arrow-left-right' },
       { name: 'Kortbetalning', icon: 'credit-card' },
-      { name: 'Sparande & investeringar', icon: 'piggy-bank' },
-      { name: 'Avräkning delade utgifter', icon: 'hand-coins' },
+      { name: WELL_KNOWN_SUBCATEGORIES.savings.name, icon: 'piggy-bank' },
+      { name: WELL_KNOWN_SUBCATEGORIES.settlement.name, icon: 'hand-coins' },
       other,
     ],
   },

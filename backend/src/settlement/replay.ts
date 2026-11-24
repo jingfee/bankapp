@@ -8,6 +8,7 @@ import type {
   SettlementResponse,
 } from '@bankapp/shared';
 import { isDay } from '../days';
+import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 import { InvalidInput, NoCloseToUndo } from '../domain-errors';
 import { ownerPart, roundOre } from '../transactions/owners-part';
 import type { CloseMonthRequest } from '@bankapp/shared';
@@ -59,9 +60,6 @@ export type ReplayPeriod = Omit<SettlementPeriod, 'reportSaved'>;
 export interface SettlementReplay extends Omit<SettlementResponse, 'periods'> {
   periods: ReplayPeriod[];
 }
-
-/** The subcategory the partner's transfers are categorised as (Överföring › Avräkning delade utgifter). */
-export const SETTLEMENT_SUBCATEGORY = 'Avräkning delade utgifter';
 
 /** What a manual transaction shows where an account's name would be. */
 export const MANUAL_ACCOUNT_NAME = 'Manuell';
@@ -191,7 +189,7 @@ function transactionEvent(transaction: ReplayTransaction): Event | null {
 
 /** Among transfers only the settlements (Avräkning) move the balance. */
 function movesBalance(kind: string | null, subcategoryName: string | null): boolean {
-  return kind !== 'transfer' || subcategoryName === SETTLEMENT_SUBCATEGORY;
+  return kind !== 'transfer' || subcategoryName === WELL_KNOWN_SUBCATEGORIES.settlement.name;
 }
 
 function emptyPeriod(

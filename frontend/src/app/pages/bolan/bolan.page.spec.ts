@@ -1,13 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
 import type {
   LoanPart,
   MortgageFiguresResponse,
   MortgageMonth,
   MortgageResponse,
 } from '@bankapp/shared';
-import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { MortgageStore } from '../../stores/mortgage.store';
 import { FakeMortgageStore } from '../../stores/mortgage.store.fake';
 import { BolanPage } from './bolan.page';
@@ -61,14 +59,8 @@ const FIGURES: MortgageFiguresResponse = {
   ],
   months: [month('2026-10'), month('2026-11', { interest: 4800, amortisation: 2000, total: 6800 })],
   monthsWithoutPayment: [],
+  paymentsSubcategoryId: 42,
 };
-
-const SUBCATEGORIES = [
-  {
-    category: { id: 1, name: 'Boende & Hushåll' },
-    subcategory: { id: 42, name: 'Bolån ränta & amortering' },
-  },
-] as unknown as CategorisedSubcategory[];
 
 describe('BolanPage', () => {
   let store: FakeMortgageStore;
@@ -78,14 +70,7 @@ describe('BolanPage', () => {
     vi.setSystemTime(new Date('2026-11-15T12:00:00'));
     store = new FakeMortgageStore();
     TestBed.configureTestingModule({
-      providers: [
-        { provide: MortgageStore, useValue: store },
-        {
-          provide: CategoriesService,
-          useValue: { subcategories: () => of(SUBCATEGORIES) },
-        },
-        provideRouter([]),
-      ],
+      providers: [{ provide: MortgageStore, useValue: store }, provideRouter([])],
     });
   });
   afterEach(() => vi.useRealTimers());
@@ -133,7 +118,7 @@ describe('BolanPage', () => {
   it('offers setup before there is a mortgage', async () => {
     const { root } = await render(
       { parts: [], entries: [] },
-      { debts: [], months: [], monthsWithoutPayment: [] },
+      { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId: null },
     );
     expect(root.querySelector('[data-add-part]')?.textContent).toContain('Lägg till bolån');
     expect(root.querySelector('[data-intro]')).not.toBeNull();
@@ -145,7 +130,7 @@ describe('BolanPage', () => {
   it('sets up a part with Swedish-format numbers', async () => {
     const { root, click, type } = await render(
       { parts: [], entries: [] },
-      { debts: [], months: [], monthsWithoutPayment: [] },
+      { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId: null },
     );
     await click('[data-add-part]');
     await type('[data-part-form] [data-name]', 'Del 1 – 3 mån');

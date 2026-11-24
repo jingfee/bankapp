@@ -7,7 +7,7 @@ ALTER TABLE `accounts` ADD `share` text;--> statement-breakpoint
 ALTER TABLE `subcategories` ADD `share` text;--> statement-breakpoint
 ALTER TABLE `transactions` ADD `share` text;
 --> statement-breakpoint
--- Add Avräkning delade utgifter to Överföring before Övrigt (the same as DEFAULT_CATEGORIES in @bankapp/shared).
+-- Add Avräkning delade utgifter to Överföring before Övrigt (the same as DEFAULT_CATEGORIES in backend/test/default-categories.ts).
 UPDATE `subcategories` SET `sort_order` = `sort_order` + 1
 	WHERE `category_id` = (SELECT `id` FROM `categories` WHERE `kind` = 'transfer') AND `sort_order` >= 3
 	AND NOT EXISTS (SELECT 1 FROM `subcategories` WHERE `name` = 'Avräkning delade utgifter');

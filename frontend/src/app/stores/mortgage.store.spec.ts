@@ -6,7 +6,12 @@ import { type Fact, Invalidation } from './invalidation';
 import { MortgageStore } from './mortgage.store';
 
 const MORTGAGE: MortgageResponse = { parts: [], entries: [] };
-const FIGURES: MortgageFiguresResponse = { debts: [], months: [], monthsWithoutPayment: [] };
+const FIGURES: MortgageFiguresResponse = {
+  debts: [],
+  months: [],
+  monthsWithoutPayment: [],
+  paymentsSubcategoryId: null,
+};
 
 describe('MortgageStore reads', () => {
   let http: HttpTestingController;

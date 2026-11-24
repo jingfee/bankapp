@@ -94,7 +94,17 @@ describe('mortgage figures', () => {
   }
 
   it('is empty before the mortgage is set up', async () => {
-    expect(await figures()).toEqual({ debts: [], months: [], monthsWithoutPayment: [] });
+    expect(await figures()).toEqual({
+      debts: [],
+      months: [],
+      monthsWithoutPayment: [],
+      paymentsSubcategoryId: mortgageId,
+    });
+  });
+
+  it('names the subcategory the payments are found in', async () => {
+    await setUp();
+    expect((await figures()).paymentsSubcategoryId).toBe(mortgageId);
   });
 
   it('subtracts the amortisation once for each month paid after the entry', async () => {

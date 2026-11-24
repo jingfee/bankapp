@@ -1,10 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, gte } from 'drizzle-orm';
 import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db/database';
 import { DATABASE } from '../src/db/database.module';
 import { accounts, connections, subcategories, transactions } from '../src/db/schema';
-import { queryTransactions } from '../src/transactions/query';
+import { queryTransactions, summariseTransactions } from '../src/transactions/query';
 import { FakeEnableBankingClient, testConfig } from './support';
 
 describe('the transaction query', () => {
@@ -25,13 +25,14 @@ describe('the transaction query', () => {
       .run();
     db.insert(accounts)
       .values(
-        ['Lönekonto', 'Sparkonto'].map((name, i) => ({
+        ['Lönekonto', 'Gömt konto', 'Sparkonto'].map((name, i) => ({
           connectionId: 1,
           identificationHash: `h${i}`,
           uid: `u${i}`,
           name,
           type: 'payment' as const,
           currency: 'SEK',
+          savings: name === 'Sparkonto',
         })),
       )
       .run();
@@ -104,5 +105,84 @@ describe('the transaction query', () => {
     add('New', { date: '2026-11-09' });
     add('Newest', { date: '2026-11-10' });
     expect(described({ orderBy: [desc(transactions.date)], limit: 2 })).toEqual(['Newest', 'New']);
+  });
+
+  describe('countIn', () => {
+    it('puts a kvittad refund in its purchase month, or in its own date', () => {
+      const purchase = add('Purchase', { date: '2026-10-30', amount: -100 });
+      add('Refund', { date: '2026-11-03', amount: 40, offsetsTransactionId: purchase });
+      const october = { from: '2026-10-01', before: '2026-11-01' };
+      const november = { from: '2026-11-01', before: '2026-12-01' };
+      const names = (query: Parameters<typeof queryTransactions>[1]) =>
+        queryTransactions(db, query)
+          .map((t) => t.description)
+          .sort();
+
+      expect(names({ ...october, countIn: 'purchase-month' })).toEqual(['Purchase', 'Refund']);
+      expect(names({ ...november, countIn: 'purchase-month' })).toEqual([]);
+      expect(names({ ...october, countIn: 'own-date' })).toEqual(['Purchase']);
+      expect(names(november)).toEqual(['Refund']);
+    });
+
+    it('carries the purchase date and the category on the row', () => {
+      const purchase = add('Purchase', { date: '2026-10-30' });
+      add('Refund', { date: '2026-11-03', offsetsTransactionId: purchase });
+      const refund = queryTransactions(db).find((t) => t.description === 'Refund')!;
+      expect(refund.purchaseDate).toBe('2026-10-30');
+      expect(refund.kind).toBeNull();
+    });
+  });
+
+  describe('sinceConnected', () => {
+    beforeEach(() => {
+      db.update(accounts).set({ connectedOn: '2026-11-05' }).where(eq(accounts.id, 1)).run();
+    });
+    const names = () =>
+      queryTransactions(db, { sinceConnected: true })
+        .map((t) => t.description)
+        .sort();
+
+    it('leaves out a transaction dated before its account was first connected', () => {
+      add('Before', { date: '2026-11-04' });
+      add('On', { date: '2026-11-05' });
+      expect(names()).toEqual(['On']);
+      expect(queryTransactions(db)).toHaveLength(2);
+    });
+
+    it('keeps a manual transaction', () => {
+      add('Manual', { accountId: null, date: '2026-01-01' });
+      expect(names()).toEqual(['Manual']);
+    });
+
+    it('keeps a bank transaction dated earlier when it replaces a manual one', () => {
+      const manual = add('Manual', { accountId: null, date: '2026-11-01' });
+      add('Bank', { date: '2026-11-01', replacesTransactionId: manual });
+      expect(names()).toEqual(['Bank']);
+    });
+  });
+
+  describe('summariseTransactions', () => {
+    it('agrees with the listed transactions and leaves out what does not count', () => {
+      add('A', { amount: -10 });
+      add('B', { amount: -5.5 });
+      add('Hidden', { accountId: 2, amount: -1000 });
+      db.update(accounts).set({ hidden: true }).where(eq(accounts.id, 2)).run();
+      add('Savings', { accountId: 3, amount: -2000 });
+      const replaced = add('Replaced', { accountId: null, amount: -3000 });
+      add('Bank', { amount: -3000, replacesTransactionId: replaced });
+
+      const listed = queryTransactions(db, { where: gte(transactions.date, '2026-11-01') });
+      const totals = summariseTransactions(db, { where: gte(transactions.date, '2026-11-01') });
+
+      expect(totals.count).toBe(listed.length);
+      expect(totals.sum).toBeCloseTo(listed.reduce((sum, t) => sum + t.amount.amount, 0));
+      expect(totals).toMatchObject({ count: 3, currencies: 1, currency: 'SEK' });
+    });
+
+    it('counts the currencies', () => {
+      add('SEK', { amount: -1 });
+      add('EUR', { amount: -1, currency: 'EUR' });
+      expect(summariseTransactions(db).currencies).toBe(2);
+    });
   });
 });
