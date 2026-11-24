@@ -21,7 +21,7 @@
   ],
   "dataGroups": [
     {
-      "name": "browsed",
+      "name": "opened",
       "urls": [
         "/api/overview/**",
         "/api/transactions",

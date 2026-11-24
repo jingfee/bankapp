@@ -1,4 +1,5 @@
 import configJson from '../../ngsw-config.json';
+import { matches } from './glob.testing';
 
 interface AssetGroup {
   name: string;
@@ -22,16 +23,6 @@ interface ServiceWorkerConfig {
   navigationUrls?: string[];
   assetGroups: AssetGroup[];
   dataGroups: DataGroup[];
-}
-
-/** The glob dialect of ngsw-config.json: `**` spans path segments, `*` stays within one. */
-function matches(glob: string, path: string, anchored = true): boolean {
-  const pattern = glob
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '<<ANY>>')
-    .replace(/\*/g, '[^/]*')
-    .replace(/<<ANY>>/g, '.*');
-  return new RegExp(anchored ? `^${pattern}$` : pattern).test(path);
 }
 
 describe('service worker caching', () => {
@@ -122,17 +113,15 @@ describe('service worker caching', () => {
       for (const group of config.dataGroups) expect(group.cacheConfig.maxAge).toBe('30d');
     });
 
-    it('keeps room for what the owner browses without pushing out the main pages', () => {
+    it('keeps room for what the owner has opened without pushing out the main pages', () => {
       const pages = dataGroupFor('/api/settlement');
-      const browsed = dataGroupFor('/api/transactions/9f3c2a1e');
+      const opened = dataGroupFor('/api/transactions/9f3c2a1e');
 
-      expect(pages).not.toBe(browsed);
-      expect(browsed?.cacheConfig.maxSize).toBeGreaterThanOrEqual(500);
+      expect(pages).not.toBe(opened);
+      expect(opened?.cacheConfig.maxSize).toBeGreaterThanOrEqual(500);
       // Months and drill-downs the owner has been through are browsing too, not main pages.
-      expect(dataGroupFor('/api/overview/transactions?month=2026-11&subcategoryId=3')).toBe(
-        browsed,
-      );
-      expect(dataGroupFor('/api/transactions?q=ica')).toBe(browsed);
+      expect(dataGroupFor('/api/overview/transactions?month=2026-11&subcategoryId=3')).toBe(opened);
+      expect(dataGroupFor('/api/transactions?q=ica')).toBe(opened);
       expect(dataGroupFor('/api/overview?month=2026-11&view=mine')).toBe(pages);
     });
 

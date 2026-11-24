@@ -131,8 +131,8 @@ describe('authentication', () => {
       const kept = ['ngsw:/:db:control', 'ngsw:/:1a2b3c:assets:app:cache'];
       const saved = [
         'ngsw:/:1a2b3c:data:pages:cache',
-        'ngsw:/:1a2b3c:data:browsed:cache',
-        'ngsw:/:db:ngsw:/:1a2b3c:data:browsed:lru',
+        'ngsw:/:1a2b3c:data:opened:cache',
+        'ngsw:/:db:1a2b3c:data:opened:lru',
       ];
       let names: string[];
 

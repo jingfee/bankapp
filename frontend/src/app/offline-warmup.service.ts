@@ -18,7 +18,7 @@ export class OfflineWarmup {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
-  private done = false;
+  private warmedUp = false;
 
   /**
    * Runs once each time the owner is in the app: when it starts, and again after the login page
@@ -32,19 +32,22 @@ export class OfflineWarmup {
       )
       .subscribe((event) => {
         if (event.urlAfterRedirects.startsWith(LOGIN_PATH)) {
-          this.done = false;
-        } else if (!this.done) {
-          this.done = true;
+          this.warmedUp = false;
+        } else if (!this.warmedUp) {
+          this.warmedUp = true;
           this.run();
         }
       });
   }
 
-  /** Fetches everything now; a read that fails is simply not saved. */
+  /**
+   * Fetches everything now; a read that fails is simply not saved. Only for a signed-in owner:
+   * signed out, every request would be refused with a 401.
+   */
   run(): void {
     const month = monthOf(new Date());
-    for (const m of [month, shiftMonth(month, -1)]) {
-      for (const view of OVERVIEW_VIEWS) this.fetch('/api/overview', { month: m, view });
+    for (const target of [month, shiftMonth(month, -1)]) {
+      for (const view of OVERVIEW_VIEWS) this.get('/api/overview', { month: target, view });
     }
     for (const url of [
       '/api/transactions',
@@ -61,11 +64,11 @@ export class OfflineWarmup {
       '/api/accounts',
       '/api/categories',
     ]) {
-      this.fetch(url);
+      this.get(url);
     }
   }
 
-  private fetch(url: string, params?: Record<string, string>): void {
+  private get(url: string, params?: Record<string, string>): void {
     this.http.get(url, { params }).subscribe({ error: () => undefined });
   }
 }

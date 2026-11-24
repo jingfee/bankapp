@@ -3,6 +3,8 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import configJson from '../../ngsw-config.json';
+import { matches } from '../pwa/glob.testing';
 import { OfflineWarmup } from './offline-warmup.service';
 
 @Component({ template: '' })
@@ -67,6 +69,18 @@ describe('warming up saved data', () => {
         '/api/categories',
       ].sort(),
     );
+  });
+
+  it('only fetches what the service worker saves, or the warm-up would achieve nothing', () => {
+    warmup.run();
+    const groups = (configJson as { dataGroups: { urls: string[] }[] }).dataGroups;
+
+    // The worker does not anchor the patterns of a data group.
+    const unsaved = fetched().filter(
+      (url) => !groups.some((group) => group.urls.some((glob) => matches(glob, url, false))),
+    );
+
+    expect(unsaved).toEqual([]);
   });
 
   describe('when the app starts', () => {
