@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import type {
   CloseMonthRequest,
   SetBalanceSettingRequest,
@@ -7,6 +7,7 @@ import type {
   SettlementResponse,
 } from '@bankapp/shared';
 import { isDay } from '../clock';
+import { InvalidInput } from '../domain-errors';
 import { SettlementService } from './settlement.service';
 
 @Controller('settlement')
@@ -29,13 +30,13 @@ export class SettlementController {
   setBalance(@Body() body: Partial<SetBalanceSettingRequest> | undefined): SettlementResponse {
     const { amount, asOf } = body ?? {};
     if (typeof amount !== 'number' || !Number.isFinite(amount) || Math.abs(amount) > 1e9) {
-      throw new BadRequestException('amount must be a number');
+      throw new InvalidInput('amount must be a number');
     }
     if (asOf !== undefined && (typeof asOf !== 'string' || !isDay(asOf))) {
-      throw new BadRequestException('asOf must be a day as YYYY-MM-DD');
+      throw new InvalidInput('asOf must be a day as YYYY-MM-DD');
     }
     if (asOf !== undefined && asOf > this.settlement.today()) {
-      throw new BadRequestException('asOf cannot be in the future');
+      throw new InvalidInput('asOf cannot be in the future');
     }
     return this.settlement.setBalance(amount, asOf);
   }
