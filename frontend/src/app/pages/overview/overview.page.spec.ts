@@ -217,7 +217,7 @@ describe('OverviewPage', () => {
       );
     });
 
-    it('shows the settlement tile once the settlement store has it', async () => {
+    it('shows the settlement row once the settlement store has it', async () => {
       const { fixture, page } = await render();
       expect(page.querySelector('[data-total="settlement"]')).toBeNull();
 
@@ -230,7 +230,7 @@ describe('OverviewPage', () => {
     });
   });
 
-  describe('the settlement tile', () => {
+  describe('the settlement row', () => {
     const card = (page: HTMLElement) => page.querySelector('[data-total="settlement"]');
     /** Opens the page at November, then steps back to `month`. */
     const viewing = async (month: string, settlement: SettlementResponse) => {
@@ -269,9 +269,24 @@ describe('OverviewPage', () => {
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('800,00\u00a0kr');
-      expect(text(card(page))).toContain('Avslutad t.o.m. 2 nov');
+      expect(text(card(page))).toContain('Avslutad 2 nov');
       expect(text(card(page))).toContain('120 kr kvar');
       expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-10');
+    });
+
+    it('marks a closed month with a check and no violet, and an open one with the violet exchange badge', async () => {
+      const closed = await viewing('2026-10', {
+        balance: 0,
+        periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
+        balanceSettings: [],
+      });
+      expect(text(card(closed)?.querySelector('[data-settlement-badge]'))).toBe('✓');
+      expect(card(closed)?.classList.contains('settlement-row-open')).toBe(false);
+      expect(text(card(closed))).toContain('Avslutad 31 okt');
+
+      const { page: open } = await render(overview(), accountsOf([]), 4312);
+      expect(text(card(open)?.querySelector('[data-settlement-badge]'))).toBe('⇄');
+      expect(card(open)?.classList.contains('settlement-row-open')).toBe(true);
     });
 
     it('does not mention a balance left when the closed month ended even', async () => {
@@ -291,10 +306,10 @@ describe('OverviewPage', () => {
         balanceSettings: [],
       });
 
-      expect(text(card(page))).toContain('Avslutad t.o.m. 3 dec');
+      expect(text(card(page))).toContain('Avslutad 3 dec');
     });
 
-    it('warns when the open month ended a week or more ago', async () => {
+    it('never says that a month is not closed, even when it is overdue', async () => {
       const page = await viewing('2026-10', {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
@@ -302,10 +317,10 @@ describe('OverviewPage', () => {
       });
 
       expect(text(card(page))).toContain('Partnern är skyldig dig');
-      expect(text(card(page))).toContain('Oktober är inte avslutad');
+      expect(text(card(page))).not.toContain('inte avslutad');
     });
 
-    it('warns on the current month while an earlier month is still open', async () => {
+    it('shows the earlier open month on the current month, linking to it', async () => {
       const { page } = await render(overview(), accountsOf([]), {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
@@ -313,7 +328,7 @@ describe('OverviewPage', () => {
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('90,00\u00a0kr');
-      expect(text(card(page))).toContain('Oktober är inte avslutad');
+      expect(text(card(page))).not.toContain('inte avslutad');
       expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-10');
     });
 
@@ -506,37 +521,70 @@ describe('OverviewPage', () => {
       expect(text(total('net')?.querySelector('[data-amount]'))).toBe('18 000,00 kr');
       expect(text(total('income')?.querySelector('[data-change]'))).toContain('+2 000,00 kr');
       expect(text(total('spending')?.querySelector('[data-change]'))).toContain('−3 000,00 kr');
-      expect(text(total('net')?.querySelector('[data-change]'))).toContain('+5 000,00 kr');
+      expect(text(total('net')?.querySelector('[data-change]'))).toBe('Hittills den här månaden');
     });
 
-    it('shows five tiles: netto, inkomster, utgifter, sparande and avräkning', async () => {
+    it('shows one Netto card with In, Ut and Varav sparande inside it, then the Avräkning row', async () => {
       const { page } = await render(overview(), accountsOf([]), 10);
 
       expect(
         Array.from(page.querySelectorAll('[data-total]')).map((t) => t.getAttribute('data-total')),
       ).toEqual(['net', 'income', 'spending', 'savings', 'settlement']);
+      const net = page.querySelector('[data-total="net"]');
+      for (const kind of ['income', 'spending', 'savings']) {
+        expect(net?.querySelector(`[data-total="${kind}"]`)).not.toBeNull();
+      }
+      expect(net?.querySelector('[data-total="settlement"]')).toBeNull();
+      expect(page.querySelector('.stat-tile')).toBeNull();
     });
 
-    it('shows the month’s savings with the change from last month, linking to its transactions', async () => {
+    it('labels the boxes In and Ut and the slim row Varav sparande', async () => {
       const { page } = await render(
         overview({ savings: { subcategoryId: 7, current: 3500, previous: 3000 } }),
       );
 
-      const tile = page.querySelector('[data-total="savings"]');
-      expect(text(tile?.querySelector('.eyebrow'))).toBe('Sparande');
-      expect(text(tile?.querySelector('[data-amount]'))?.replace(/\s/g, ' ')).toBe('3 500,00 kr');
-      expect(text(tile?.querySelector('[data-change]'))?.replace(/\s/g, ' ')).toContain(
-        '+500,00 kr',
+      const label = (kind: string) => text(page.querySelector(`[data-total="${kind}"] .eyebrow`));
+      expect(label('net')).toContain('Netto');
+      expect(label('income')).toBe('In');
+      expect(label('spending')).toBe('Ut');
+      expect(text(page.querySelector('[data-total="savings"]'))).toContain('Varav sparande');
+    });
+
+    it('shows the month’s savings, linking to its transactions', async () => {
+      const { page } = await render(
+        overview({ savings: { subcategoryId: 7, current: 3500, previous: 3000 } }),
       );
-      expect(tile?.getAttribute('href')).toBe(
+
+      const row = page.querySelector('[data-total="savings"]');
+      expect(text(row?.querySelector('[data-amount]'))?.replace(/\s/g, ' ')).toBe('3 500,00 kr');
+      expect(row?.getAttribute('href')).toBe(
         '/transaktioner?from=2026-11-01&to=2026-11-30&subcategories=7',
       );
     });
 
-    it('does not link the netto tile', async () => {
+    it('leaves out Varav sparande when there is no savings subcategory', async () => {
+      const { page } = await render(
+        overview({ savings: { subcategoryId: null, current: 0, previous: 0 } }),
+      );
+
+      expect(page.querySelector('[data-total="savings"]')).toBeNull();
+    });
+
+    it('does not link the netto card', async () => {
       const { page } = await render();
 
       expect(page.querySelector('[data-total="net"]')?.tagName).not.toBe('A');
+    });
+
+    it('compares In and Ut with the whole previous month, also in the current month', async () => {
+      const { page } = await render(overview({ totals: totals(10, 5), previous: totals(40, 20) }));
+
+      expect(
+        text(page.querySelector('[data-total="income"] [data-change]'))?.replace(/\s/g, ' '),
+      ).toContain('−30,00 kr');
+      expect(
+        text(page.querySelector('[data-total="spending"] [data-change]'))?.replace(/\s/g, ' '),
+      ).toContain('−15,00 kr');
     });
 
     it('says when a total is unchanged', async () => {
@@ -545,6 +593,99 @@ describe('OverviewPage', () => {
       expect(text(page.querySelector('[data-total="income"] [data-change]'))).toContain(
         'Oförändrat',
       );
+    });
+  });
+
+  describe('the Netto card', () => {
+    const net = (page: HTMLElement) => page.querySelector('[data-total="net"]');
+    const bar = (page: HTMLElement) => net(page)?.querySelector('[data-net-bar]');
+    const caption = (page: HTMLElement) => text(net(page)?.querySelector('[data-net-caption]'));
+    const grey = (page: HTMLElement) =>
+      (bar(page)?.querySelector('[data-bar-spending]') as HTMLElement | null)?.style.width;
+    const amount = (page: HTMLElement) => net(page)?.querySelector('[data-amount]');
+    /** Opens November, then steps back to October. */
+    const lastMonth = async (body: OverviewResponse) => {
+      const { fixture, page } = await render();
+      await click(fixture, page.querySelector('[data-previous-month]'));
+      await answer(body);
+      await fixture.whenStable();
+      return page;
+    };
+
+    it('shows a positive past month in green, as a share of income kept', async () => {
+      const page = await lastMonth(
+        overview({ month: '2026-10', totals: totals(10000, 8900), previous: totals(10000, 9000) }),
+      );
+
+      expect(amount(page)?.classList.contains('text-positive')).toBe(true);
+      expect(net(page)?.classList.contains('net-card-positive')).toBe(true);
+      expect(caption(page)).toBe('Du behöll 11 % av inkomsterna');
+      expect(grey(page)).toBe('89%');
+      expect(bar(page)?.getAttribute('role')).toBe('img');
+      expect(bar(page)?.getAttribute('aria-label')).toBe('Du behöll 11 % av inkomsterna');
+      expect(net(page)?.querySelector('[data-ongoing]')).toBeNull();
+    });
+
+    it('shows a negative past month in red, as spending over income', async () => {
+      const page = await lastMonth(
+        overview({ month: '2026-10', totals: totals(10000, 11850), previous: totals(0, 0) }),
+      );
+
+      expect(amount(page)?.classList.contains('text-danger')).toBe(true);
+      expect(net(page)?.classList.contains('net-card-negative')).toBe(true);
+      expect(caption(page)?.replace(/\s/g, ' ')).toBe('Du spenderade 1 850 kr mer än du fick in');
+      expect(grey(page)).toBe('84%');
+      expect(bar(page)?.getAttribute('aria-label')?.replace(/\s/g, ' ')).toBe(
+        'Du spenderade 1 850 kr mer än du fick in',
+      );
+    });
+
+    it('shows a negative current month neutral, as use of last month’s income, never red', async () => {
+      const { page } = await render(
+        overview({ totals: totals(0, 21500), previous: totals(38450, 30000) }),
+      );
+
+      expect(amount(page)?.classList.contains('text-danger')).toBe(false);
+      expect(amount(page)?.classList.contains('text-positive')).toBe(false);
+      expect(net(page)?.classList.contains('net-card-negative')).toBe(false);
+      expect(net(page)?.classList.contains('net-card-positive')).toBe(false);
+      expect(text(net(page)?.querySelector('[data-ongoing]'))).toBe('Pågår');
+      expect(text(net(page)?.querySelector('[data-change]'))).toBe('Hittills den här månaden');
+      expect(caption(page)?.replace(/\s/g, ' ')).toBe(
+        'Du har använt 56 % av förra månadens inkomster (38 450 kr)',
+      );
+      expect(grey(page)).toBe('56%');
+      expect(net(page)?.innerHTML).not.toContain('danger');
+    });
+
+    it('stops the bar of a current month at 100 %', async () => {
+      const { page } = await render(
+        overview({ totals: totals(0, 50000), previous: totals(40000, 0) }),
+      );
+
+      expect(grey(page)).toBe('100%');
+    });
+
+    it('treats a current month with income ahead of spending like a positive past month', async () => {
+      const { page } = await render(overview({ totals: totals(20000, 15000) }));
+
+      expect(amount(page)?.classList.contains('text-positive')).toBe(true);
+      expect(text(net(page)?.querySelector('[data-ongoing]'))).toBe('Pågår');
+      expect(caption(page)).toBe('Du behöll 25 % av inkomsterna');
+    });
+
+    it('leaves out the bar when the income it is measured against is 0', async () => {
+      const { page } = await render(overview({ totals: totals(0, 500), previous: totals(0, 0) }));
+
+      expect(bar(page)).toBeNull();
+      expect(caption(page)).toBeUndefined();
+      expect(text(amount(page))?.replace(/\s/g, ' ')).toBe('−500,00 kr');
+    });
+
+    it('leaves out the bar on a past month with neither income nor spending', async () => {
+      const page = await lastMonth(overview({ month: '2026-10' }));
+
+      expect(bar(page)).toBeNull();
     });
   });
 

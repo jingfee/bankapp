@@ -7,6 +7,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  *
  * - `rows`: a list of lines (transactions, accounts);
  * - `tiles`: a row of stat tiles;
+ * - `summary`: one tall card for a headline figure with a bar and boxes;
  * - `card`: one card-sized block.
  */
 @Component({
@@ -21,6 +22,9 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
             <div class="skeleton h-20 rounded-2xl"></div>
           }
         </div>
+      }
+      @case ('summary') {
+        <div class="skeleton h-64 rounded-[20px] lg:h-44"></div>
       }
       @case ('card') {
         <div class="skeleton h-40 rounded-[20px]"></div>
@@ -43,7 +47,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
   `,
 })
 export class Skeleton {
-  readonly shape = input<'rows' | 'tiles' | 'card'>('rows');
+  readonly shape = input<'rows' | 'tiles' | 'summary' | 'card'>('rows');
   readonly count = input(4);
 
   protected readonly items = computed(() => Array.from({ length: this.count() }, (_, i) => i));

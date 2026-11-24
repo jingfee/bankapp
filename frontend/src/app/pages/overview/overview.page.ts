@@ -5,7 +5,6 @@ import {
   type ChartTip,
 } from '../../chart-card/chart-card';
 import { shortDate } from '../../formatting/short-date.pipe';
-import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
@@ -14,7 +13,6 @@ import {
   type ConnectedAccount,
   type OverviewCategory,
   type OverviewResponse,
-  type OverviewTotals,
   type OverviewView,
 } from '@bankapp/shared';
 import { owesText } from '../../balance-display';
@@ -32,8 +30,6 @@ import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 
-type TotalKind = keyof OverviewTotals;
-
 interface Bar<T> {
   item: T;
   /** Share of the section's total, as a whole percentage. */
@@ -41,12 +37,6 @@ interface Bar<T> {
   /** Width relative to the largest bar of the group, as a whole percentage. */
   width: number;
 }
-
-const TOTALS: { kind: TotalKind; label: string }[] = [
-  { kind: 'net', label: 'Netto' },
-  { kind: 'income', label: 'Inkomster' },
-  { kind: 'spending', label: 'Utgifter' },
-];
 
 const ACCOUNT_TYPES: Record<AccountType, string> = {
   payment: 'Betalkonto',
@@ -91,13 +81,39 @@ interface SpendingChart {
 
 const KR = new Intl.NumberFormat(APP_LOCALE, { maximumFractionDigits: 0 });
 
-interface Tile {
-  kind: TotalKind | 'savings' | 'settlement';
-  label: string;
+interface TotalLink {
+  path: string;
+  params: Record<string, string>;
   amount: string;
-  line: string;
-  positive: boolean;
-  link?: { path: string; params: Record<string, string> };
+  change: string;
+}
+
+/** The bar in the Netto card: a track with a grey part and a coloured remainder. */
+interface NetBar {
+  /** How much of the track the grey part fills, as a whole percentage. */
+  fill: number;
+  /** Colour of what remains: Netto in green, overspending in red, or nothing in a current month. */
+  rest: 'positive' | 'danger' | 'none';
+  /** The caption, split so that the figure can be bold. */
+  caption: { before: string; strong: string; after: string };
+}
+
+interface NetCard {
+  amount: string;
+  change: string;
+  tone: 'positive' | 'negative' | 'neutral';
+  ongoing: boolean;
+  bar: NetBar | null;
+  income: TotalLink;
+  spending: TotalLink;
+  savings: TotalLink | null;
+}
+
+interface SettlementRow {
+  closed: boolean;
+  amount: string;
+  lines: string[];
+  link: { path: string; params: Record<string, string> };
 }
 
 interface AccountRow {
@@ -106,15 +122,6 @@ interface AccountRow {
 }
 
 const money = new MoneyPipe();
-
-const MONTH_LONG = new Intl.DateTimeFormat(APP_LOCALE, { month: 'long' });
-
-/** `Oktober` for a `YYYY-MM` month. */
-function monthName(month: string): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  const name = MONTH_LONG.format(new Date(year, number - 1, 1));
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 const VIEWS: { view: OverviewView; label: string }[] = [
   { view: 'mine', label: 'Min andel' },
@@ -152,7 +159,6 @@ function bars<T extends { id: number; name: string; total: number }>(
   imports: [
     ChartCard,
     Page,
-    NgTemplateOutlet,
     RouterLink,
     MoneyPipe,
     CategoryBar,
@@ -162,17 +168,6 @@ function bars<T extends { id: number; name: string; total: number }>(
     Skeleton,
   ],
   template: `
-    <ng-template #tileBody let-tile>
-      <span class="eyebrow">{{ tile.label }}</span>
-      <span
-        data-amount
-        class="amount text-[17px] whitespace-nowrap sm:text-[21px]"
-        [class.text-positive]="tile.positive"
-        >{{ tile.amount }}</span
-      >
-      <span data-change class="text-xs leading-snug text-muted">{{ tile.line }}</span>
-    </ng-template>
-
     <app-page>
       <div page-title class="flex items-center gap-1">
         <button
@@ -233,7 +228,7 @@ function bars<T extends { id: number; name: string; total: number }>(
       @switch (status()) {
         @case ('loading') {
           <div aria-busy="true" class="flex flex-col gap-4">
-            <app-skeleton shape="tiles" [count]="5" />
+            <app-skeleton shape="summary" />
             <app-skeleton shape="card" />
           </div>
         }
@@ -244,30 +239,166 @@ function bars<T extends { id: number; name: string; total: number }>(
         }
         @default {
           @if (overview(); as o) {
-            <div data-tiles class="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-5">
-              @for (tile of tiles(); track tile.kind) {
-                @if (tile.link; as link) {
-                  <a
-                    [attr.data-total]="tile.kind"
-                    [attr.data-total-link]="tile.kind === 'settlement' ? null : ''"
-                    [routerLink]="link.path"
-                    [queryParams]="link.params"
-                    class="stat-tile"
-                    [class.stat-tile-violet]="tile.kind === 'settlement'"
-                  >
-                    <ng-container *ngTemplateOutlet="tileBody; context: { $implicit: tile }" />
-                  </a>
-                } @else {
-                  <div
-                    [attr.data-total]="tile.kind"
-                    class="stat-tile"
-                    [class.stat-tile-positive]="tile.positive"
-                  >
-                    <ng-container *ngTemplateOutlet="tileBody; context: { $implicit: tile }" />
+            @if (netCard(); as n) {
+              <div
+                data-summary
+                class="grid grid-cols-[minmax(0,1fr)] gap-2 sm:gap-2.5"
+                [class.lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]]="settlementRow()"
+              >
+                <section
+                  data-total="net"
+                  aria-label="Netto"
+                  class="net-card"
+                  [class.net-card-positive]="n.tone === 'positive'"
+                  [class.net-card-negative]="n.tone === 'negative'"
+                >
+                  <div class="net-card-head">
+                    <span class="flex items-center gap-2">
+                      <span class="eyebrow">Netto</span>
+                      @if (n.ongoing) {
+                        <span data-ongoing class="net-pill">Pågår</span>
+                      }
+                    </span>
+                    <span
+                      data-amount
+                      class="amount text-[32px] leading-tight whitespace-nowrap"
+                      [class.text-positive]="n.tone === 'positive'"
+                      [class.text-danger]="n.tone === 'negative'"
+                      >{{ n.amount }}</span
+                    >
+                    <span data-change class="text-xs leading-snug text-muted">{{ n.change }}</span>
                   </div>
+
+                  <div class="net-card-body">
+                    @if (n.bar; as bar) {
+                      <div class="flex flex-col gap-1.5">
+                        <div
+                          data-net-bar
+                          role="img"
+                          class="net-bar"
+                          [attr.aria-label]="
+                            bar.caption.before + bar.caption.strong + bar.caption.after
+                          "
+                        >
+                          <span
+                            data-bar-spending
+                            class="net-bar-fill"
+                            [class.net-bar-fill-accent]="bar.rest === 'none'"
+                            [style.width.%]="bar.fill"
+                          ></span>
+                          @if (bar.rest !== 'none') {
+                            <span
+                              class="net-bar-rest"
+                              [class.net-bar-rest-danger]="bar.rest === 'danger'"
+                              [style.left.%]="bar.fill"
+                            ></span>
+                          }
+                        </div>
+                        <p
+                          data-net-caption
+                          class="text-xs leading-snug text-muted"
+                          aria-hidden="true"
+                        >
+                          {{ bar.caption.before
+                          }}<strong class="font-semibold text-ink">{{ bar.caption.strong }}</strong
+                          >{{ bar.caption.after }}
+                        </p>
+                      </div>
+                    }
+
+                    <div class="grid grid-cols-2 gap-2">
+                      <a
+                        data-total="income"
+                        data-total-link
+                        [routerLink]="n.income.path"
+                        [queryParams]="n.income.params"
+                        class="net-box"
+                      >
+                        <span class="flex items-center justify-between">
+                          <span class="eyebrow">In</span><span aria-hidden="true">›</span>
+                        </span>
+                        <span data-amount class="amount text-[17px] whitespace-nowrap">{{
+                          n.income.amount
+                        }}</span>
+                        <span data-change class="text-xs leading-snug text-muted">{{
+                          n.income.change
+                        }}</span>
+                      </a>
+                      <a
+                        data-total="spending"
+                        data-total-link
+                        [routerLink]="n.spending.path"
+                        [queryParams]="n.spending.params"
+                        class="net-box"
+                      >
+                        <span class="flex items-center justify-between">
+                          <span class="eyebrow">Ut</span><span aria-hidden="true">›</span>
+                        </span>
+                        <span data-amount class="amount text-[17px] whitespace-nowrap">{{
+                          n.spending.amount
+                        }}</span>
+                        <span data-change class="text-xs leading-snug text-muted">{{
+                          n.spending.change
+                        }}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  @if (n.savings; as savings) {
+                    <a
+                      data-total="savings"
+                      data-total-link
+                      [routerLink]="savings.path"
+                      [queryParams]="savings.params"
+                      class="net-savings"
+                    >
+                      <span class="text-sm">Varav sparande</span>
+                      <span class="flex items-center gap-2">
+                        <span data-amount class="amount text-[15px] whitespace-nowrap">{{
+                          savings.amount
+                        }}</span>
+                        <span aria-hidden="true">›</span>
+                      </span>
+                    </a>
+                  }
+                </section>
+
+                @if (settlementRow(); as s) {
+                  <a
+                    data-total="settlement"
+                    [routerLink]="s.link.path"
+                    [queryParams]="s.link.params"
+                    class="settlement-row"
+                    [class.settlement-row-open]="!s.closed"
+                  >
+                    <span
+                      data-settlement-badge
+                      class="settlement-badge"
+                      [class.settlement-badge-closed]="s.closed"
+                      aria-hidden="true"
+                      >{{ s.closed ? '✓' : '⇄' }}</span
+                    >
+                    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span class="eyebrow">Avräkning</span>
+                      @for (line of s.lines; track $index) {
+                        <span
+                          data-change
+                          class="text-sm leading-snug break-words"
+                          [class.text-muted]="$index > 0 || s.closed"
+                          >{{ line }}</span
+                        >
+                      }
+                    </span>
+                    <span class="flex shrink-0 items-center gap-2">
+                      <span data-amount class="amount text-[17px] whitespace-nowrap">{{
+                        s.amount
+                      }}</span>
+                      <span aria-hidden="true">›</span>
+                    </span>
+                  </a>
                 }
-              }
-            </div>
+              </div>
+            }
 
             @if (spending().length === 0 && income().length === 0) {
               <app-empty icon="receipt" text="Inga transaktioner den här månaden.">
@@ -716,61 +847,95 @@ export class OverviewPage {
     };
   }
 
-  /** Netto, Inkomster, Utgifter, Sparande and, with a balance setting, Avräkning. */
-  protected readonly tiles = computed<Tile[]>(() => {
+  /** Netto with In, Ut and Varav sparande; the bar says how the month is going. */
+  protected readonly netCard = computed<NetCard | null>(() => {
     const o = this.overview();
-    if (o === null) return [];
-    const tiles: Tile[] = TOTALS.map(({ kind, label }) => ({
-      kind,
-      label,
-      amount: money.transform(o.totals[kind]),
-      line: this.changeText(o.totals[kind] - o.previous[kind]),
-      positive: kind === 'net' && o.totals.net >= 0,
-      link:
-        kind === 'net'
-          ? undefined
-          : {
-              path: '/transaktioner',
-              params: this.monthParams({ kind: kind === 'income' ? 'in' : 'out' }),
-            },
-    }));
-    tiles.push({
-      kind: 'savings',
-      label: 'Sparande',
-      amount: money.transform(o.savings.current),
-      line: this.changeText(o.savings.current - o.savings.previous),
-      positive: false,
-      link:
-        o.savings.subcategoryId === null
-          ? undefined
-          : {
-              path: '/transaktioner',
-              params: this.monthParams({ subcategories: '' + o.savings.subcategoryId }),
-            },
+    if (o === null) return null;
+    const ongoing = o.month === this.currentMonth;
+    const net = o.totals.net;
+    const link = (amount: number, change: number, params: Record<string, string>): TotalLink => ({
+      path: '/transaktioner',
+      params: this.monthParams(params),
+      amount: money.transform(amount),
+      change: this.changeText(change),
     });
-    const settlement = this.settlementTile(o.month);
-    if (settlement !== null) tiles.push(settlement);
-    return tiles;
+    return {
+      amount: money.transform(net),
+      change: ongoing ? 'Hittills den här månaden' : this.changeText(net - o.previous.net),
+      tone: net >= 0 ? 'positive' : ongoing ? 'neutral' : 'negative',
+      ongoing,
+      bar: this.netBar(o, ongoing),
+      income: link(o.totals.income, o.totals.income - o.previous.income, { kind: 'in' }),
+      spending: link(o.totals.spending, o.totals.spending - o.previous.spending, { kind: 'out' }),
+      savings:
+        o.savings.subcategoryId === null
+          ? null
+          : link(o.savings.current, o.savings.current - o.savings.previous, {
+              subcategories: '' + o.savings.subcategoryId,
+            }),
+    };
   });
 
-  /**
-   * Avräkning for the month shown, from the settlement period named for it (ADR 0014):
-   * what a closed period paid, or the live balance of the open one.
-   */
-  private settlementTile(month: string): Tile | null {
+  /** The month's bar and caption, or null when the income it is measured against is 0. */
+  private netBar(o: OverviewResponse, ongoing: boolean): NetBar | null {
+    const { income, spending, net } = o.totals;
+    const share = (part: number, whole: number) => Math.min(Math.round((part / whole) * 100), 100);
+    if (net >= 0) {
+      if (income <= 0) return null;
+      return {
+        fill: share(spending, income),
+        rest: 'positive',
+        caption: {
+          before: 'Du behöll ',
+          strong: `${Math.round((net / income) * 100)} %`,
+          after: ' av inkomsterna',
+        },
+      };
+    }
+    if (ongoing) {
+      const basis = o.previous.income;
+      if (basis <= 0) return null;
+      return {
+        fill: share(spending, basis),
+        rest: 'none',
+        caption: {
+          before: 'Du har använt ',
+          strong: `${Math.round((spending / basis) * 100)} %`,
+          after: ` av förra månadens inkomster (${KR.format(basis)} kr)`,
+        },
+      };
+    }
+    return {
+      fill: share(income, spending),
+      rest: 'danger',
+      caption: {
+        before: 'Du spenderade ',
+        strong: `${KR.format(Math.abs(net))} kr`,
+        after: ' mer än du fick in',
+      },
+    };
+  }
+
+  /** Avräkning, when the month shown has a settlement period (ADR 0014). */
+  protected readonly settlementRow = computed<SettlementRow | null>(() => {
+    const o = this.overview();
+    return o === null ? null : this.settlementFor(o.month);
+  });
+
+  /** What a closed period paid, or the live balance of the open one. */
+  private settlementFor(month: string): SettlementRow | null {
     const settlement = this.settlement();
     if (settlement === undefined) return null;
     const open = settlement.periods.find((p) => p.closedThrough === null);
-    const base = { kind: 'settlement' as const, label: 'Avräkning', positive: false };
 
     const closed = settlement.periods.find((p) => p.month === month && p.closedThrough !== null);
     if (closed?.closedThrough) {
-      const lines = [`Avslutad t.o.m. ${shortDate(closed.closedThrough)}`];
+      const lines = [`Avslutad ${shortDate(closed.closedThrough)}`];
       if (closed.carriedOut !== 0) lines.push(`${KR.format(Math.abs(closed.carriedOut))} kr kvar`);
       return {
-        ...base,
+        closed: true,
         amount: money.transform(closed.paid),
-        line: lines.join(' · '),
+        lines,
         link: { path: '/delat', params: { manad: month } },
       };
     }
@@ -779,12 +944,10 @@ export class OverviewPage {
     if (open === undefined || balance === null) return null;
     const earlierOpen = month === this.currentMonth && open.month < month;
     if (open.month !== month && !earlierOpen) return null;
-    const lines = [owesText(balance)];
-    if (open.overdue) lines.push(`${monthName(open.month)} är inte avslutad`);
     return {
-      ...base,
+      closed: false,
       amount: money.transform(Math.abs(balance)),
-      line: lines.join(' · '),
+      lines: [owesText(balance)],
       link: { path: '/delat', params: { manad: open.month } },
     };
   }
