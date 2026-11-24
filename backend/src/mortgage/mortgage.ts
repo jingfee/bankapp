@@ -25,7 +25,7 @@ import {
   NoSuchLoanPart,
   NoSuchMortgageEntry,
 } from '../domain-errors';
-import { inForce, nextOccurrence } from './figures';
+import { inForce, needsNewRate, nextOccurrence } from './figures';
 
 const MAX_AMOUNT = 1e12;
 const MAX_INTERVAL_MONTHS = 120;
@@ -358,6 +358,7 @@ export class Mortgage {
       next: nextOccurrence(date, intervalMonths, today),
       intervalMonths,
     });
+    const rateAdjustment = day(row.rateAdjustmentDate, row.rateAdjustmentIntervalMonths);
     return {
       id: row.id,
       name: row.name,
@@ -378,7 +379,8 @@ export class Mortgage {
           ),
       rateChanges,
       amortisationChanges: amortisation,
-      rateAdjustment: day(row.rateAdjustmentDate, row.rateAdjustmentIntervalMonths),
+      rateAdjustment,
+      needsNewRate: needsNewRate({ ...row, rateChanges }, rateAdjustment, today),
       termsChange: day(row.termsChangeDate, row.termsChangeIntervalMonths),
     };
   }

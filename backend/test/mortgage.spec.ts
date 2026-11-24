@@ -142,6 +142,27 @@ describe('mortgage', () => {
     });
   });
 
+  describe('the rate prompt', () => {
+    it('asks for a new rate once the adjustment day has passed, until one is dated on or after it', async () => {
+      const [first] = (await twoParts()).parts;
+      expect(first!.needsNewRate).toBe(true);
+      const { body } = await post(`/parts/${first!.id}/rate-changes`, {
+        from: '2026-11-15',
+        rate: 3.85,
+      }).expect(201);
+      expect(body.parts.map((p: { needsNewRate: boolean }) => p.needsNewRate)).toEqual([
+        false,
+        true,
+      ]);
+    });
+
+    it('does not ask for an ended part', async () => {
+      const [first] = (await twoParts()).parts;
+      const { body } = await post(`/parts/${first!.id}/end`, { date: '2026-11-20' }).expect(201);
+      expect(body.parts.at(-1)).toMatchObject({ id: first!.id, needsNewRate: false });
+    });
+  });
+
   describe('recurring days', () => {
     it('reads the next rate adjustment day by adding the interval until it is ahead', async () => {
       const { parts } = await twoParts();

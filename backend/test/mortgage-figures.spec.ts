@@ -1,4 +1,4 @@
-import { inForce, nextOccurrence } from '../src/mortgage/figures';
+import { inForce, mortgageTotals, needsNewRate, nextOccurrence } from '../src/mortgage/figures';
 
 describe('inForce', () => {
   const changes = [
@@ -39,5 +39,70 @@ describe('nextOccurrence', () => {
 
   it('moves the series when the date is edited', () => {
     expect(nextOccurrence('2026-11-25', 3, '2026-11-20')).toBe('2026-11-25');
+  });
+});
+
+describe('needsNewRate', () => {
+  const today = '2026-11-15';
+  const part = { startedOn: '2026-01-10', endedOn: null, rateChanges: [{ from: '2026-01-10' }] };
+  const every3 = (next: string) => ({ next, intervalMonths: 3 });
+
+  it.each([
+    ['on the rate adjustment day', part, every3('2026-11-15'), true],
+    // Next is 2027-01-10, so the day that passed was 2026-10-10.
+    ['after the day, with no rate change since', part, every3('2027-01-10'), true],
+    [
+      'once a rate change is dated on the day',
+      { ...part, rateChanges: [{ from: '2026-10-10' }] },
+      every3('2027-01-10'),
+      false,
+    ],
+    [
+      'once a rate change is dated after the day',
+      { ...part, rateChanges: [{ from: '2026-11-01' }] },
+      every3('2027-01-10'),
+      false,
+    ],
+    ['before the day', part, every3('2027-02-20'), false],
+    [
+      'before the first adjustment day of a new part',
+      { ...part, startedOn: '2026-11-01', rateChanges: [{ from: '2026-11-01' }] },
+      every3('2027-02-01'),
+      false,
+    ],
+    [
+      'when the day that passed was before the part started',
+      { ...part, startedOn: '2026-11-01', rateChanges: [] },
+      every3('2027-01-10'),
+      false,
+    ],
+    ['for an ended part', { ...part, endedOn: '2026-11-01' }, every3('2026-11-15'), false],
+  ])('%s is %s', (_name, loanPart, rateAdjustment, expected) => {
+    expect(needsNewRate(loanPart, rateAdjustment, today)).toBe(expected);
+  });
+});
+
+describe('mortgageTotals', () => {
+  it('weights the rates by debt', () => {
+    const { totalDebt, averageRate } = mortgageTotals([
+      { debt: 990_000, rate: 3.85 },
+      { debt: 500_000, rate: 4.1 },
+    ]);
+    expect(totalDebt).toBe(1_490_000);
+    expect(averageRate).toBeCloseTo((990_000 * 3.85 + 500_000 * 4.1) / 1_490_000, 10);
+  });
+
+  it('leaves a part with no rate out of the average but not the debt', () => {
+    expect(
+      mortgageTotals([
+        { debt: 100_000, rate: null },
+        { debt: 300_000, rate: 4 },
+      ]),
+    ).toEqual({ totalDebt: 400_000, averageRate: 4 });
+  });
+
+  it('has no average without rated debt', () => {
+    expect(mortgageTotals([])).toEqual({ totalDebt: 0, averageRate: null });
+    expect(mortgageTotals([{ debt: 0, rate: 4 }])).toEqual({ totalDebt: 0, averageRate: null });
   });
 });

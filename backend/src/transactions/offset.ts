@@ -3,6 +3,7 @@ import type { OffsetCandidatesResponse } from '@bankapp/shared';
 import { and, desc, eq, gte, isNull, lt, lte, ne, sql, type SQL } from 'drizzle-orm';
 import { Categorising } from '../categories/guessing/categorising';
 import { normaliseDescription } from '../categories/guessing/normalise-description';
+import { DAY_MS } from '../calendar';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -15,11 +16,9 @@ const SUGGESTION_WINDOW_DAYS = 90;
 const SUGGESTION_LIMIT = 10;
 const SEARCH_LIMIT = 30;
 
-const DAY = 86_400_000;
-
 /** Whole days from `from` to `to` (`YYYY-MM-DD`), negative when `to` is earlier. */
 export function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(to) - Date.parse(from)) / DAY);
+  return Math.round((Date.parse(to) - Date.parse(from)) / DAY_MS);
 }
 
 const words = (description: string) =>
@@ -132,7 +131,7 @@ export class Offset {
       };
     }
 
-    const earliest = new Date(Date.parse(refund.date) - SUGGESTION_WINDOW_DAYS * DAY)
+    const earliest = new Date(Date.parse(refund.date) - SUGGESTION_WINDOW_DAYS * DAY_MS)
       .toISOString()
       .slice(0, 10);
     const rows = queryTransactions(this.db, {

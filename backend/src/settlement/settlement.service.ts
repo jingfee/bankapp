@@ -18,9 +18,6 @@ import {
   type SettlementReplay,
 } from './replay';
 
-/** Money sums are floats; rounding to öre keeps the noise out of the API. */
-const round = roundOre;
-
 /** A `settlement_months` row. */
 type PeriodRecord = typeof settlementMonths.$inferSelect;
 
@@ -169,7 +166,7 @@ export class SettlementService {
     this.db
       .insert(balanceSettings)
       .values({
-        amount: round(amount),
+        amount: roundOre(amount),
         asOf: asOf ?? this.clock.today(),
         createdAt: this.clock.now(),
       })

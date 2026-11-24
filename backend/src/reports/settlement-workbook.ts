@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import type { SettlementPeriod, ShareOption } from '@bankapp/shared';
+import { roundOre } from '../transactions/owners-part';
 
 const MONEY_FORMAT = '# ##0,00 "kr"';
 const DATE_FORMAT = 'yyyy-MM-dd';
@@ -30,8 +31,6 @@ export function reportFileName(month: string): { dir: string; file: string } {
 /** A calendar day as a real date, kept at UTC midnight so it shows as the same day everywhere. */
 const day = (value: string) => new Date(`${value}T00:00:00Z`);
 
-const round = (value: number) => Math.round(value * 100) / 100;
-
 /** The settlement report of one closed period: summary, transactions and settlements. */
 export async function buildSettlementWorkbook(
   period: SettlementPeriod,
@@ -43,7 +42,7 @@ export async function buildSettlementWorkbook(
 
   const startsOn =
     period.startsOn ?? period.balanceSettings[0]?.asOf ?? period.items[0]?.date ?? null;
-  const partnerPart = round(period.items.reduce((sum, item) => sum + item.partnerPart, 0));
+  const partnerPart = roundOre(period.items.reduce((sum, item) => sum + item.partnerPart, 0));
 
   const summary = workbook.addWorksheet('Sammanfattning');
   summary.columns = [{ width: 34 }, { width: 22 }];
@@ -102,7 +101,7 @@ export async function buildSettlementWorkbook(
     ]);
   }
   addTotalsRow(transactions, 'Summa', {
-    5: round(period.items.reduce((sum, item) => sum + item.amount, 0)),
+    5: roundOre(period.items.reduce((sum, item) => sum + item.amount, 0)),
     7: partnerPart,
   });
 

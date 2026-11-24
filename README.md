@@ -10,7 +10,7 @@ A pnpm workspace with three packages:
 
 - `frontend`: Angular app (Tailwind CSS, Vitest)
 - `backend`: NestJS API under `/api`, which also serves the built frontend in production (Vitest)
-- `shared`: API types used by both (type-only, import with `import type`)
+- `shared`: API types used by both, plus the category palette and icons the frontend uses. The backend may only `import type` from it, as it is not in the production image ([ADR 0016](docs/adr/0016-the-shared-package-stays-types-only.md))
 
 ## Development
 

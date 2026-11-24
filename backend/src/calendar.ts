@@ -3,7 +3,8 @@
  * day on every machine. The one home for these helpers in the backend (ADR 0016).
  */
 
-const DAY_MS = 86_400_000;
+/** Milliseconds in a day. */
+export const DAY_MS = 86_400_000;
 
 const pad = (value: number, width = 2) => String(value).padStart(width, '0');
 
@@ -20,6 +21,9 @@ export function isDay(value: string): boolean {
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
 }
+
+/** The month (`YYYY-MM`) of `day` (`YYYY-MM-DD`). */
+export const monthOfDay = (day: string): string => day.slice(0, 7);
 
 /** The month `by` months from `month` (`YYYY-MM`). */
 export function shiftMonth(month: string, by: number): string {
@@ -47,6 +51,11 @@ export function monthEnd(month: string): string {
   return `${month}-${pad(new Date(Date.UTC(year, number, 0)).getUTCDate())}`;
 }
 
+/** How many days `month` (`YYYY-MM`) has. */
+export function daysInMonth(month: string): number {
+  return Number(monthEnd(month).slice(8, 10));
+}
+
 /** Whole days from the last day of `month` to `today` (negative while the month is running). */
 export function endedDaysAgo(month: string, today: string): number {
   return Math.round(
@@ -58,5 +67,5 @@ export function endedDaysAgo(month: string, today: string): number {
 export function addMonths(day: string, months: number): string {
   const date = Number(day.slice(8, 10));
   const target = shiftMonth(day.slice(0, 7), months);
-  return `${target}-${pad(Math.min(date, Number(monthEnd(target).slice(8, 10))))}`;
+  return `${target}-${pad(Math.min(date, daysInMonth(target)))}`;
 }

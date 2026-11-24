@@ -7,25 +7,23 @@ import type {
   OverviewTransactionsResponse,
   OverviewView,
 } from '@bankapp/shared';
-import { queryTransactions, toListed } from '../transactions/query';
-import { monthEnd, shiftMonth } from '../calendar';
+import { daysInMonth, shiftMonth } from '../calendar';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { categories, subcategories, transactions } from '../db/schema';
+import { roundOre } from '../transactions/owners-part';
+import { queryTransactions, toListed } from '../transactions/query';
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 
 /** The ledger filter for `month`: a kvittad refund counts in its purchase's month, else a transaction in its own. */
-function monthOf(month: string) {
+function countedIn(month: string) {
   return {
     countIn: 'purchase-month',
     from: `${month}-01`,
     before: `${shiftMonth(month, 1)}-01`,
   } as const;
 }
-
-/** Money sums are floats; rounding to öre keeps the noise out of the API. */
-const round = (value: number) => Math.round(value * 100) / 100 + 0;
 
 /** The transfer subcategory whose net deposits the overview shows as Sparande. */
 const SAVINGS_SUBCATEGORY = WELL_KNOWN_SUBCATEGORIES.savings.name;
@@ -81,7 +79,7 @@ export class OverviewService {
   listForSubcategory(month: string, subcategoryId: number): OverviewTransactionsResponse {
     return {
       transactions: queryTransactions(this.db, {
-        ...monthOf(month),
+        ...countedIn(month),
         where: eq(transactions.subcategoryId, subcategoryId),
         orderBy: [desc(transactions.date), desc(transactions.id)],
       }).map(toListed),
@@ -95,9 +93,9 @@ export class OverviewService {
     spendingByDay: number[];
     savings: number;
   } {
-    const rows = queryTransactions(this.db, monthOf(month));
+    const rows = queryTransactions(this.db, countedIn(month));
 
-    const daily: number[] = Array(Number(monthEnd(month).slice(8))).fill(0);
+    const daily: number[] = Array(daysInMonth(month)).fill(0);
     let uncategorised = 0;
     let deposited = 0;
     const byCategory = new Map<number, OverviewCategory>();
@@ -147,23 +145,23 @@ export class OverviewService {
 
     const list = [...byCategory.values()].map((category) => ({
       ...category,
-      total: round(category.total),
+      total: roundOre(category.total),
       subcategories: category.subcategories
-        .map((sub) => ({ ...sub, total: round(sub.total) }))
+        .map((sub) => ({ ...sub, total: roundOre(sub.total) }))
         .sort((a, b) => b.total - a.total),
     }));
     list.sort((a, b) => b.total - a.total);
 
     const sum = (kind: 'income' | 'expense') =>
-      round(list.filter((c) => c.kind === kind).reduce((total, c) => total + c.total, 0));
+      roundOre(list.filter((c) => c.kind === kind).reduce((total, c) => total + c.total, 0));
     const totals: OverviewTotals = {
       income: sum('income'),
       spending: sum('expense'),
       net: 0,
     };
-    totals.net = round(totals.income - totals.spending);
+    totals.net = roundOre(totals.income - totals.spending);
     let running = 0;
-    const spendingByDay = daily.map((value) => round((running += value)));
-    return { totals, categories: list, uncategorised, spendingByDay, savings: round(deposited) };
+    const spendingByDay = daily.map((value) => roundOre((running += value)));
+    return { totals, categories: list, uncategorised, spendingByDay, savings: roundOre(deposited) };
   }
 }

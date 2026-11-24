@@ -8,6 +8,8 @@ import { MortgageStore } from './mortgage.store';
 const MORTGAGE: MortgageResponse = { parts: [], entries: [] };
 const FIGURES: MortgageFiguresResponse = {
   debts: [],
+  totalDebt: 0,
+  averageRate: null,
   months: [],
   monthsWithoutPayment: [],
   paymentsSubcategoryId: null,

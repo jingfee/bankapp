@@ -96,6 +96,8 @@ describe('mortgage figures', () => {
   it('is empty before the mortgage is set up', async () => {
     expect(await figures()).toEqual({
       debts: [],
+      totalDebt: 0,
+      averageRate: null,
       months: [],
       monthsWithoutPayment: [],
       paymentsSubcategoryId: mortgageId,
@@ -173,6 +175,18 @@ describe('mortgage figures', () => {
     pay('2026-11-28');
     pay('2026-12-01');
     expect((await figures()).debts[0]!.debt).toBe(0);
+  });
+
+  it('totals the debt and weights the rate across open parts only', async () => {
+    const first = await setUp();
+    await setUp({ name: 'Del 2', debt: 600_000, rate: 4.2, amortisation: 1000 });
+    const ended = await setUp({ name: 'Del 3', debt: 50_000, rate: 9 });
+    await post(`/parts/${ended}/end`, { date: '2026-11-20' }).expect(201);
+    pay('2026-11-28');
+    const result = await figures();
+    expect(result.totalDebt).toBe(1_198_000 + 599_000);
+    expect(result.averageRate).toBeCloseTo((1_198_000 * 3 + 599_000 * 4.2) / 1_797_000, 10);
+    expect(result.debts.map((d) => d.partId)).toContain(first);
   });
 
   it('counts an ended part as 0', async () => {

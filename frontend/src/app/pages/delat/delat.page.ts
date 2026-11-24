@@ -762,9 +762,7 @@ export class DelatPage {
   }
 
   protected readonly balanceAmount = computed(() => Math.abs(this.settlement().balance ?? 0));
-  protected readonly balanceDirection = computed(() =>
-    owesText(this.settlement().balance ?? 0, { zero: 'Partnern är skyldig dig' }),
-  );
+  protected readonly balanceDirection = computed(() => owesText(this.settlement().balance ?? 0));
   /** The latest settlement's or balance setting's date, as " · sedan avräkningen <date>". */
   protected readonly sinceText = computed(() => {
     const { periods, balanceSettings } = this.settlement();
@@ -788,12 +786,12 @@ export class DelatPage {
     const from = this.sharesStore.householdRatioInForceFrom();
     return this.ratio().find((entry) => entry.from === from);
   });
-  /** The history with the entry in force first, then the rest newest first. */
   /** The ratio entry open in the edit sheet. */
   protected readonly editingEntry = computed(
     () => this.ratio().find((e) => e.from === this.editing()) ?? null,
   );
 
+  /** The history with the entry in force first, then the rest newest first. */
   protected readonly history = computed(() => {
     const current = this.current();
     const rest = [...this.ratio()].sort((a, b) => b.from.localeCompare(a.from));

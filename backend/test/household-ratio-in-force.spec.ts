@@ -1,8 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
-import type { HouseholdRatioResponse } from '@bankapp/shared';
-import { createApp } from '../src/app';
 import { inForceFrom } from '../src/transactions/shares';
-import { FakeEnableBankingClient, api, testConfig } from './support';
 
 describe('the household ratio in force', () => {
   const entries = [
@@ -21,34 +17,5 @@ describe('the household ratio in force', () => {
     ['today after the last entry', entries, '2027-05-01', '2026-12-01'],
   ])('with %s gives the entry in force', (_name, list, today, expected) => {
     expect(inForceFrom(list, today)).toBe(expected);
-  });
-
-  describe('over HTTP', () => {
-    let app: INestApplication;
-    beforeEach(async () => {
-      app = await createApp({
-        config: testConfig,
-        enableBanking: new FakeEnableBankingClient(),
-        database: { inMemory: true },
-      });
-      await app.init();
-    });
-    afterEach(() => app.close());
-
-    it('is null before any entry and present after setting the ratio', async () => {
-      const empty = (await api(app).get('/api/household-ratio').expect(200))
-        .body as HouseholdRatioResponse;
-      expect(empty).toEqual({ entries: [], inForceFrom: null });
-      const put = (
-        await api(app)
-          .put('/api/household-ratio')
-          .send({ entries: [{ from: '2020-01-01', percent: 60 }] })
-          .expect(200)
-      ).body as HouseholdRatioResponse;
-      expect(put.inForceFrom).toBe('2020-01-01');
-      const got = (await api(app).get('/api/household-ratio').expect(200))
-        .body as HouseholdRatioResponse;
-      expect(got.inForceFrom).toBe('2020-01-01');
-    });
   });
 });

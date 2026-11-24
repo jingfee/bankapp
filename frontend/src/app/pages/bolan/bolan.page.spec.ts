@@ -21,6 +21,7 @@ const part = (id: number, name: string, extra: Partial<LoanPart> = {}): LoanPart
   rateChanges: [],
   amortisationChanges: [],
   rateAdjustment: { next: '2027-02-20', intervalMonths: 3 },
+  needsNewRate: false,
   termsChange: { next: '2027-03-01', intervalMonths: 12 },
   ...extra,
 });
@@ -57,6 +58,8 @@ const FIGURES: MortgageFiguresResponse = {
     { partId: 1, debt: 990000 },
     { partId: 2, debt: 500000 },
   ],
+  totalDebt: 1490000,
+  averageRate: 3.9324,
   months: [month('2026-10'), month('2026-11', { interest: 4800, amortisation: 2000, total: 6800 })],
   monthsWithoutPayment: [],
   paymentsSubcategoryId: 42,
@@ -118,7 +121,14 @@ describe('BolanPage', () => {
   it('offers setup before there is a mortgage', async () => {
     const { root } = await render(
       { parts: [], entries: [] },
-      { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId: null },
+      {
+        debts: [],
+        totalDebt: 0,
+        averageRate: null,
+        months: [],
+        monthsWithoutPayment: [],
+        paymentsSubcategoryId: null,
+      },
     );
     expect(root.querySelector('[data-add-part]')?.textContent).toContain('Lägg till bolån');
     expect(root.querySelector('[data-intro]')).not.toBeNull();
@@ -130,7 +140,14 @@ describe('BolanPage', () => {
   it('sets up a part with Swedish-format numbers', async () => {
     const { root, click, type } = await render(
       { parts: [], entries: [] },
-      { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId: null },
+      {
+        debts: [],
+        totalDebt: 0,
+        averageRate: null,
+        months: [],
+        monthsWithoutPayment: [],
+        paymentsSubcategoryId: null,
+      },
     );
     await click('[data-add-part]');
     await type('[data-part-form] [data-name]', 'Del 1 – 3 mån');
@@ -235,7 +252,6 @@ describe('BolanPage', () => {
     const text = (selector: string) =>
       root.querySelector(selector)?.textContent?.replace(/\s/g, ' ');
     expect(text('[data-total-debt]')).toContain('1 490 000');
-    // (990 000 × 3,85 + 500 000 × 4,1) / 1 490 000
     expect(text('[data-average-rate]')).toContain('3,93');
     expect(text('[data-estimate]')).toContain('6 800');
     expect(text('[data-estimate-interest]')).toContain('4 800');
@@ -276,51 +292,30 @@ describe('BolanPage', () => {
   });
 
   describe('rate prompt', () => {
-    const due = (extra: Partial<LoanPart> = {}) => ({
+    const due = (needsNewRate: boolean) => ({
       ...MORTGAGE,
       parts: [
-        part(1, 'Del 1', { rateAdjustment: { next: '2026-11-15', intervalMonths: 3 }, ...extra }),
+        part(1, 'Del 1', {
+          rateAdjustment: { next: '2026-11-15', intervalMonths: 3 },
+          needsNewRate,
+        }),
       ],
     });
 
-    it('asks on the rate adjustment day', async () => {
-      const { root } = await render(due());
+    it('asks when the backend says the part needs a new rate', async () => {
+      const { root } = await render(due(true));
       expect(root.querySelector('[data-rate-prompt]')?.textContent).toContain(
         'Dags att ange ny ränta för Del 1',
       );
     });
 
-    it('keeps asking after the day until a rate change on or after it exists', async () => {
-      // Next is 2027-01-10, so the day that passed was 2026-10-10.
-      const next = { next: '2027-01-10', intervalMonths: 3 };
-      const open = await render(due({ rateAdjustment: next }));
-      expect(open.root.querySelector('[data-rate-prompt]')).not.toBeNull();
-    });
-
-    it('clears once a rate change is dated on or after the day', async () => {
-      const next = { next: '2027-01-10', intervalMonths: 3 };
-      const { root } = await render(
-        due({
-          rateAdjustment: next,
-          rateChanges: [{ id: 1, from: '2026-10-10', rate: 3.85 }],
-        }),
-      );
-      expect(root.querySelector('[data-rate-prompt]')).toBeNull();
-    });
-
-    it('is not shown before the first adjustment day of a new part', async () => {
-      const { root } = await render(
-        due({
-          startedOn: '2026-11-01',
-          rateChanges: [{ id: 1, from: '2026-11-01', rate: 3.85 }],
-          rateAdjustment: { next: '2027-02-01', intervalMonths: 3 },
-        }),
-      );
+    it('does not ask otherwise', async () => {
+      const { root } = await render(due(false));
       expect(root.querySelector('[data-rate-prompt]')).toBeNull();
     });
 
     it('records the same rate again, which clears it', async () => {
-      const { root, click } = await render(due());
+      const { root, click } = await render(due(true));
       await click('[data-new-rate]');
       expect(root.querySelector<HTMLInputElement>('[data-new-rate-form] [data-rate]')?.value).toBe(
         '3,85',
