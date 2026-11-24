@@ -38,6 +38,14 @@ _Avoid_: Disconnected, invalid
 A bank the owner removed from Banker because they no longer use it. Its connection is no longer synced and is revoked, and its accounts become closed accounts: their transactions keep counting as history, in lists, past months and settlements, and a hidden account stays hidden. Connecting the same bank again brings it back, and its accounts continue where they left off. A savings account of a removed bank either closes or, if the owner chooses, continues as a manual savings account from its last synced balance. A removed bank can later be deleted for good, which erases it and everything it brought in (ADR 0013).
 _Avoid_: Deleted bank, disconnected, ended connection
 
+**Offline** (sv: _Offline_):
+The app cannot reach its own server, for whatever reason (no signal, not on the home network or the tailnet), or the server cannot answer. The owner can still look at saved data but cannot change anything. It says nothing about any bank's connection.
+_Avoid_: Disconnected, frånkopplad, ej ansluten, no connection
+
+**Saved data** (sv: _Sparad data_, shown as _Visar sparad data från …_):
+What the app last fetched from its own server and keeps on the device, so pages can be shown while offline. Its age is when the device last fetched it, not when the bank was last synced. It is never older than 30 days, and logging out deletes it, even while offline.
+_Avoid_: Cache, stale data, synced data, senast uppdaterad
+
 ### Money
 
 **Account** (sv: _Konto_):
