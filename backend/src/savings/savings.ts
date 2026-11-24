@@ -10,7 +10,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { savingsFigures } from '../accounts/savings-figures';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
-import { monthEnd, nextMonth, previousMonth } from '../calendar';
+import { monthEnd, monthOfDay, nextMonth, previousMonth } from '../calendar';
 import { CLOCK, clock, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -23,11 +23,10 @@ import {
 } from '../db/schema';
 import { ManualSavings } from '../manual-savings/manual-savings';
 import { change, stateOn, type Entry } from '../manual-savings/figures';
+import { roundOre } from '../transactions/owners-part';
 
 /** Which balance a fetch shows, most preferred first; the same as on Banker. */
 const BALANCE_PREFERENCE = ['CLBD', 'ITBD', 'ITAV'];
-
-const round = (value: number) => Math.round(value * 100) / 100;
 
 /** One account as the series needs it: its history as entries, whichever kind it is. */
 interface Source {
@@ -42,8 +41,6 @@ interface Source {
 }
 
 const maxDay = (a: string, b: string) => (a > b ? a : b);
-
-const monthOf = (day: string) => day.slice(0, 7);
 
 /** The savings view: every savings account, connected or manual, over time (`CONTEXT.md` › Savings). */
 @Injectable()
@@ -129,7 +126,7 @@ export class Savings {
     return points.map((point) => ({
       date: point.day,
       balance: point.amount,
-      netDeposits: round(
+      netDeposits: roundOre(
         first.amount +
           savingsFigures(this.db, accountId, point.day, point.amount).netDeposits -
           atFirst,
@@ -202,7 +199,7 @@ export class Savings {
     for (const [at, balance] of byFetch) byDay.set(dayOf(new Date(at)), balance.amount);
     const days = [...byDay.keys()].sort();
     const lastOfMonth = new Map<string, string>();
-    for (const day of days) lastOfMonth.set(monthOf(day), day);
+    for (const day of days) lastOfMonth.set(monthOfDay(day), day);
     const wanted = new Set([...(days[0] === undefined ? [] : [days[0]]), ...lastOfMonth.values()]);
     return [...wanted].sort().map((day) => ({ day, amount: byDay.get(day)! }));
   }
@@ -228,14 +225,14 @@ export class Savings {
     const state = stateOn(entries, account.closedOn, today);
     const open = state !== null && !state.closed;
     const netDeposits = open ? state.netDeposits : null;
-    const growth = netDeposits === null ? null : round(state!.balance - netDeposits);
+    const growth = netDeposits === null ? null : roundOre(state!.balance - netDeposits);
     return {
       ...account,
       balance: state?.balance ?? null,
       netDeposits,
       growth,
       growthPercent:
-        growth !== null && netDeposits! > 0 ? round((growth / netDeposits!) * 100) : null,
+        growth !== null && netDeposits! > 0 ? roundOre((growth / netDeposits!) * 100) : null,
       approximate: growth !== null && source.approximate,
       lastUpdated: source.lastUpdated,
     };
@@ -248,9 +245,9 @@ export class Savings {
       return first === undefined ? [] : [first.date];
     });
     if (firsts.length === 0) return [];
-    const thisMonth = monthOf(today);
+    const thisMonth = monthOfDay(today);
     const result: SavingsMonth[] = [];
-    for (let month = monthOf(firsts.sort()[0]!); month <= thisMonth; month = nextMonth(month)) {
+    for (let month = monthOfDay(firsts.sort()[0]!); month <= thisMonth; month = nextMonth(month)) {
       // The current month uses the latest value rather than a month end still to come.
       const end = month === thisMonth ? today : monthEnd(month);
       const before = monthEnd(previousMonth(month));
@@ -269,17 +266,17 @@ export class Savings {
           key: source.account.key,
           balance: state.balance,
           netDeposits: state.netDeposits,
-          growth: delta === null ? null : round(delta.growth),
+          growth: delta === null ? null : roundOre(delta.growth),
         })),
-        balance: round(points.reduce((sum, point) => sum + point.state.balance, 0)),
+        balance: roundOre(points.reduce((sum, point) => sum + point.state.balance, 0)),
         netDeposits:
           withDeposits.length === 0
             ? null
-            : round(withDeposits.reduce((sum, point) => sum + point.state.netDeposits!, 0)),
+            : roundOre(withDeposits.reduce((sum, point) => sum + point.state.netDeposits!, 0)),
         growth:
           withGrowth.length === 0
             ? null
-            : round(withGrowth.reduce((sum, point) => sum + point.delta!.growth, 0)),
+            : roundOre(withGrowth.reduce((sum, point) => sum + point.delta!.growth, 0)),
         approximate: withGrowth.some((point) => point.delta!.approximate),
       });
     }
@@ -290,15 +287,15 @@ export class Savings {
     const open = list.filter((account) => account.closedOn === null);
     const tracked = open.filter((account) => account.netDeposits !== null);
     const netDeposits =
-      tracked.length === 0 ? null : round(tracked.reduce((sum, a) => sum + a.netDeposits!, 0));
+      tracked.length === 0 ? null : roundOre(tracked.reduce((sum, a) => sum + a.netDeposits!, 0));
     const growth =
-      tracked.length === 0 ? null : round(tracked.reduce((sum, a) => sum + a.growth!, 0));
+      tracked.length === 0 ? null : roundOre(tracked.reduce((sum, a) => sum + a.growth!, 0));
     return {
-      balance: round(open.reduce((sum, account) => sum + (account.balance ?? 0), 0)),
+      balance: roundOre(open.reduce((sum, account) => sum + (account.balance ?? 0), 0)),
       netDeposits,
       growth,
       growthPercent:
-        growth !== null && netDeposits! > 0 ? round((growth / netDeposits!) * 100) : null,
+        growth !== null && netDeposits! > 0 ? roundOre((growth / netDeposits!) * 100) : null,
       approximate: tracked.some((account) => account.approximate),
     };
   }
@@ -308,14 +305,14 @@ export class Savings {
    * that month has ended without the owner stating the balance.
    */
   private reminders(today: string): SavingsReminder[] {
-    const ended = previousMonth(monthOf(today));
+    const ended = previousMonth(monthOfDay(today));
     return this.manual
       .list()
       .accounts.filter(
         (account) =>
           account.closedOn === null &&
           account.entries.length > 0 &&
-          !account.entries.some((entry) => monthOf(entry.date) >= ended),
+          !account.entries.some((entry) => monthOfDay(entry.date) >= ended),
       )
       .map((account) => ({ key: `manual-${account.id}`, name: account.name, month: ended }));
   }

@@ -347,6 +347,18 @@ describe('shares', () => {
       expect((await share(from)).percent).toBe(50);
     });
 
+    it('marks no entry in force before any is set, and the one in force after', async () => {
+      const empty = (await api(app).get('/api/household-ratio').expect(200))
+        .body as HouseholdRatioResponse;
+      expect(empty).toEqual({ entries: [], inForceFrom: null });
+      const put = (await setRatio([{ from: '2020-01-01', percent: 60 }]).expect(200))
+        .body as HouseholdRatioResponse;
+      expect(put.inForceFrom).toBe('2020-01-01');
+      const got = (await api(app).get('/api/household-ratio').expect(200))
+        .body as HouseholdRatioResponse;
+      expect(got.inForceFrom).toBe('2020-01-01');
+    });
+
     it('cannot lose its last entry while Hushåll is in use', async () => {
       await setRatio([{ from: '2026-01-01', percent: 60 }]).expect(200);
       await setAccountShare(1, 'household').expect(200);

@@ -6,7 +6,7 @@ import type {
   Transaction,
 } from '@bankapp/shared';
 import { and, asc, eq } from 'drizzle-orm';
-import { nextMonth } from '../calendar';
+import { monthOfDay, nextMonth } from '../calendar';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -21,13 +21,11 @@ import {
   transactions,
 } from '../db/schema';
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
+import { roundOre } from '../transactions/owners-part';
 import { queryTransactions } from '../transactions/query';
 import { inForce } from './figures';
 
 const MORTGAGE = WELL_KNOWN_SUBCATEGORIES.mortgage;
-
-const monthOf = (day: string) => day.slice(0, 7);
-const round = (value: number) => Math.round(value * 100) / 100;
 
 interface Part {
   id: number;
@@ -66,10 +64,10 @@ export class MortgageReport {
 
     const months: MortgageMonth[] = [];
     const monthsWithoutPayment: string[] = [];
-    const current = monthOf(today);
-    for (let month = monthOf(firstEntry); month <= current; month = nextMonth(month)) {
+    const current = monthOfDay(today);
+    for (let month = monthOfDay(firstEntry); month <= current; month = nextMonth(month)) {
       months.push(this.month(month, parts, booked, payments));
-      if (month < current && !booked.some((p) => monthOf(p.date) === month)) {
+      if (month < current && !booked.some((p) => monthOfDay(p.date) === month)) {
         monthsWithoutPayment.push(month);
       }
     }
@@ -100,17 +98,17 @@ export class MortgageReport {
       amortisation += inForce(part.amortisations, day) ?? 0;
     }
     const paid = payments
-      .filter((p) => monthOf(p.date) === month)
+      .filter((p) => monthOfDay(p.date) === month)
       .reduce((sum, p) => sum - p.amount.amount, 0);
-    interest = round(interest);
-    amortisation = round(amortisation);
+    interest = roundOre(interest);
+    amortisation = roundOre(amortisation);
     return {
       month,
       debts,
       interest,
       amortisation,
-      total: round(interest + amortisation),
-      paid: round(paid),
+      total: roundOre(interest + amortisation),
+      paid: roundOre(paid),
     };
   }
 
@@ -130,12 +128,12 @@ export class MortgageReport {
     for (const payment of booked) {
       if (payment.date <= entry.date || (cutoff !== null && payment.date >= cutoff)) continue;
       if (part.endedOn !== null && payment.date >= part.endedOn) continue;
-      const month = monthOf(payment.date);
+      const month = monthOfDay(payment.date);
       if (paidMonths.has(month)) continue;
       paidMonths.add(month);
       debt = Math.max(0, debt - (inForce(part.amortisations, payment.date) ?? 0));
     }
-    return round(debt);
+    return roundOre(debt);
   }
 
   /** Booked and pending payments, oldest first, on accounts that count. */

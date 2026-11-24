@@ -1,9 +1,11 @@
 import {
   addMonths,
+  daysInMonth,
   endedDaysAgo,
   isDay,
   isMonth,
   monthEnd,
+  monthOfDay,
   nextDay,
   nextMonth,
   previousMonth,
@@ -86,6 +88,11 @@ describe('the calendar', () => {
     ['2026-12', '2026-12-31'],
   ])('the last day of %s is %s', (month, expected) => {
     expect(monthEnd(month)).toBe(expected);
+    expect(daysInMonth(month)).toBe(Number(expected.slice(8)));
+  });
+
+  it('gives the month of a day', () => {
+    expect(monthOfDay('2026-11-24')).toBe('2026-11');
   });
 
   it.each([

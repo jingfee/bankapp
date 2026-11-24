@@ -110,7 +110,7 @@ describe('DelatPage', () => {
   async function render(
     options: {
       ratio?: HouseholdRatioEntry[];
-      /** The `from` the backend marks as in force; the first entry unless given. */
+      /** The `from` the backend marks as in force; by default the backend's rule for today. */
       inForceFrom?: string | null;
       shares?: SubcategoryShare[];
       settlement?: SettlementResponse;
@@ -124,7 +124,9 @@ describe('DelatPage', () => {
     settlementStore.settlement.set(settlement);
     sharesStore.householdRatio.set(ratio);
     sharesStore.householdRatioInForceFrom.set(
-      options.inForceFrom !== undefined ? options.inForceFrom : (ratio?.[0]?.from ?? null),
+      options.inForceFrom !== undefined
+        ? options.inForceFrom
+        : ((ratio?.filter((entry) => entry.from <= today).at(-1) ?? ratio?.[0])?.from ?? null),
     );
     sharesStore.subcategoryShares.set(shares);
     const fixture = TestBed.createComponent(DelatPage);
@@ -235,6 +237,13 @@ describe('DelatPage', () => {
       expect(text(page.querySelector('[data-balance-direction]'))).toBe(
         'Partnern är skyldig dig · sedan avräkningen 20 okt',
       );
+    });
+
+    it('says they are even when the balance is zero, as Översikt does', async () => {
+      const { page } = await render({ settlement: settlementOf({ balance: 0 }) });
+
+      expect(text(page.querySelector('[data-balance]'))).toBe('0,00 kr');
+      expect(text(page.querySelector('[data-balance-direction]'))).toContain('Ni är kvitt');
     });
 
     it('says the owner owes the partner when the balance is negative', async () => {
@@ -645,7 +654,6 @@ describe('DelatPage', () => {
           { from: '2026-07-01', percent: 55 },
           { from: '2999-01-01', percent: 50 },
         ],
-        inForceFrom: '2026-07-01',
       });
 
       expect(text(page.querySelector('[data-ratio-heading]'))).toBe('55/45');
@@ -725,7 +733,6 @@ describe('DelatPage', () => {
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
         ],
-        inForceFrom: '2026-07-01',
       });
 
       const entries = page.querySelectorAll('[data-ratio-entry]');
@@ -764,7 +771,6 @@ describe('DelatPage', () => {
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
         ],
-        inForceFrom: '2026-07-01',
       });
 
       const entries = page.querySelectorAll('[data-ratio-entry]');

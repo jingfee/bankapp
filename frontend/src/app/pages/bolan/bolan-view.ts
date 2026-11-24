@@ -4,12 +4,10 @@ import type {
   MortgageFiguresResponse,
   MortgageMonth,
 } from '@bankapp/shared';
-import { addMonths } from '../../dates';
+import { DAY_MS, addMonths } from '../../dates';
 
 /** A highlighted date is one at most this many days away. */
 export const HIGHLIGHT_DAYS = 14;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const utc = (day: string) => {
   const [year, month, date] = day.split('-').map(Number) as [number, number, number];

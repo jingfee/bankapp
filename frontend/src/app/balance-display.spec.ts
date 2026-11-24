@@ -8,9 +8,4 @@ describe('the balance text', () => {
   ])('says who owes whom for %d', (balance, expected) => {
     expect(owesText(balance)).toBe(expected);
   });
-
-  it('lets a page word the settled case itself', () => {
-    expect(owesText(0, { zero: 'Partnern är skyldig dig' })).toBe('Partnern är skyldig dig');
-    expect(owesText(-5, { zero: 'Partnern är skyldig dig' })).toBe('Du är skyldig partnern');
-  });
 });

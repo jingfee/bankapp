@@ -23,7 +23,8 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { effectiveShares, ownerPart } from './shares';
+import { ownerPart } from './owners-part';
+import { effectiveShares } from './shares';
 import type { AppDatabase } from '../db/database';
 import { accounts, categories, connections, subcategories, transactions } from '../db/schema';
 

@@ -22,11 +22,10 @@ import { type Observable, map, tap } from 'rxjs';
 import { AccountsStore } from './accounts.store';
 import { Invalidation } from './invalidation';
 import { keptValue } from './kept';
+import { DAY_MS } from '../dates';
 
 /** How often the accounts are asked for again while a sync is running. */
 export const SYNC_POLL_INTERVAL_MS = 2000;
-
-const DAY_MS = 24 * 3600 * 1000;
 
 /** How long a bank connection is good for when it is made or renewed. */
 const CONNECTION_DAYS = 90;
