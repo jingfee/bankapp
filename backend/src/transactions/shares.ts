@@ -29,9 +29,20 @@ const FIXED_PERCENT: Record<Exclude<ShareOption, 'household'>, number> = {
 
 /** The household ratio in force on `date`: the latest entry from then or before, else the first. `entries` is earliest first. */
 export function householdPercent(entries: HouseholdRatioEntry[], date: string): number {
-  const inForce = entries.filter((entry) => entry.from <= date).at(-1) ?? entries[0];
   // Hushåll cannot be chosen before an entry exists; 100 keeps an orphaned option harmless.
-  return inForce?.percent ?? 100;
+  return entryInForce(entries, date)?.percent ?? 100;
+}
+
+function entryInForce(
+  entries: HouseholdRatioEntry[],
+  date: string,
+): HouseholdRatioEntry | undefined {
+  return entries.filter((entry) => entry.from <= date).at(-1) ?? entries[0];
+}
+
+/** The `from` of the entry in force on `today`, by the rule of `householdPercent`; null with no entries. */
+export function inForceFrom(entries: HouseholdRatioEntry[], today: string): string | null {
+  return entryInForce(entries, today)?.from ?? null;
 }
 
 export { ownerPart, roundOre } from './owners-part';

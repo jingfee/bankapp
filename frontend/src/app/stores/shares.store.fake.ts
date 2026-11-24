@@ -11,6 +11,7 @@ export class FakeSharesStore extends SharesStore {
   readonly failures = this.recorder.failures;
 
   readonly householdRatio = signal<HouseholdRatioEntry[] | undefined>(undefined);
+  readonly householdRatioInForceFrom = signal<string | null | undefined>(undefined);
   readonly subcategoryShares = signal<SubcategoryShare[] | undefined>(undefined);
   readonly loading = signal(false);
   readonly failed = signal(false);

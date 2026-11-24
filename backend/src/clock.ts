@@ -12,5 +12,3 @@ export function clock(now: () => Date, timeZone: string): Clock {
   const format = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' });
   return { now, today: () => format.format(now()) };
 }
-
-export { isDay } from './days';

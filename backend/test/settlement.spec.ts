@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import type {
   CategoriesResponse,
-  HouseholdRatioResponse,
+  SetHouseholdRatioRequest,
   SettlementResponse,
   ShareOption,
 } from '@bankapp/shared';
@@ -125,7 +125,7 @@ describe('the settlement balance', () => {
   it('applies the share chosen for the transaction, including Hushåll and Partner', async () => {
     await api(app)
       .put('/api/household-ratio')
-      .send({ entries: [{ from: '2026-01-01', percent: 60 }] } satisfies HouseholdRatioResponse)
+      .send({ entries: [{ from: '2026-01-01', percent: 60 }] } satisfies SetHouseholdRatioRequest)
       .expect(200);
     await setBalance(0, '2026-11-01');
     const shares: ShareOption[] = ['household', 'partner'];

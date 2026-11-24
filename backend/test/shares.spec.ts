@@ -3,6 +3,7 @@ import type {
   AccountsResponse,
   CategoriesResponse,
   HouseholdRatioResponse,
+  SetHouseholdRatioRequest,
   ShareOption,
   SubcategorySharesResponse,
   TransactionDetails,
@@ -79,7 +80,7 @@ describe('shares', () => {
 
   const setAccountShare = (id: number, share: ShareOption) =>
     api(app).put(`/api/accounts/${id}/share`).send({ share });
-  const setRatio = (entries: HouseholdRatioResponse['entries']) =>
+  const setRatio = (entries: SetHouseholdRatioRequest['entries']) =>
     api(app).put('/api/household-ratio').send({ entries });
   const setSubcategoryShare = (name: string, share: ShareOption) =>
     api(app)

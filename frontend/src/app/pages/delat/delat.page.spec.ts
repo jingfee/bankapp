@@ -110,6 +110,8 @@ describe('DelatPage', () => {
   async function render(
     options: {
       ratio?: HouseholdRatioEntry[];
+      /** The `from` the backend marks as in force; the first entry unless given. */
+      inForceFrom?: string | null;
       shares?: SubcategoryShare[];
       settlement?: SettlementResponse;
     } = {},
@@ -121,6 +123,9 @@ describe('DelatPage', () => {
     } = options;
     settlementStore.settlement.set(settlement);
     sharesStore.householdRatio.set(ratio);
+    sharesStore.householdRatioInForceFrom.set(
+      options.inForceFrom !== undefined ? options.inForceFrom : (ratio?.[0]?.from ?? null),
+    );
     sharesStore.subcategoryShares.set(shares);
     const fixture = TestBed.createComponent(DelatPage);
     await fixture.whenStable();
@@ -640,6 +645,7 @@ describe('DelatPage', () => {
           { from: '2026-07-01', percent: 55 },
           { from: '2999-01-01', percent: 50 },
         ],
+        inForceFrom: '2026-07-01',
       });
 
       expect(text(page.querySelector('[data-ratio-heading]'))).toBe('55/45');
@@ -679,6 +685,7 @@ describe('DelatPage', () => {
       expect(callsTo(sharesStore, 'setHouseholdRatio')).toEqual([[entries]]);
       // The shares fact refreshes what the page shows.
       sharesStore.householdRatio.set(entries);
+      sharesStore.householdRatioInForceFrom.set(today);
       await fixture.whenStable();
 
       expect(text(page.querySelector('[data-ratio-heading]'))).toBe('50/50');
@@ -718,6 +725,7 @@ describe('DelatPage', () => {
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
         ],
+        inForceFrom: '2026-07-01',
       });
 
       const entries = page.querySelectorAll('[data-ratio-entry]');
@@ -756,6 +764,7 @@ describe('DelatPage', () => {
           { from: '2026-01-01', percent: 60 },
           { from: '2026-07-01', percent: 55 },
         ],
+        inForceFrom: '2026-07-01',
       });
 
       const entries = page.querySelectorAll('[data-ratio-entry]');
@@ -768,6 +777,7 @@ describe('DelatPage', () => {
         [[{ from: '2026-07-01', percent: 55 }]],
       ]);
       sharesStore.householdRatio.set([{ from: '2026-07-01', percent: 55 }]);
+      sharesStore.householdRatioInForceFrom.set('2026-07-01');
       await fixture.whenStable();
 
       await openMenu(fixture, page.querySelector('[data-ratio-entry]')!);

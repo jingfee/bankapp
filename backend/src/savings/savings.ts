@@ -10,6 +10,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { savingsFigures } from '../accounts/savings-figures';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config';
+import { monthEnd, nextMonth, previousMonth } from '../calendar';
 import { CLOCK, clock, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -43,22 +44,6 @@ interface Source {
 const maxDay = (a: string, b: string) => (a > b ? a : b);
 
 const monthOf = (day: string) => day.slice(0, 7);
-
-function nextMonth(month: string): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  return number === 12 ? `${year + 1}-01` : `${year}-${String(number + 1).padStart(2, '0')}`;
-}
-
-function previousMonth(month: string): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  return number === 1 ? `${year - 1}-12` : `${year}-${String(number - 1).padStart(2, '0')}`;
-}
-
-/** The last day of a `YYYY-MM` month. */
-function monthEnd(month: string): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  return `${month}-${String(new Date(Date.UTC(year, number, 0)).getUTCDate()).padStart(2, '0')}`;
-}
 
 /** The savings view: every savings account, connected or manual, over time (`CONTEXT.md` › Savings). */
 @Injectable()

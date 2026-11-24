@@ -30,16 +30,13 @@ import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementStore } from '../../stores/settlement.store';
 import { SharesStore } from '../../stores/shares.store';
-import { today, shiftMonth } from '../../dates';
+import { owesText } from '../../balance-display';
+import { isMonth, today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
 import { ShareControl } from '../../share-control/share-control';
-import { SHARE_LABELS, householdRatioOn } from '../../share-display';
+import { SHARE_LABELS } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
-
-function isMonth(value: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
-}
 
 interface Loaded {
   categories: Category[];
@@ -766,7 +763,7 @@ export class DelatPage {
 
   protected readonly balanceAmount = computed(() => Math.abs(this.settlement().balance ?? 0));
   protected readonly balanceDirection = computed(() =>
-    (this.settlement().balance ?? 0) < 0 ? 'Du är skyldig partnern' : 'Partnern är skyldig dig',
+    owesText(this.settlement().balance ?? 0, { zero: 'Partnern är skyldig dig' }),
   );
   /** The latest settlement's or balance setting's date, as " · sedan avräkningen <date>". */
   protected readonly sinceText = computed(() => {
@@ -786,9 +783,10 @@ export class DelatPage {
   );
   protected readonly monthDraftValid = computed(() => isMonth(this.monthDraft()));
 
-  /** The ratio in force today: the latest entry from today or before, else the first. */
+  /** The ratio in force today, as the backend marks it. */
   protected readonly current = computed(() => {
-    return householdRatioOn(this.ratio(), today());
+    const from = this.sharesStore.householdRatioInForceFrom();
+    return this.ratio().find((entry) => entry.from === from);
   });
   /** The history with the entry in force first, then the rest newest first. */
   /** The ratio entry open in the edit sheet. */

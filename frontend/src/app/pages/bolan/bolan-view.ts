@@ -4,6 +4,7 @@ import type {
   MortgageFiguresResponse,
   MortgageMonth,
 } from '@bankapp/shared';
+import { addMonths } from '../../dates';
 
 /** A highlighted date is one at most this many days away. */
 export const HIGHLIGHT_DAYS = 14;
@@ -14,18 +15,6 @@ const utc = (day: string) => {
   const [year, month, date] = day.split('-').map(Number) as [number, number, number];
   return Date.UTC(year, month - 1, date);
 };
-
-/** `day` (`YYYY-MM-DD`) moved by whole months, clamped to the last day of a shorter month. */
-export function addMonths(day: string, months: number): string {
-  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
-  const index = year * 12 + (month - 1) + months;
-  const targetYear = Math.floor(index / 12);
-  const targetMonth = (index % 12) + 1;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
-  return `${String(targetYear).padStart(4, '0')}-${String(targetMonth).padStart(2, '0')}-${String(
-    Math.min(date, lastDay),
-  ).padStart(2, '0')}`;
-}
 
 /** Whole days from `today` to `day`. */
 export function daysUntil(day: string, today: string): number {
@@ -186,10 +175,4 @@ export function buildChart(
     yTicks: [0, top / 2, top].map((value) => ({ value, pct: (value / top) * 100 })),
     top,
   };
-}
-
-/** Last day of `month` (`YYYY-MM`). */
-export function lastDayOf(month: string): string {
-  const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0));
-  return last.toISOString().slice(0, 10);
 }

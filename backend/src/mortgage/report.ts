@@ -6,6 +6,7 @@ import type {
   Transaction,
 } from '@bankapp/shared';
 import { and, asc, eq } from 'drizzle-orm';
+import { nextMonth } from '../calendar';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
@@ -21,12 +22,11 @@ import {
 } from '../db/schema';
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 import { queryTransactions } from '../transactions/query';
-import { addMonths, inForce } from './figures';
+import { inForce } from './figures';
 
 const MORTGAGE = WELL_KNOWN_SUBCATEGORIES.mortgage;
 
 const monthOf = (day: string) => day.slice(0, 7);
-const nextMonth = (month: string) => monthOf(addMonths(`${month}-01`, 1));
 const round = (value: number) => Math.round(value * 100) / 100;
 
 interface Part {

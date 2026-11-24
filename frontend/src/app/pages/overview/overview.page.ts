@@ -17,6 +17,7 @@ import {
   type OverviewTotals,
   type OverviewView,
 } from '@bankapp/shared';
+import { owesText } from '../../balance-display';
 import { dayOf, monthOf, shiftMonth } from '../../dates';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -778,13 +779,7 @@ export class OverviewPage {
     if (open === undefined || balance === null) return null;
     const earlierOpen = month === this.currentMonth && open.month < month;
     if (open.month !== month && !earlierOpen) return null;
-    const lines = [
-      balance === 0
-        ? 'Ni är kvitt'
-        : balance > 0
-          ? 'Partnern är skyldig dig'
-          : 'Du är skyldig partnern',
-    ];
+    const lines = [owesText(balance)];
     if (open.overdue) lines.push(`${monthName(open.month)} är inte avslutad`);
     return {
       ...base,

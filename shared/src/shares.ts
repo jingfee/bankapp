@@ -28,10 +28,14 @@ export interface HouseholdRatioEntry {
 /** Response body of `GET /api/household-ratio` and `PUT /api/household-ratio`, earliest first. */
 export interface HouseholdRatioResponse {
   entries: HouseholdRatioEntry[];
+  /** The `from` of the entry in force today (ADR 0011), or null when there are no entries. */
+  inForceFrom: string | null;
 }
 
 /** Request body of `PUT /api/household-ratio`: the whole list, at least one entry. */
-export type SetHouseholdRatioRequest = HouseholdRatioResponse;
+export interface SetHouseholdRatioRequest {
+  entries: HouseholdRatioEntry[];
+}
 
 /** Request body of `PUT /api/accounts/:id/share`. */
 export interface SetAccountShareRequest {
