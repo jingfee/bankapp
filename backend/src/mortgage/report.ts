@@ -50,7 +50,10 @@ export class MortgageReport {
   figures(): MortgageFiguresResponse {
     const parts = this.parts();
     const firstEntry = parts.flatMap((p) => p.entries.map((e) => e.date)).sort()[0];
-    if (firstEntry === undefined) return { debts: [], months: [], monthsWithoutPayment: [] };
+    const paymentsSubcategoryId = this.paymentsSubcategoryId();
+    if (firstEntry === undefined) {
+      return { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId };
+    }
 
     const today = this.clock.today();
     const payments = this.payments();
@@ -70,7 +73,7 @@ export class MortgageReport {
         monthsWithoutPayment.push(month);
       }
     }
-    return { debts, months, monthsWithoutPayment };
+    return { debts, months, monthsWithoutPayment, paymentsSubcategoryId };
   }
 
   private month(
@@ -137,16 +140,22 @@ export class MortgageReport {
 
   /** Booked and pending payments, oldest first, on accounts that count. */
   private payments(): Transaction[] {
-    const subcategory = this.db
-      .select({ id: subcategories.id })
-      .from(subcategories)
-      .innerJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(eq(categories.name, MORTGAGE.category), eq(subcategories.name, MORTGAGE.name)))
-      .get();
-    if (subcategory === undefined) return [];
+    const id = this.paymentsSubcategoryId();
+    if (id === null) return [];
     return queryTransactions(this.db, {
-      where: eq(transactions.subcategoryId, subcategory.id),
+      where: eq(transactions.subcategoryId, id),
     }).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  }
+
+  private paymentsSubcategoryId(): number | null {
+    return (
+      this.db
+        .select({ id: subcategories.id })
+        .from(subcategories)
+        .innerJoin(categories, eq(subcategories.categoryId, categories.id))
+        .where(and(eq(categories.name, MORTGAGE.category), eq(subcategories.name, MORTGAGE.name)))
+        .get()?.id ?? null
+    );
   }
 
   private parts(): Part[] {

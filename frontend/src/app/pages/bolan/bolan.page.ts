@@ -4,7 +4,6 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CATEGORY_PALETTE,
-  WELL_KNOWN_SUBCATEGORIES,
   type LoanPart,
   type MortgageEntry,
   type MortgageFiguresResponse,
@@ -19,7 +18,6 @@ import { Menu, MenuItem } from '../../menu/menu';
 import { Sheet } from '../../sheet/sheet';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Icon } from '../../icon/icon';
-import { CategoriesService } from '../../categories.service';
 import { DateField } from '../../date-field/date-field';
 import { today } from '../../dates';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
@@ -777,7 +775,6 @@ const PART_COLOURS = [
 })
 export class BolanPage {
   private readonly store = inject(MortgageStore);
-  private readonly categories = inject(CategoriesService);
   private readonly now = today();
   private readonly mortgageRead = this.store.mortgage();
   private readonly figuresRead = this.store.figures();
@@ -794,10 +791,14 @@ export class BolanPage {
   protected readonly openParts = computed(() => this.parts().filter((part) => !part.endedOn));
   protected readonly endedParts = computed(() => this.parts().filter((part) => part.endedOn));
   protected readonly figures = computed<MortgageFiguresResponse>(
-    () => this.figuresRead.value() ?? { debts: [], months: [], monthsWithoutPayment: [] },
+    () =>
+      this.figuresRead.value() ?? {
+        debts: [],
+        months: [],
+        monthsWithoutPayment: [],
+        paymentsSubcategoryId: null,
+      },
   );
-  /** The id of Bolån ränta & amortering, for the link from a month with no payment. */
-  private readonly subcategoryId = signal<number | null>(null);
   protected readonly newRateId = signal<number | null>(null);
   protected readonly mode = signal<ChartMode>('debt');
   protected readonly range = signal<Range>('1y');
@@ -821,7 +822,9 @@ export class BolanPage {
       params: {
         from: `${month}-01`,
         to: lastDayOf(month),
-        ...(this.subcategoryId() === null ? {} : { subcategories: String(this.subcategoryId()) }),
+        ...(this.figures().paymentsSubcategoryId === null
+          ? {}
+          : { subcategories: String(this.figures().paymentsSubcategoryId) }),
       },
     })),
   );
@@ -957,18 +960,6 @@ export class BolanPage {
       (part) => part.startedOn <= day && (part.endedOn === null || day < part.endedOn),
     );
   });
-
-  constructor() {
-    this.categories.subcategories().subscribe({
-      next: (all) =>
-        this.subcategoryId.set(
-          all.find((item) => item.subcategory.name === WELL_KNOWN_SUBCATEGORIES.mortgage.name)
-            ?.subcategory.id ?? null,
-        ),
-      // The note then links to the month's transactions without the category filter.
-      error: () => undefined,
-    });
-  }
 
   protected countdown(day: string) {
     return countdown(day, this.now);

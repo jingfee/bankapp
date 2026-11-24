@@ -1,4 +1,3 @@
-import { WELL_KNOWN_SUBCATEGORIES } from './well-known-subcategories';
 import type { CategoryIcon } from './category-icons';
 import type { CategoryColour } from './category-palette';
 import type { CategoryKind } from './categories';
@@ -33,7 +32,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     icon: 'house',
     fixed: false,
     subcategories: [
-      { name: WELL_KNOWN_SUBCATEGORIES.mortgage.name, icon: 'key-round' },
+      { name: 'Bolån ränta & amortering', icon: 'key-round' },
       { name: 'Hyra & avgift', icon: 'receipt' },
       { name: 'El & värme', icon: 'zap' },
       { name: 'Vatten, avlopp & sopor', icon: 'droplets' },
@@ -205,8 +204,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     subcategories: [
       { name: 'Mellan egna konton', icon: 'arrow-left-right' },
       { name: 'Kortbetalning', icon: 'credit-card' },
-      { name: WELL_KNOWN_SUBCATEGORIES.savings.name, icon: 'piggy-bank' },
-      { name: WELL_KNOWN_SUBCATEGORIES.settlement.name, icon: 'hand-coins' },
+      { name: 'Sparande & investeringar', icon: 'piggy-bank' },
+      { name: 'Avräkning delade utgifter', icon: 'hand-coins' },
       other,
     ],
   },
