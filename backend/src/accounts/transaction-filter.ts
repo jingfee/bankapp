@@ -1,5 +1,5 @@
 import { and, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
-import { isDay } from '../clock';
+import { isDay } from '../calendar';
 import { categories, transactions } from '../db/schema';
 
 /** What the owner searches and filters transactions by; every part is optional and they combine with AND. */

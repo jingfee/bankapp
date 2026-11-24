@@ -1,4 +1,4 @@
-import { addMonths, inForce, nextOccurrence } from '../src/mortgage/figures';
+import { inForce, nextOccurrence } from '../src/mortgage/figures';
 
 describe('inForce', () => {
   const changes = [
@@ -16,18 +16,6 @@ describe('inForce', () => {
   it('is null before the first change', () => {
     expect(inForce(changes, '2025-12-31')).toBeNull();
     expect(inForce([], '2026-01-01')).toBeNull();
-  });
-});
-
-describe('addMonths', () => {
-  it('clamps to the end of a shorter month', () => {
-    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
-    expect(addMonths('2028-01-31', 1)).toBe('2028-02-29');
-  });
-
-  it('crosses years', () => {
-    expect(addMonths('2026-11-15', 3)).toBe('2027-02-15');
-    expect(addMonths('2026-12-15', 12)).toBe('2027-12-15');
   });
 });
 

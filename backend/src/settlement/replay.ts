@@ -7,7 +7,7 @@ import type {
   SettlementPeriod,
   SettlementResponse,
 } from '@bankapp/shared';
-import { isDay } from '../days';
+import { endedDaysAgo, isDay, isMonth, nextDay } from '../calendar';
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 import { InvalidInput, NoCloseToUndo } from '../domain-errors';
 import { ownerPart, roundOre } from '../transactions/owners-part';
@@ -212,19 +212,6 @@ function emptyPeriod(
   };
 }
 
-function nextDay(day: string): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
-}
-
-/** Whole days from the last day of `month` to `today` (negative while the month is running). */
-function endedDaysAgo(month: string, today: string): number {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  const lastDay = Date.UTC(year, number, 0);
-  return Math.round((Date.parse(`${today}T00:00:00Z`) - lastDay) / 86_400_000);
-}
-
 /** The latest setting made replaces every earlier one from its day on. */
 function effectiveSettings(inOrderMade: ReplaySetting[]): ReplaySetting[] {
   let kept: ReplaySetting[] = [];
@@ -279,8 +266,4 @@ export function checkOpenMonth(periods: PeriodRow[], month: unknown): string {
 /** Only a period that has been closed can be reopened. */
 export function checkUndoClose(periods: PeriodRow[]): void {
   if (periods.length < 2) throw new NoCloseToUndo();
-}
-
-function isMonth(value: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }

@@ -6,7 +6,8 @@ import type {
   ManualSavingsResponse,
 } from '@bankapp/shared';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { CLOCK, isDay, type Clock } from '../clock';
+import { isDay } from '../calendar';
+import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { balanceEntries, manualSavingsAccounts } from '../db/schema';

@@ -1,6 +1,7 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import type { OverviewResponse, OverviewTransactionsResponse, OverviewView } from '@bankapp/shared';
-import { OverviewService, isMonth } from './overview.service';
+import { isMonth } from '../calendar';
+import { OverviewService } from './overview.service';
 
 @Controller('overview')
 export class OverviewController {

@@ -6,7 +6,7 @@ import type {
   SettlementBalanceResponse,
   SettlementResponse,
 } from '@bankapp/shared';
-import { isDay } from '../clock';
+import { isDay } from '../calendar';
 import { InvalidInput } from '../domain-errors';
 import { SettlementService } from './settlement.service';
 

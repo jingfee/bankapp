@@ -15,6 +15,8 @@ import { keptValue } from './kept';
 export abstract class SharesStore {
   /** The household ratio, earliest entry first; undefined until it has been fetched. */
   abstract readonly householdRatio: Signal<HouseholdRatioEntry[] | undefined>;
+  /** The `from` of the ratio entry in force today, as the backend works it out; null with no entries. */
+  abstract readonly householdRatioInForceFrom: Signal<string | null | undefined>;
   /** The subcategories whose share is not Jag; undefined until they have been fetched. */
   abstract readonly subcategoryShares: Signal<SubcategoryShare[] | undefined>;
   /** True while either is being fetched for the first time. */
@@ -50,6 +52,7 @@ export class HttpSharesStore extends SharesStore {
   private readonly sharesResponse = keptValue(this.sharesResource, this.active);
 
   readonly householdRatio = computed(() => this.ratioResponse()?.entries);
+  readonly householdRatioInForceFrom = computed(() => this.ratioResponse()?.inForceFrom);
   readonly subcategoryShares = computed(() => this.sharesResponse()?.shares);
   readonly loading = computed(
     () =>

@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import type {
-  HouseholdRatioResponse,
+  SetHouseholdRatioRequest,
   OverviewResponse,
   SettlementResponse,
   ShareOption,
@@ -120,7 +120,7 @@ describe('the owner’s part of a transaction', () => {
           { from: '2026-01-01', percent: 60 },
           { from: '2026-11-10', percent: 55 },
         ],
-      } satisfies HouseholdRatioResponse)
+      } satisfies SetHouseholdRatioRequest)
       .expect(200);
     await setShare('household');
     const before = store(-100.1, '2026-11-09');

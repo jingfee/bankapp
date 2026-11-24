@@ -19,7 +19,7 @@ import { Sheet } from '../../sheet/sheet';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Icon } from '../../icon/icon';
 import { DateField } from '../../date-field/date-field';
-import { today } from '../../dates';
+import { lastDayOf, today } from '../../dates';
 import { formatAmountInput, parseAmount } from '../../formatting/amount';
 import {
   ChartCard,
@@ -41,7 +41,6 @@ import {
   countdown,
   currentMonth,
   inRange,
-  lastDayOf,
   needsNewRate,
   totals,
 } from './bolan-view';

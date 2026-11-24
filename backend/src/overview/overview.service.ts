@@ -8,23 +8,12 @@ import type {
   OverviewView,
 } from '@bankapp/shared';
 import { queryTransactions, toListed } from '../transactions/query';
+import { monthEnd, shiftMonth } from '../calendar';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { categories, subcategories, transactions } from '../db/schema';
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
-
-/** Whether `value` is a month as `YYYY-MM`. */
-export function isMonth(value: string): boolean {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
-}
-
-/** The month before or after `month` (`YYYY-MM`). */
-function shiftMonth(month: string, by: number): string {
-  const [year, number] = month.split('-').map(Number) as [number, number];
-  const index = year * 12 + (number - 1) + by;
-  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
-}
 
 /** The ledger filter for `month`: a kvittad refund counts in its purchase's month, else a transaction in its own. */
 function monthOf(month: string) {
@@ -108,8 +97,7 @@ export class OverviewService {
   } {
     const rows = queryTransactions(this.db, monthOf(month));
 
-    const [year, number] = month.split('-').map(Number) as [number, number];
-    const daily: number[] = Array(new Date(Date.UTC(year, number, 0)).getUTCDate()).fill(0);
+    const daily: number[] = Array(Number(monthEnd(month).slice(8))).fill(0);
     let uncategorised = 0;
     let deposited = 0;
     const byCategory = new Map<number, OverviewCategory>();

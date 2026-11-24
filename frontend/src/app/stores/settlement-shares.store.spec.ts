@@ -92,17 +92,18 @@ describe('SettlementStore and SharesStore reads', () => {
     await settle();
     http
       .expectOne('/api/household-ratio')
-      .flush({ entries: [{ from: '2026-01-01', percent: 60 }] });
+      .flush({ entries: [{ from: '2026-01-01', percent: 60 }], inForceFrom: '2026-01-01' });
     http
       .expectOne('/api/subcategory-shares')
       .flush({ shares: [{ subcategoryId: 1, share: 'half' }] });
     await settle();
     expect(store.householdRatio()).toEqual([{ from: '2026-01-01', percent: 60 }]);
+    expect(store.householdRatioInForceFrom()).toBe('2026-01-01');
     expect(store.subcategoryShares()).toEqual([{ subcategoryId: 1, share: 'half' }]);
 
     TestBed.inject(Invalidation).fire('shares');
     await settle();
-    http.expectOne('/api/household-ratio').flush({ entries: [] });
+    http.expectOne('/api/household-ratio').flush({ entries: [], inForceFrom: null });
     http.expectOne('/api/subcategory-shares').flush({ shares: [] });
     await settle();
     expect(store.householdRatio()).toEqual([]);
