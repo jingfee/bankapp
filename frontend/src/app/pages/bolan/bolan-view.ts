@@ -1,10 +1,5 @@
-import type {
-  LoanPart,
-  LoanPartDebt,
-  MortgageFiguresResponse,
-  MortgageMonth,
-} from '@bankapp/shared';
-import { DAY_MS, addMonths } from '../../dates';
+import type { MortgageFiguresResponse, MortgageMonth } from '@bankapp/shared';
+import { DAY_MS } from '../../dates';
 
 /** A highlighted date is one at most this many days away. */
 export const HIGHLIGHT_DAYS = 14;
@@ -26,45 +21,6 @@ export function countdown(day: string, today: string): { soon: boolean; text: st
   if (days <= 0) return { soon: true, text: 'idag' };
   if (days === 1) return { soon: true, text: 'imorgon' };
   return { soon: true, text: `om ${days} dagar` };
-}
-
-/**
- * Whether the owner should be asked for the part's new rate: its latest rate adjustment day has
- * come and no rate change dated on or after it exists. `rateAdjustment.next` is already rolled
- * forward to today or later, so the day that last passed is one interval before it (or today).
- */
-export function needsNewRate(part: LoanPart, today: string): boolean {
-  if (part.endedOn !== null) return false;
-  const { next, intervalMonths } = part.rateAdjustment;
-  const latest = next <= today ? next : addMonths(next, -intervalMonths);
-  if (latest > today || latest < part.startedOn) return false;
-  return !part.rateChanges.some((change) => change.from >= latest);
-}
-
-export interface Totals {
-  debt: number;
-  /** Debt-weighted average of the open parts' rates, in per cent; null with no debt. */
-  rate: number | null;
-}
-
-/** The debt across open parts and their debt-weighted average rate. */
-export function totals(parts: LoanPart[], debts: LoanPartDebt[]): Totals {
-  const debtOf = (part: LoanPart) =>
-    debts.find((d) => d.partId === part.id)?.debt ?? part.debt ?? 0;
-  let debt = 0;
-  let weighted = 0;
-  let rated = 0;
-  for (const part of parts) {
-    if (part.endedOn !== null) continue;
-    const amount = debtOf(part);
-    debt += amount;
-    // A part with no rate yet is left out of the average rather than counted as 0 %.
-    if (part.rate !== null) {
-      rated += amount;
-      weighted += amount * part.rate;
-    }
-  }
-  return { debt, rate: rated > 0 ? weighted / rated : null };
 }
 
 /** The current month's figures, if the mortgage has any. */

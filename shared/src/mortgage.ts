@@ -39,6 +39,8 @@ export interface LoanPart {
   /** Newest first. */
   amortisationChanges: AmortisationChange[];
   rateAdjustment: RecurringDay;
+  /** Whether to ask the owner for a new rate: the latest rate adjustment day has come and no rate change is dated on or after it. False once ended. */
+  needsNewRate: boolean;
   termsChange: RecurringDay;
 }
 
@@ -138,6 +140,10 @@ export interface MortgageMonth {
 export interface MortgageFiguresResponse {
   /** Each part's remaining debt now, worked out from its latest entry and the booked payments since. */
   debts: LoanPartDebt[];
+  /** The remaining debt across open parts now, in kr. */
+  totalDebt: number;
+  /** The debt-weighted average of the open parts' rates in force today (%); parts with no rate are left out; null with no such debt. */
+  averageRate: number | null;
   /** From the first mortgage entry's month to the current one, oldest first. Empty before any entry. */
   months: MortgageMonth[];
   /** `YYYY-MM` of each ended month since the first entry with no booked payment, oldest first. */

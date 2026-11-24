@@ -23,7 +23,7 @@ import {
 import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 import { roundOre } from '../transactions/owners-part';
 import { queryTransactions } from '../transactions/query';
-import { inForce } from './figures';
+import { inForce, mortgageTotals } from './figures';
 
 const MORTGAGE = WELL_KNOWN_SUBCATEGORIES.mortgage;
 
@@ -50,7 +50,14 @@ export class MortgageReport {
     const firstEntry = parts.flatMap((p) => p.entries.map((e) => e.date)).sort()[0];
     const paymentsSubcategoryId = this.paymentsSubcategoryId();
     if (firstEntry === undefined) {
-      return { debts: [], months: [], monthsWithoutPayment: [], paymentsSubcategoryId };
+      return {
+        debts: [],
+        totalDebt: 0,
+        averageRate: null,
+        months: [],
+        monthsWithoutPayment: [],
+        paymentsSubcategoryId,
+      };
     }
 
     const today = this.clock.today();
@@ -62,6 +69,15 @@ export class MortgageReport {
       debt: this.debtOn(part, booked, today, null),
     }));
 
+    const { totalDebt, averageRate } = mortgageTotals(
+      parts
+        .filter((part) => part.endedOn === null)
+        .map((part) => ({
+          debt: debts.find((d) => d.partId === part.id)!.debt,
+          rate: inForce(part.rates, today),
+        })),
+    );
+
     const months: MortgageMonth[] = [];
     const monthsWithoutPayment: string[] = [];
     const current = monthOfDay(today);
@@ -71,7 +87,14 @@ export class MortgageReport {
         monthsWithoutPayment.push(month);
       }
     }
-    return { debts, months, monthsWithoutPayment, paymentsSubcategoryId };
+    return {
+      debts,
+      totalDebt: roundOre(totalDebt),
+      averageRate,
+      months,
+      monthsWithoutPayment,
+      paymentsSubcategoryId,
+    };
   }
 
   private month(

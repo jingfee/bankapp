@@ -41,8 +41,6 @@ import {
   countdown,
   currentMonth,
   inRange,
-  needsNewRate,
-  totals,
 } from './bolan-view';
 
 /** The form that is open besides a part's own edit form: at most one at a time. */
@@ -132,13 +130,13 @@ const PART_COLOURS = [
           <div class="stat-tile">
             <span class="eyebrow">Kvarvarande skuld</span>
             <span data-total-debt class="amount text-[17px] whitespace-nowrap sm:text-[21px]">{{
-              summary().debt | money
+              figures().totalDebt | money
             }}</span>
           </div>
           <div class="stat-tile">
             <span class="eyebrow">Snittränta</span>
             <span data-average-rate class="amount text-[17px] whitespace-nowrap sm:text-[21px]">{{
-              summary().rate === null ? '–' : percent(summary().rate!)
+              figures().averageRate === null ? '–' : percent(figures().averageRate!)
             }}</span>
           </div>
           <div class="stat-tile">
@@ -337,7 +335,7 @@ const PART_COLOURS = [
                       }
                     </span>
                   </span>
-                  @if (needsNewRate(part)) {
+                  @if (part.needsNewRate) {
                     <div
                       data-rate-prompt
                       class="mt-1 flex flex-wrap items-center gap-3 rounded-[10px] bg-surface-2 px-3 py-2 text-sm"
@@ -793,6 +791,8 @@ export class BolanPage {
     () =>
       this.figuresRead.value() ?? {
         debts: [],
+        totalDebt: 0,
+        averageRate: null,
         months: [],
         monthsWithoutPayment: [],
         paymentsSubcategoryId: null,
@@ -804,7 +804,6 @@ export class BolanPage {
   protected readonly ranges = RANGES;
   protected readonly hovered = signal<number | null>(null);
 
-  protected readonly summary = computed(() => totals(this.parts(), this.figures().debts));
   /** This month's estimate, if the mortgage has figures. */
   protected readonly estimate = computed(() => {
     const month = currentMonth(this.figures(), this.now);
@@ -962,10 +961,6 @@ export class BolanPage {
 
   protected countdown(day: string) {
     return countdown(day, this.now);
-  }
-
-  protected needsNewRate(part: LoanPart): boolean {
-    return needsNewRate(part, this.now);
   }
 
   protected kr(value: number): string {

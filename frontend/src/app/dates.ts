@@ -32,10 +32,3 @@ export function lastDayOf(month: string): string {
   const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0));
   return last.toISOString().slice(0, 10);
 }
-
-/** `day` (`YYYY-MM-DD`) moved by whole months, clamped to the last day of a shorter month. */
-export function addMonths(day: string, months: number): string {
-  const target = shiftMonth(day.slice(0, 7), months);
-  const date = Math.min(Number(day.slice(8, 10)), Number(lastDayOf(target).slice(8, 10)));
-  return `${target}-${String(date).padStart(2, '0')}`;
-}
