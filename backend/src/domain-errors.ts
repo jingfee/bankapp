@@ -176,3 +176,19 @@ export class MortgageEntryDateTaken extends DomainError {
     super('The mortgage already has an entry for that day');
   }
 }
+
+/** The settlement report of a month that is not a closed period. */
+export class NoSuchClosedPeriod extends DomainError {
+  readonly kind = 'not-found';
+  constructor(month: string) {
+    super(`there is no closed period ${month}`);
+  }
+}
+
+/** Undo needs a close to undo. */
+export class NoCloseToUndo extends DomainError {
+  readonly kind = 'bad-request';
+  constructor() {
+    super('there is no close to undo');
+  }
+}
