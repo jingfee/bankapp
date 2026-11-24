@@ -8,7 +8,7 @@ An architecture review found domain rules written twice, once in the backend and
 
 That does not work in production. The runtime image installs only the backend's production dependencies (`pnpm --filter @bankapp/backend deploy --prod`), and `@bankapp/shared` is a devDependency that the backend imports types from. A function in `shared` would pass every test, which run from source, and fail when the image starts.
 
-So `@bankapp/shared` stays types-only for the backend: API types, plus the palette, icons and default categories the frontend uses. When the frontend needs a domain value, such as the interest on a loan part or which household ratio entry is in force, the backend works it out and sends it in the response. The frontend keeps only rules that are about the UI, such as moving between months in a picker or formatting dates, and these never feed back into the backend.
+So `@bankapp/shared` stays types-only for the backend: API types, plus the palette and icons the frontend uses. When the frontend needs a domain value, such as the interest on a loan part or which household ratio entry is in force, the backend works it out and sends it in the response. The frontend keeps only rules that are about the UI, such as moving between months in a picker or formatting dates, and these never feed back into the backend.
 
 ## Considered Options
 

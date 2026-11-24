@@ -1,13 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
-import {
-  CATEGORY_COLOURS,
-  CATEGORY_ICONS,
-  DEFAULT_CATEGORIES,
-  type CategoriesResponse,
-} from '@bankapp/shared';
+import { CATEGORY_COLOURS, CATEGORY_ICONS, type CategoriesResponse } from '@bankapp/shared';
 import { createApp } from '../src/app';
 import { openDatabase } from '../src/db/database';
 import { categories } from '../src/db/schema';
+import { DEFAULT_CATEGORIES } from './default-categories';
 import { FakeEnableBankingClient, testConfig, api } from './support';
 
 const omitId = <T extends { id: number }>({ id, ...rest }: T): Omit<T, 'id'> => (void id, rest);

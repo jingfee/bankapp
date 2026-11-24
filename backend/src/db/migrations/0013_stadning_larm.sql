@@ -1,4 +1,4 @@
--- Add Larm & säkerhet and Städning to Boende & Hushåll (the same as DEFAULT_CATEGORIES in @bankapp/shared).
+-- Add Larm & säkerhet and Städning to Boende & Hushåll (the same as DEFAULT_CATEGORIES in backend/test/default-categories.ts).
 UPDATE `subcategories` SET `sort_order` = `sort_order` + 1
 	WHERE `category_id` = (SELECT `id` FROM `categories` WHERE `name` = 'Boende & Hushåll') AND `sort_order` >= 6;
 --> statement-breakpoint

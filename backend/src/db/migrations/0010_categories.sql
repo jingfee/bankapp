@@ -20,7 +20,7 @@ CREATE TABLE `subcategories` (
 --> statement-breakpoint
 CREATE INDEX `subcategories_category_id` ON `subcategories` (`category_id`);
 --> statement-breakpoint
--- Seed the default list (the same as DEFAULT_CATEGORIES in @bankapp/shared).
+-- Seed the default list (the same as DEFAULT_CATEGORIES in backend/test/default-categories.ts).
 INSERT INTO `categories` (`name`, `kind`, `colour`, `icon`, `sort_order`, `fixed`) VALUES ('Boende & Hushåll', 'expense', 'orange', 'house', 0, 0);
 --> statement-breakpoint
 INSERT INTO `subcategories` (`category_id`, `name`, `icon`, `sort_order`) VALUES
