@@ -1030,6 +1030,147 @@ router-outlet + * {
     }
   }
 
+  /* Overview Netto card: the headline figure, a bar for how the month is going, In / Ut boxes */
+  .net-card {
+    display: grid;
+    min-width: 0;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--color-line);
+    border-radius: 18px;
+    background: var(--color-surface-1);
+  }
+  .net-card-positive {
+    border-color: color-mix(in srgb, var(--color-positive) 28%, transparent);
+  }
+  .net-card-negative {
+    border-color: color-mix(in srgb, var(--color-danger) 28%, transparent);
+  }
+  .net-card-head,
+  .net-card-body {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .net-card-body {
+    gap: 12px;
+  }
+  .net-pill {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .net-bar {
+    position: relative;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-3);
+  }
+  .net-bar-fill,
+  .net-bar-rest {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    background: var(--color-muted);
+    opacity: 0.7;
+  }
+  .net-bar-fill-accent {
+    background: var(--color-accent);
+    opacity: 1;
+  }
+  .net-bar-rest {
+    right: 0;
+    background: var(--color-positive);
+    opacity: 1;
+  }
+  .net-bar-rest-danger {
+    background: var(--color-danger);
+  }
+  .net-box,
+  .net-savings,
+  .settlement-row {
+    display: flex;
+    min-width: 0;
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    background: var(--color-surface-2);
+    transition:
+      background-color 0.15s ease,
+      transform 0.12s ease;
+  }
+  .net-box {
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+  }
+  .net-savings {
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+  }
+  .net-box:hover,
+  .net-savings:hover,
+  .settlement-row:hover {
+    background: var(--color-surface-3);
+  }
+  .net-box:active,
+  .net-savings:active,
+  .settlement-row:active {
+    transform: scale(0.98);
+  }
+  /* Avräkning: its own row beside or under the Netto card; violet while the period is open */
+  .settlement-row {
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--color-surface-1);
+  }
+  .settlement-row-open {
+    border-color: color-mix(in srgb, #c4b5fd 30%, transparent);
+    background: color-mix(in srgb, #c4b5fd 8%, var(--color-surface-1));
+  }
+  .settlement-row-open [data-amount] {
+    color: #c4b5fd;
+  }
+  .settlement-badge {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    place-content: center;
+    border-radius: 10px;
+    background: color-mix(in srgb, #c4b5fd 18%, transparent);
+    color: #c4b5fd;
+    font-weight: 700;
+  }
+  .settlement-badge-closed {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-positive) 18%, transparent);
+    color: var(--color-positive);
+    font-size: 13px;
+  }
+  @media (min-width: 64rem) {
+    .net-card {
+      grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+      column-gap: 32px;
+      align-items: center;
+    }
+    .net-savings {
+      grid-column: 1 / -1;
+    }
+    .settlement-row {
+      align-self: start;
+    }
+  }
+
   /* Overview: the donut rotates and scales in, bars grow, and an opened row fades and slides */
   .donut-enter {
     animation: donut-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
