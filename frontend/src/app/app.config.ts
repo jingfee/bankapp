@@ -12,6 +12,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { authInterceptor } from './auth/auth.interceptor';
 import { AppUpdateService } from './app-update.service';
 import { routes } from './app.routes';
+import { OfflineWarmup } from './offline-warmup.service';
 import { APP_LOCALE } from './formatting/locale';
 
 export const appConfig: ApplicationConfig = {
@@ -27,5 +28,6 @@ export const appConfig: ApplicationConfig = {
       registrationStrategy: 'registerWhenStable:30000',
     }),
     provideAppInitializer(() => inject(AppUpdateService).watch()),
+    provideAppInitializer(() => inject(OfflineWarmup).watch()),
   ],
 };

@@ -21,18 +21,36 @@
   ],
   "dataGroups": [
     {
-      "name": "overview",
-      "urls": ["/api/accounts"],
+      "name": "browsed",
+      "urls": [
+        "/api/overview/**",
+        "/api/transactions",
+        "/api/transactions?**",
+        "/api/transactions/**"
+      ],
       "cacheConfig": {
         "strategy": "freshness",
         "timeout": "5s",
-        "maxSize": 1,
+        "maxSize": 500,
         "maxAge": "30d"
       }
     },
     {
-      "name": "transactions",
-      "urls": ["/api/transactions", "/api/transactions?*"],
+      "name": "pages",
+      "urls": [
+        "/api/accounts",
+        "/api/banks",
+        "/api/categories",
+        "/api/household-ratio",
+        "/api/subcategory-shares",
+        "/api/manual-savings-accounts",
+        "/api/mortgage",
+        "/api/mortgage/**",
+        "/api/overview",
+        "/api/overview?**",
+        "/api/savings",
+        "/api/settlement"
+      ],
       "cacheConfig": {
         "strategy": "freshness",
         "timeout": "5s",

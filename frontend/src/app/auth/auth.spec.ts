@@ -124,5 +124,45 @@ describe('authentication', () => {
 
       http.expectOne('/api/auth/me').flush(null, unauthorised);
     });
+
+    describe('saved data', () => {
+      // What the service worker keeps: one cache and some bookkeeping per data group, next to
+      // the app shell and its own control data, which must stay.
+      const kept = ['ngsw:/:db:control', 'ngsw:/:1a2b3c:assets:app:cache'];
+      const saved = [
+        'ngsw:/:1a2b3c:data:pages:cache',
+        'ngsw:/:1a2b3c:data:browsed:cache',
+        'ngsw:/:db:ngsw:/:1a2b3c:data:browsed:lru',
+      ];
+      let names: string[];
+
+      beforeEach(() => {
+        names = [...kept, ...saved];
+        vi.stubGlobal('caches', {
+          keys: () => Promise.resolve([...names]),
+          delete: (name: string) => {
+            names = names.filter((existing) => existing !== name);
+            return Promise.resolve(true);
+          },
+        });
+      });
+
+      afterEach(() => vi.unstubAllGlobals());
+
+      it('is deleted when the owner logs out, and nothing else is', async () => {
+        const auth = TestBed.inject(AuthService);
+
+        auth.logout().subscribe();
+        http.expectOne('/api/auth/logout').flush(null, { status: 204, statusText: 'No Content' });
+
+        await vi.waitFor(() => expect(names).toEqual(kept));
+      });
+
+      it('is deleted when the server ends the session', async () => {
+        TestBed.inject(AuthService).markSignedOut();
+
+        await vi.waitFor(() => expect(names).toEqual(kept));
+      });
+    });
   });
 });
