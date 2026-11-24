@@ -1,4 +1,5 @@
 import configJson from '../../ngsw-config.json';
+import { matches } from './glob.testing';
 
 interface AssetGroup {
   name: string;
@@ -9,7 +10,12 @@ interface AssetGroup {
 interface DataGroup {
   name: string;
   urls: string[];
-  cacheConfig: { strategy: 'freshness' | 'performance'; timeout?: string; maxAge: string };
+  cacheConfig: {
+    strategy: 'freshness' | 'performance';
+    timeout?: string;
+    maxAge: string;
+    maxSize: number;
+  };
 }
 
 interface ServiceWorkerConfig {
@@ -19,21 +25,13 @@ interface ServiceWorkerConfig {
   dataGroups: DataGroup[];
 }
 
-/** The glob dialect of ngsw-config.json: `**` spans path segments, `*` stays within one. */
-function matches(glob: string, path: string): boolean {
-  const pattern = glob
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '<<ANY>>')
-    .replace(/\*/g, '[^/]*')
-    .replace(/<<ANY>>/g, '.*');
-  return new RegExp(`^${pattern}$`).test(path);
-}
-
 describe('service worker caching', () => {
   const config = configJson as ServiceWorkerConfig;
 
+  // The worker does not anchor the patterns of a data group, so a URL belongs to the first group
+  // with a pattern that matches the start of it: `/api/overview` also takes `/api/overview/x`.
   const dataGroupFor = (url: string) =>
-    config.dataGroups.find((group) => group.urls.some((glob) => matches(glob, url)));
+    config.dataGroups.find((group) => group.urls.some((glob) => matches(glob, url, false)));
 
   describe('app shell', () => {
     const shell = config.assetGroups.find((group) => group.installMode === 'prefetch');
@@ -80,10 +78,28 @@ describe('service worker caching', () => {
   });
 
   describe('data', () => {
+    // Every read the stores make, so any page the owner has opened works offline (ADR 0017).
     it.each([
       '/api/accounts',
+      '/api/banks',
+      '/api/categories',
+      '/api/household-ratio',
+      '/api/subcategory-shares',
+      '/api/manual-savings-accounts',
+      '/api/mortgage',
+      '/api/mortgage/figures',
+      '/api/overview?month=2026-11&view=mine',
+      '/api/overview/transactions?month=2026-11&subcategoryId=3',
+      '/api/savings',
+      '/api/settlement',
       '/api/transactions',
       '/api/transactions?before=2026-11-01T10%3A00%3A00.000Z',
+      // Angular leaves a slash in a query value as it is.
+      '/api/transactions?q=a/b',
+      '/api/transactions/review',
+      '/api/transactions/review/count',
+      '/api/transactions/9f3c2a1e',
+      '/api/transactions/9f3c2a1e/offset-candidates?amount=-100',
     ])('serves %s from the network when it can and from the cache when it cannot', (url) => {
       const group = dataGroupFor(url);
 
@@ -92,12 +108,29 @@ describe('service worker caching', () => {
       expect(group?.cacheConfig.timeout).toBeDefined();
     });
 
+    it('drops saved data that was fetched more than 30 days ago', () => {
+      expect(config.dataGroups.length).toBeGreaterThan(0);
+      for (const group of config.dataGroups) expect(group.cacheConfig.maxAge).toBe('30d');
+    });
+
+    it('keeps room for what the owner has opened without pushing out the main pages', () => {
+      const pages = dataGroupFor('/api/settlement');
+      const opened = dataGroupFor('/api/transactions/9f3c2a1e');
+
+      expect(pages).not.toBe(opened);
+      expect(opened?.cacheConfig.maxSize).toBeGreaterThanOrEqual(500);
+      // Months and drill-downs the owner has been through are browsing too, not main pages.
+      expect(dataGroupFor('/api/overview/transactions?month=2026-11&subcategoryId=3')).toBe(opened);
+      expect(dataGroupFor('/api/transactions?q=ica')).toBe(opened);
+      expect(dataGroupFor('/api/overview?month=2026-11&view=mine')).toBe(pages);
+    });
+
     it.each([
       '/api/connections',
       '/api/auth/me',
       '/api/auth/login',
       '/api/auth/logout',
-      '/api/banks',
+      // The check that tells whether the server can be reached must never be answered from saved data.
       '/api/health',
       '/api/sync',
       '/api/connections/callback',
