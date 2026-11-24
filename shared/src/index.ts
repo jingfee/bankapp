@@ -7,6 +7,7 @@ export {
   type DefaultCategory,
   type DefaultSubcategory,
 } from './default-categories';
+export { WELL_KNOWN_SUBCATEGORIES } from './well-known-subcategories';
 export type { LoginRequest, MeResponse } from './auth';
 export type { HealthResponse } from './health';
 export type {

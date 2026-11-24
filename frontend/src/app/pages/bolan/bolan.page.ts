@@ -4,6 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CATEGORY_PALETTE,
+  WELL_KNOWN_SUBCATEGORIES,
   type LoanPart,
   type MortgageEntry,
   type MortgageFiguresResponse,
@@ -961,8 +962,8 @@ export class BolanPage {
     this.categories.subcategories().subscribe({
       next: (all) =>
         this.subcategoryId.set(
-          all.find((item) => item.subcategory.name === 'Bolån ränta & amortering')?.subcategory
-            .id ?? null,
+          all.find((item) => item.subcategory.name === WELL_KNOWN_SUBCATEGORIES.mortgage.name)
+            ?.subcategory.id ?? null,
         ),
       // The note then links to the month's transactions without the category filter.
       error: () => undefined,

@@ -8,7 +8,7 @@ import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { transactions } from '../db/schema';
 import { NoSuchPurchase, NoSuchTransaction, NotLinkable } from '../domain-errors';
-import { queryTransactions } from './query';
+import { queryTransactions, toListed } from './query';
 
 /** How far before a refund its purchase may be to be suggested. */
 const SUGGESTION_WINDOW_DAYS = 90;
@@ -128,7 +128,7 @@ export class Offset {
           where: and(base, sql`${transactions.description} LIKE ${`%${escaped}%`} ESCAPE '\\'`),
           orderBy: [desc(transactions.date), desc(transactions.id)],
           limit: SEARCH_LIMIT,
-        }),
+        }).map(toListed),
       };
     }
 
@@ -158,6 +158,6 @@ export class Offset {
           b.transaction.id - a.transaction.id,
       )
       .slice(0, SUGGESTION_LIMIT);
-    return { transactions: ranked.map(({ transaction }) => transaction) };
+    return { transactions: ranked.map(({ transaction }) => toListed(transaction)) };
   }
 }

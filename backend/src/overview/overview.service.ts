@@ -1,19 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type {
-  CategoryIcon,
   OverviewCategory,
   OverviewResponse,
   OverviewTotals,
   OverviewTransactionsResponse,
   OverviewView,
 } from '@bankapp/shared';
-import { effectiveShares, ownerPart } from '../transactions/shares';
-import { onVisibleAccount, purchases, queryTransactions } from '../transactions/query';
+import { queryTransactions, toListed } from '../transactions/query';
 import { CLOCK, type Clock } from '../clock';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { categories, subcategories, transactions } from '../db/schema';
+import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 
 /** Whether `value` is a month as `YYYY-MM`. */
 export function isMonth(value: string): boolean {
@@ -27,11 +26,20 @@ function shiftMonth(month: string, by: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
 }
 
+/** The ledger filter for `month`: a kvittad refund counts in its purchase's month, else a transaction in its own. */
+function monthOf(month: string) {
+  return {
+    countIn: 'purchase-month',
+    from: `${month}-01`,
+    before: `${shiftMonth(month, 1)}-01`,
+  } as const;
+}
+
 /** Money sums are floats; rounding to öre keeps the noise out of the API. */
 const round = (value: number) => Math.round(value * 100) / 100 + 0;
 
 /** The transfer subcategory whose net deposits the overview shows as Sparande. */
-const SAVINGS_SUBCATEGORY = 'Sparande & investeringar';
+const SAVINGS_SUBCATEGORY = WELL_KNOWN_SUBCATEGORIES.savings.name;
 
 @Injectable()
 export class OverviewService {
@@ -84,16 +92,11 @@ export class OverviewService {
   listForSubcategory(month: string, subcategoryId: number): OverviewTransactionsResponse {
     return {
       transactions: queryTransactions(this.db, {
-        where: and(this.inMonth(month), eq(transactions.subcategoryId, subcategoryId)),
+        ...monthOf(month),
+        where: eq(transactions.subcategoryId, subcategoryId),
         orderBy: [desc(transactions.date), desc(transactions.id)],
-      }),
+      }).map(toListed),
     };
-  }
-
-  /** In `month` by the transaction's date, or by its purchase's when it is a kvittad refund. */
-  private inMonth(month: string) {
-    const date = sql<string>`coalesce(${purchases.date}, ${transactions.date})`;
-    return and(gte(date, `${month}-01`), lt(date, `${shiftMonth(month, 1)}-01`));
   }
 
   private summarise(
@@ -103,34 +106,7 @@ export class OverviewService {
     spendingByDay: number[];
     savings: number;
   } {
-    const rows = this.db
-      .select({
-        transaction: transactions,
-        purchaseDate: purchases.date,
-        subcategoryId: subcategories.id,
-        subcategoryName: subcategories.name,
-        subcategoryIcon: subcategories.icon,
-        categoryId: categories.id,
-        categoryName: categories.name,
-        kind: categories.kind,
-        colour: categories.colour,
-        categoryIcon: categories.icon,
-        sortOrder: categories.sortOrder,
-      })
-      .from(transactions)
-      .leftJoin(purchases, eq(transactions.offsetsTransactionId, purchases.id))
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(and(onVisibleAccount(this.db), this.inMonth(month)))
-      .all();
-
-    const shares =
-      view === 'mine'
-        ? effectiveShares(
-            this.db,
-            rows.map((row) => row.transaction),
-          )
-        : undefined;
+    const rows = queryTransactions(this.db, monthOf(month));
 
     const [year, number] = month.split('-').map(Number) as [number, number];
     const daily: number[] = Array(new Date(Date.UTC(year, number, 0)).getUTCDate()).fill(0);
@@ -138,45 +114,42 @@ export class OverviewService {
     let deposited = 0;
     const byCategory = new Map<number, OverviewCategory>();
     for (const row of rows) {
-      if (row.subcategoryId === null || row.categoryId === null || row.kind === null) {
+      if (row.category === null || row.kind === null) {
         uncategorised += 1;
         continue;
       }
       if (row.kind === 'transfer') {
         // Savings accounts aren't connected, so only the outgoing leg shows: out is a deposit.
-        if (row.subcategoryName === SAVINGS_SUBCATEGORY) deposited -= row.transaction.amount;
+        if (row.category.subcategory.name === SAVINGS_SUBCATEGORY) deposited -= row.amount.amount;
         continue;
       }
       // Spending is money out, so expenses are negated; income is counted as it is.
-      const amount = shares
-        ? ownerPart(row.transaction.amount, shares.get(row.transaction.id)!.percent)
-        : row.transaction.amount;
+      const amount = view === 'mine' ? row.ownerPart : row.amount.amount;
       const value = row.kind === 'expense' ? -amount : amount;
       if (row.kind === 'expense') {
-        const day = Number((row.purchaseDate ?? row.transaction.date).slice(8, 10));
+        const day = Number((row.purchaseDate ?? row.date).slice(8, 10));
         daily[day - 1]! += value;
       }
-      let category = byCategory.get(row.categoryId);
+      let category = byCategory.get(row.category.category.id);
       if (category === undefined) {
         category = {
-          id: row.categoryId,
-          name: row.categoryName ?? '',
+          id: row.category.category.id,
+          name: row.category.category.name,
           kind: row.kind,
-          // Stored as text; only migrations write them, with palette and icon names.
-          colour: row.colour as OverviewCategory['colour'],
-          icon: row.categoryIcon as CategoryIcon,
+          colour: row.category.category.colour,
+          icon: row.categoryIcon!,
           total: 0,
           subcategories: [],
         };
-        byCategory.set(row.categoryId, category);
+        byCategory.set(row.category.category.id, category);
       }
       category.total += value;
-      let sub = category.subcategories.find((s) => s.id === row.subcategoryId);
+      let sub = category.subcategories.find((s) => s.id === row.category!.subcategory.id);
       if (sub === undefined) {
         sub = {
-          id: row.subcategoryId,
-          name: row.subcategoryName ?? '',
-          icon: row.subcategoryIcon as CategoryIcon,
+          id: row.category.subcategory.id,
+          name: row.category.subcategory.name,
+          icon: row.category.subcategory.icon,
           total: 0,
         };
         category.subcategories.push(sub);

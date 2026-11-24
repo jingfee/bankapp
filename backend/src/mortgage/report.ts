@@ -19,11 +19,11 @@ import {
   subcategories,
   transactions,
 } from '../db/schema';
+import { WELL_KNOWN_SUBCATEGORIES } from '../well-known-subcategories';
 import { queryTransactions } from '../transactions/query';
 import { addMonths, inForce } from './figures';
 
-const MORTGAGE_CATEGORY = 'Boende & Hushåll';
-const MORTGAGE_SUBCATEGORY = 'Bolån ränta & amortering';
+const MORTGAGE = WELL_KNOWN_SUBCATEGORIES.mortgage;
 
 const monthOf = (day: string) => day.slice(0, 7);
 const nextMonth = (month: string) => monthOf(addMonths(`${month}-01`, 1));
@@ -141,9 +141,7 @@ export class MortgageReport {
       .select({ id: subcategories.id })
       .from(subcategories)
       .innerJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(
-        and(eq(categories.name, MORTGAGE_CATEGORY), eq(subcategories.name, MORTGAGE_SUBCATEGORY)),
-      )
+      .where(and(eq(categories.name, MORTGAGE.category), eq(subcategories.name, MORTGAGE.name)))
       .get();
     if (subcategory === undefined) return [];
     return queryTransactions(this.db, {

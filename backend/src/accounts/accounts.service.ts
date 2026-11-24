@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, isNotNull, lt, max, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, lt, max, or } from 'drizzle-orm';
 import type {
   AccountsResponse,
   Money,
@@ -13,9 +13,7 @@ import type { AppDatabase } from '../db/database';
 import {
   accounts,
   balances,
-  categories,
   connections,
-  subcategories,
   syncAccountResults,
   syncRuns,
   transactions,
@@ -24,7 +22,7 @@ import { connectionStatus } from '../connections/connection-status';
 import { CLOCK, type Clock } from '../clock';
 import { NoSuchAccount, InvalidInput } from '../domain-errors';
 import { SyncService } from '../sync/sync.service';
-import { onVisibleAccount, queryTransactions } from '../transactions/query';
+import { queryTransactions, summariseTransactions, toListed } from '../transactions/query';
 import { filterCondition, type TransactionFilter } from './transaction-filter';
 import { loadTransactionDetails } from './transaction-details';
 
@@ -185,28 +183,16 @@ export class AccountsService {
         and(eq(transactions.date, date), lt(transactions.id, Number(id))),
       );
     }
-    const matching = and(onVisibleAccount(this.db), filterCondition(filter));
     const rows = queryTransactions(this.db, {
       where: and(filterCondition(filter), after),
       orderBy: [desc(transactions.date), desc(transactions.id)],
       limit: TRANSACTIONS_PAGE_SIZE + 1,
     });
-    const totals = this.db
-      .select({
-        count: sql<number>`count(*)`,
-        sum: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
-        currencies: sql<number>`count(distinct ${transactions.currency})`,
-        currency: sql<string | null>`min(${transactions.currency})`,
-      })
-      .from(transactions)
-      .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-      .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-      .where(matching)
-      .get()!;
+    const totals = summariseTransactions(this.db, { where: filterCondition(filter) });
     const page = rows.slice(0, TRANSACTIONS_PAGE_SIZE);
     const last = page.at(-1);
     return {
-      transactions: page,
+      transactions: page.map(toListed),
       nextCursor: rows.length > page.length && last ? `${last.date}:${last.id}` : null,
       count: totals.count,
       sum:
