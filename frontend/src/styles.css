@@ -63,6 +63,7 @@
   --color-on-accent: #0e0b24;
   --color-positive: #5ee6a0;
   --color-warning: #ffb547;
+  --color-offline: #f08fc0;
   --color-danger: #ff7a7a;
   --color-pending: #7dd3fc;
 }

@@ -22,6 +22,11 @@ Offline means the app cannot reach its own server, or the server cannot answer (
 - Something never saved (an older month, a filter never used, a transaction never opened, more pages of the list) says _Inte sparad_ instead of fetching. Saved transactions are not filtered or searched on the device.
 - Logging out still works: it deletes saved data at once, and the device ends the server session the next time it is online.
 
+## How the app finds out
+
+- A read that gets no answer within 3 seconds, no response, or a 502, 503 or 504 makes the app offline. An interceptor then answers reads from the service worker's saved data (`caches.match`) at once. The service worker's own fallback cannot do this: its freshness strategy waits for every request, and its timeout (5 seconds) is deliberately longer than the app's, so the app always decides first.
+- A timeout is not proof, so the app asks `/api/health` at once. While offline it asks every 30 seconds, and when the app returns to the foreground or the browser says it is online. `/api/health` is never saved.
+
 ## Considered options
 
 - **Queueing changes made offline** and sending them later was rejected. The owner uses the app from several devices, so queued changes could conflict with changes and syncs made elsewhere. Most of what a change affects (overview totals, the settlement balance, mortgage figures) is worked out on the server, so the device could not show the result honestly until it was back online.

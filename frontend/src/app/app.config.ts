@@ -13,13 +13,15 @@ import { authInterceptor } from './auth/auth.interceptor';
 import { AppUpdateService } from './app-update.service';
 import { routes } from './app.routes';
 import { OfflineWarmup } from './offline-warmup.service';
+import { offlineInterceptor } from './offline/offline.interceptor';
+import { Offline } from './offline/offline.service';
 import { APP_LOCALE } from './formatting/locale';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })),
-    provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
+    provideHttpClient(withFetch(), withInterceptors([authInterceptor, offlineInterceptor])),
     { provide: LOCALE_ID, useValue: APP_LOCALE },
     // Only production builds run the service worker, so `ng serve` never serves stale files.
     provideServiceWorker('ngsw-worker.js', {
@@ -29,5 +31,6 @@ export const appConfig: ApplicationConfig = {
     }),
     provideAppInitializer(() => inject(AppUpdateService).watch()),
     provideAppInitializer(() => inject(OfflineWarmup).watch()),
+    provideAppInitializer(() => inject(Offline).watch()),
   ],
 };

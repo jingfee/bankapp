@@ -83,6 +83,24 @@ describe('warming up saved data', () => {
     expect(unsaved).toEqual([]);
   });
 
+  describe('when the app is back from being offline', () => {
+    it('runs again for an owner who is in the app', async () => {
+      warmup.watch();
+      await TestBed.inject(Router).navigateByUrl('/banker');
+      fetched();
+
+      warmup.rerun();
+
+      expect(fetched()).toHaveLength(17);
+    });
+
+    it('does nothing when nobody is signed in', () => {
+      warmup.rerun();
+
+      expect(fetched()).toEqual([]);
+    });
+  });
+
   describe('when the app starts', () => {
     let router: Router;
 
