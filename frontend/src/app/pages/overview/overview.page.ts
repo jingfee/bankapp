@@ -159,10 +159,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 @Component({
   selector: 'app-overview-page',
   imports: [
-<<<<<<< HEAD
-=======
     ReadFailed,
->>>>>>> f57ddef
     OfflineDisabled,
     ChartCard,
     Page,

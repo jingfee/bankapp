@@ -63,10 +63,7 @@ interface SharedRow {
 @Component({
   selector: 'app-delat-page',
   imports: [
-<<<<<<< HEAD
-=======
     ReadFailed,
->>>>>>> f57ddef
     OfflineDisabled,
     ShortDatePipe,
     Page,

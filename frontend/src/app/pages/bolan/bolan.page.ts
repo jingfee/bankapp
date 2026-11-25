@@ -78,10 +78,7 @@ const PART_COLOURS = [
 @Component({
   selector: 'app-bolan-page',
   imports: [
-<<<<<<< HEAD
-=======
     ReadFailed,
->>>>>>> f57ddef
     OfflineDisabled,
     ChartCard,
     ShortDatePipe,

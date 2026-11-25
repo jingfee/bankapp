@@ -84,10 +84,7 @@ function formatOriginal({ amount, currency }: Money): string {
 @Component({
   selector: 'app-transaction-details-page',
   imports: [
-<<<<<<< HEAD
-=======
     ReadFailed,
->>>>>>> f57ddef
     OfflineDisabled,
     Page,
     RouterLink,

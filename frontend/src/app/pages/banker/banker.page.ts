@@ -50,10 +50,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 @Component({
   selector: 'app-banker-page',
   imports: [
-<<<<<<< HEAD
-=======
     ReadFailed,
->>>>>>> f57ddef
     OfflineDisabled,
     RouterLink,
     Confirm,
