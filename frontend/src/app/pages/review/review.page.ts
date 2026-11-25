@@ -18,6 +18,8 @@ import { TransactionsStore } from '../../stores/transactions.store';
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
+import { OfflineDisabled } from '../../offline/offline-disabled';
+import { Offline, saveFailureMessage } from '../../offline/offline.service';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 
@@ -40,6 +42,7 @@ const COLLAPSE_MS = 450;
     Callout,
     Empty,
     Skeleton,
+    OfflineDisabled,
   ],
   template: `
     <app-page width="narrow" title="Att granska" [fetchedAt]="fetchedAt()">
@@ -143,7 +146,7 @@ const COLLAPSE_MS = 450;
                           type="button"
                           data-replace
                           class="btn btn-primary btn-sm"
-                          [disabled]="deciding() !== null"
+                          [appOfflineDisabled]="deciding() !== null"
                           (click)="decide(pair, 'replace')"
                         >
                           Ersätt med banktransaktionen
@@ -152,7 +155,7 @@ const COLLAPSE_MS = 450;
                           type="button"
                           data-not-same
                           class="btn btn-secondary btn-sm"
-                          [disabled]="deciding() !== null"
+                          [appOfflineDisabled]="deciding() !== null"
                           (click)="decide(pair, 'notSame')"
                         >
                           Inte samma
@@ -234,7 +237,7 @@ const COLLAPSE_MS = 450;
                                 type="button"
                                 data-confirm
                                 class="btn btn-positive btn-sm max-sm:flex-1"
-                                [disabled]="saving() === t.id"
+                                [appOfflineDisabled]="saving() === t.id"
                                 (click)="save(t, c.subcategory.id)"
                               >
                                 Stämmer
@@ -243,6 +246,7 @@ const COLLAPSE_MS = 450;
                             <button
                               type="button"
                               data-change
+                              appOfflineDisabled
                               class="btn btn-secondary btn-sm max-sm:flex-1"
                               [attr.aria-expanded]="picking() === t.id"
                               (click)="togglePicker(t)"
@@ -300,6 +304,7 @@ export class ReviewPage {
   protected readonly fetchedAt = computed(() => [this.review.fetchedAt()]);
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
+  private readonly offline = inject(Offline);
 
   protected readonly accountLabel = accountLabel;
   protected readonly status = computed(() =>
@@ -406,6 +411,10 @@ export class ReviewPage {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.timers.forEach(clearTimeout));
+    // A picker left open when the app goes offline closes: a change cannot be made from it.
+    effect(() => {
+      if (this.offline.isOffline()) untracked(() => this.picking.set(null));
+    });
     effect(() => {
       const value = this.review.value();
       if (value === undefined) return;
@@ -427,8 +436,8 @@ export class ReviewPage {
         this.collapse(this.leavingPairs, this.fadingPairs, this.droppedPairs, pair.bank.id, pair);
         this.deciding.set(null);
       },
-      error: () => {
-        this.error.set('Det gick inte att spara. Försök igen.');
+      error: (error: unknown) => {
+        this.error.set(saveFailureMessage(error, 'Det gick inte att spara. Försök igen.'));
         this.deciding.set(null);
       },
     });
@@ -465,8 +474,8 @@ export class ReviewPage {
         this.saving.set(null);
         this.similarNote.set(similarUpdatedNote(updatedSimilar));
       },
-      error: () => {
-        this.error.set('Kategorin kunde inte sparas. Försök igen.');
+      error: (error: unknown) => {
+        this.error.set(saveFailureMessage(error, 'Kategorin kunde inte sparas. Försök igen.'));
         this.saving.set(null);
       },
     });

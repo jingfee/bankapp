@@ -30,6 +30,7 @@ import {
   periodPresets,
   samePeriod,
 } from './transaction-filters';
+import { OfflineDisabled } from '../../offline/offline-disabled';
 
 interface ActiveChip {
   key: string;
@@ -45,6 +46,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 @Component({
   selector: 'app-transactions-page',
   imports: [
+    OfflineDisabled,
     TransactionList,
     RouterLink,
     FilterPanel,
@@ -67,6 +69,7 @@ const SEARCH_DEBOUNCE_MS = 250;
         routerLink="/transaktioner/ny"
         queryParamsHandling="preserve"
         data-add
+        appOfflineDisabled
         class="btn btn-secondary btn-sm flex-none whitespace-nowrap"
         aria-label="Lägg till manuell transaktion"
         ><app-icon name="plus" [size]="16" /><span class="max-[359px]:hidden">Manuell</span></a
@@ -193,7 +196,11 @@ const SEARCH_DEBOUNCE_MS = 250;
               </app-empty>
             } @else {
               <app-empty icon="receipt" text="Inga transaktioner ännu.">
-                <a empty-action routerLink="/anslut-bank" class="btn btn-secondary btn-sm"
+                <a
+                  empty-action
+                  routerLink="/anslut-bank"
+                  appOfflineDisabled
+                  class="btn btn-secondary btn-sm"
                   >Anslut bank</a
                 >
               </app-empty>
@@ -215,7 +222,7 @@ const SEARCH_DEBOUNCE_MS = 250;
               type="button"
               data-more
               class="btn btn-secondary w-full"
-              [disabled]="loadingMore()"
+              [appOfflineDisabled]="loadingMore()"
               (click)="list.loadMore()"
             >
               Visa fler

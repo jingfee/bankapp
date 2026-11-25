@@ -1,4 +1,5 @@
 import { Component, input, output } from '@angular/core';
+import { OfflineDisabled } from '../offline/offline-disabled';
 import { Sheet } from '../sheet/sheet';
 
 /**
@@ -11,7 +12,7 @@ import { Sheet } from '../sheet/sheet';
  */
 @Component({
   selector: 'app-confirm',
-  imports: [Sheet],
+  imports: [Sheet, OfflineDisabled],
   template: `
     <app-sheet
       size="small"
@@ -41,7 +42,7 @@ import { Sheet } from '../sheet/sheet';
           class="btn flex-1"
           [class.btn-danger]="danger()"
           [class.btn-primary]="!danger()"
-          [disabled]="busy() || confirmDisabled()"
+          [appOfflineDisabled]="busy() || confirmDisabled()"
         >
           {{ confirmLabel() }}
         </button>

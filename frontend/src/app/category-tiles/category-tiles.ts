@@ -4,6 +4,7 @@ import { CategoryIconComponent } from '../category-icon/category-icon';
 import { Empty } from '../empty/empty';
 import { APP_LOCALE } from '../formatting/locale';
 import { Icon } from '../icon/icon';
+import { OfflineDisabled } from '../offline/offline-disabled';
 
 const fold = (text: string) => text.toLocaleLowerCase(APP_LOCALE);
 
@@ -15,7 +16,7 @@ const fold = (text: string) => text.toLocaleLowerCase(APP_LOCALE);
  */
 @Component({
   selector: 'app-category-tiles',
-  imports: [CategoryIconComponent, Empty, Icon],
+  imports: [CategoryIconComponent, Empty, Icon, OfflineDisabled],
   template: `
     <div data-picker class="expand-in flex flex-col gap-4">
       @if (searchable()) {
@@ -48,6 +49,7 @@ const fold = (text: string) => text.toLocaleLowerCase(APP_LOCALE);
           @for (match of matches(); track match.subcategory.id) {
             <button
               type="button"
+              appOfflineDisabled
               class="chip"
               [attr.data-subcategory]="match.subcategory.id"
               [attr.aria-pressed]="current() === match.subcategory.id"
@@ -89,6 +91,7 @@ const fold = (text: string) => text.toLocaleLowerCase(APP_LOCALE);
             @for (subcategory of category.subcategories; track subcategory.id) {
               <button
                 type="button"
+                appOfflineDisabled
                 class="chip"
                 [attr.data-subcategory]="subcategory.id"
                 [attr.aria-pressed]="current() === subcategory.id"

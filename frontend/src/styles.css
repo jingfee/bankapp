@@ -151,10 +151,12 @@
       background-color 0.15s ease,
       border-color 0.15s ease;
   }
-  .btn:active:not(:disabled) {
+  .btn:active:not(:disabled):not([aria-disabled='true']) {
     transform: scale(0.97);
   }
-  .btn:disabled {
+  /* A link cannot be disabled; offline it is marked aria-disabled instead (OfflineDisabled). */
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
     opacity: 0.45;
     cursor: not-allowed;
   }
@@ -162,7 +164,7 @@
     background: var(--color-accent);
     color: var(--color-on-accent);
   }
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
     background: color-mix(in srgb, var(--color-accent) 88%, white);
   }
   .btn-secondary {
@@ -170,14 +172,14 @@
     border-color: var(--color-line-strong);
     color: var(--color-ink);
   }
-  .btn-secondary:hover:not(:disabled) {
+  .btn-secondary:hover:not(:disabled):not([aria-disabled='true']) {
     background: var(--color-surface-3);
   }
   .btn-ghost {
     background: transparent;
     color: var(--color-muted);
   }
-  .btn-ghost:hover:not(:disabled) {
+  .btn-ghost:hover:not(:disabled):not([aria-disabled='true']) {
     background: var(--color-surface-2);
     color: var(--color-ink);
   }
@@ -285,7 +287,7 @@
     background: color-mix(in srgb, var(--color-positive) 90%, transparent);
     color: #04210f;
   }
-  .btn-positive:hover:not(:disabled) {
+  .btn-positive:hover:not(:disabled):not([aria-disabled='true']) {
     background: var(--color-positive);
   }
 
@@ -294,14 +296,14 @@
     background: var(--color-danger);
     color: #2a0808;
   }
-  .btn-danger:hover:not(:disabled) {
+  .btn-danger:hover:not(:disabled):not([aria-disabled='true']) {
     background: color-mix(in srgb, var(--color-danger) 88%, white);
   }
   .btn-danger-soft {
     background: color-mix(in srgb, var(--color-danger) 14%, transparent);
     color: var(--color-danger);
   }
-  .btn-danger-soft:hover:not(:disabled) {
+  .btn-danger-soft:hover:not(:disabled):not([aria-disabled='true']) {
     background: color-mix(in srgb, var(--color-danger) 24%, transparent);
   }
 
@@ -1266,6 +1268,12 @@ router-outlet + * {
   .menu-item:focus-visible {
     background: var(--color-surface-3);
     outline: none;
+  }
+  .menu-item:disabled,
+  .menu-item[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: transparent;
   }
   .menu-item-danger {
     color: var(--color-danger);

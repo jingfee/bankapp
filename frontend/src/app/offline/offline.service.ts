@@ -28,6 +28,18 @@ export function isOfflineFailure(error: unknown): boolean {
 }
 
 /**
+ * What a form says when its save failed because the app is offline (ADR 0017). The form stays open
+ * with what was entered; the owner can save once the app is back.
+ */
+export const OFFLINE_SAVE_MESSAGE =
+  'Du är offline. Det du fyllt i finns kvar – spara när du är online igen.';
+
+/** The message for a failed save: that the app is offline, or else the usual `fallback`. */
+export function saveFailureMessage(error: unknown, fallback: string): string {
+  return isOfflineFailure(error) ? OFFLINE_SAVE_MESSAGE : fallback;
+}
+
+/**
  * Whether the app is offline. Everything that needs to know reads `isOffline` from here: the
  * navigation, the pages and the interceptor that answers reads from saved data.
  *

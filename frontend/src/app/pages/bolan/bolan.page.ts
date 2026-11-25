@@ -42,6 +42,8 @@ import {
   currentMonth,
   inRange,
 } from './bolan-view';
+import { OfflineDisabled } from '../../offline/offline-disabled';
+import { saveFailureMessage } from '../../offline/offline.service';
 
 /** The form that is open besides a part's own edit form: at most one at a time. */
 type Panel = { kind: 'add-part' } | { kind: 'entry'; entry: MortgageEntry | null };
@@ -75,6 +77,7 @@ const PART_COLOURS = [
 @Component({
   selector: 'app-bolan-page',
   imports: [
+    OfflineDisabled,
     ChartCard,
     ShortDatePipe,
     Page,
@@ -112,6 +115,7 @@ const PART_COLOURS = [
             <button
               type="button"
               data-add-part-intro
+              appOfflineDisabled
               class="btn btn-primary"
               (click)="startAddPart()"
             >
@@ -267,6 +271,7 @@ const PART_COLOURS = [
               <button
                 type="button"
                 data-new-entry
+                appOfflineDisabled
                 class="btn btn-sm btn-secondary"
                 (click)="startEntry(null)"
               >
@@ -277,6 +282,7 @@ const PART_COLOURS = [
             <button
               type="button"
               data-add-part
+              appOfflineDisabled
               class="btn btn-sm btn-secondary"
               (click)="startAddPart()"
             >
@@ -344,6 +350,7 @@ const PART_COLOURS = [
                       <button
                         type="button"
                         data-new-rate
+                        appOfflineDisabled
                         class="btn btn-sm btn-secondary"
                         (click)="startNewRate(part)"
                       >
@@ -354,13 +361,20 @@ const PART_COLOURS = [
                 </div>
                 @if (!part.endedOn) {
                   <app-menu [label]="'Åtgärder för ' + part.name">
-                    <button appMenuItem type="button" data-edit (click)="startEdit(part)">
+                    <button
+                      appMenuItem
+                      appOfflineDisabled
+                      type="button"
+                      data-edit
+                      (click)="startEdit(part)"
+                    >
                       Ändra
                     </button>
                     <button
                       appMenuItem
                       type="button"
                       data-new-rate-item
+                      appOfflineDisabled
                       (click)="startNewRate(part)"
                     >
                       Ny ränta
@@ -369,6 +383,7 @@ const PART_COLOURS = [
                       appMenuItem
                       type="button"
                       data-end
+                      appOfflineDisabled
                       [danger]="true"
                       (click)="startEnd(part)"
                     >
@@ -420,7 +435,13 @@ const PART_COLOURS = [
                   }
                 </span>
                 <app-menu [label]="'Åtgärder för noteringen ' + (entry.date | shortDate)">
-                  <button appMenuItem type="button" data-edit-entry (click)="startEntry(entry)">
+                  <button
+                    appMenuItem
+                    appOfflineDisabled
+                    type="button"
+                    data-edit-entry
+                    (click)="startEntry(entry)"
+                  >
                     Ändra
                   </button>
                   <button
@@ -428,7 +449,7 @@ const PART_COLOURS = [
                     type="button"
                     data-delete-entry
                     [danger]="true"
-                    [disabled]="busy()"
+                    [appOfflineDisabled]="busy()"
                     (click)="deletingEntry.set(entry)"
                   >
                     Ta bort…
@@ -515,7 +536,12 @@ const PART_COLOURS = [
         }
         <ng-container sheet-footer>
           <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
-          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+          <button
+            type="submit"
+            data-save
+            class="btn btn-primary flex-1"
+            [appOfflineDisabled]="busy()"
+          >
             Spara lånedel
           </button>
         </ng-container>
@@ -561,7 +587,12 @@ const PART_COLOURS = [
         }
         <ng-container sheet-footer>
           <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
-          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+          <button
+            type="submit"
+            data-save
+            class="btn btn-primary flex-1"
+            [appOfflineDisabled]="busy()"
+          >
             Spara ränta
           </button>
         </ng-container>
@@ -643,7 +674,12 @@ const PART_COLOURS = [
         }
         <ng-container sheet-footer>
           <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">Avbryt</button>
-          <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+          <button
+            type="submit"
+            data-save
+            class="btn btn-primary flex-1"
+            [appOfflineDisabled]="busy()"
+          >
             Spara
           </button>
         </ng-container>
@@ -688,7 +724,12 @@ const PART_COLOURS = [
             <button type="button" data-cancel class="btn btn-ghost" (click)="cancel()">
               Avbryt
             </button>
-            <button type="submit" data-save class="btn btn-primary flex-1" [disabled]="busy()">
+            <button
+              type="submit"
+              data-save
+              class="btn btn-primary flex-1"
+              [appOfflineDisabled]="busy()"
+            >
               Spara notering
             </button>
           </ng-container>
@@ -1226,7 +1267,10 @@ export class BolanPage {
         this.formError.set(
           (error as { status?: number }).status === 409
             ? 'Det går inte att spara just nu: lånedelen är avslutad, eller så finns redan en notering för det datumet.'
-            : 'Det gick inte att spara. Kontrollera uppgifterna och försök igen.',
+            : saveFailureMessage(
+                error,
+                'Det gick inte att spara. Kontrollera uppgifterna och försök igen.',
+              ),
         );
       },
     });

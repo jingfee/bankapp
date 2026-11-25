@@ -29,6 +29,7 @@ import { Callout } from '../../callout/callout';
 import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
+import { OfflineDisabled } from '../../offline/offline-disabled';
 
 interface Bar<T> {
   item: T;
@@ -157,6 +158,7 @@ function bars<T extends { id: number; name: string; total: number }>(
 @Component({
   selector: 'app-overview-page',
   imports: [
+    OfflineDisabled,
     ChartCard,
     Page,
     RouterLink,
@@ -403,7 +405,11 @@ function bars<T extends { id: number; name: string; total: number }>(
             @if (spending().length === 0 && income().length === 0) {
               <app-empty icon="receipt" text="Inga transaktioner den här månaden.">
                 @if (!accountRows()) {
-                  <a empty-action routerLink="/anslut-bank" class="btn btn-secondary btn-sm"
+                  <a
+                    empty-action
+                    routerLink="/anslut-bank"
+                    appOfflineDisabled
+                    class="btn btn-secondary btn-sm"
                     >Anslut bank</a
                   >
                 }
