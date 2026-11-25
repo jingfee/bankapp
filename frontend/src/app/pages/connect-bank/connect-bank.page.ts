@@ -17,6 +17,7 @@ import { Redirector } from '../../redirector';
     <app-page
       width="narrow"
       title="Anslut bank"
+      [fetchedAt]="[banksStore.availableFetchedAt()]"
       subtitle="Välj banken. Du loggar in med BankID hos banken och kommer sedan tillbaka hit."
     >
       <a page-back routerLink="/banker" class="text-sm text-muted hover:underline">← Banker</a>

@@ -16,6 +16,7 @@ export class FakeSettlementStore extends SettlementStore {
   readonly failures = this.recorder.failures;
 
   readonly settlement = signal<SettlementResponse | undefined>(undefined);
+  readonly fetchedAt = signal<Date | undefined>(undefined);
   readonly loading = signal(false);
   readonly failed = signal(false);
 

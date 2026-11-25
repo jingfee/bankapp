@@ -26,14 +26,14 @@ import type {
   TransactionReviewResponse,
   TransactionsResponse,
 } from '@bankapp/shared';
-import { type Observable, type Subscription, tap } from 'rxjs';
+import { type Observable, type Subscription, map, tap } from 'rxjs';
 import {
   type TransactionFilters,
   filtersKey,
   filtersToParams,
 } from '../pages/transactions/transaction-filters';
 import { Invalidation } from './invalidation';
-import { type ParamRead, paramRead } from './kept';
+import { type ParamRead, fetchedAtOf, paramRead } from './kept';
 
 /** What the transaction list is read for. */
 export interface TransactionListRequest {
@@ -60,6 +60,8 @@ export interface TransactionListRead {
   readonly loadingMore: Signal<boolean>;
   /** True when the next page could not be fetched. */
   readonly moreFailed: Signal<boolean>;
+  /** When the device fetched the oldest page shown; undefined until a page has been fetched. */
+  readonly fetchedAt: Signal<Date | undefined>;
   /** Fetches the next page, unless one is under way. */
   loadMore(): void;
 }
@@ -72,6 +74,7 @@ interface ListedTransactions {
   cursor: string | null;
   count: number;
   sum: Money | null;
+  fetchedAt: Date | undefined;
 }
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpTransactionsStore) })
@@ -182,6 +185,7 @@ export class HttpTransactionsStore extends TransactionsStore {
     const cursor = signal<string | null>(null);
     const count = signal(0);
     const sum = signal<Money | null>(null);
+    const fetchedAt = signal<Date | undefined>(undefined);
     const status = signal<'loading' | 'ready' | 'failed'>('loading');
     const loadingMore = signal(false);
     const moreFailed = signal(false);
@@ -194,6 +198,7 @@ export class HttpTransactionsStore extends TransactionsStore {
       cursor.set(page.cursor);
       count.set(page.count);
       sum.set(page.sum);
+      fetchedAt.set(page.fetchedAt);
       status.set('ready');
     };
     const remember = () => {
@@ -203,6 +208,7 @@ export class HttpTransactionsStore extends TransactionsStore {
         cursor: cursor(),
         count: count(),
         sum: sum(),
+        fetchedAt: fetchedAt(),
       };
     };
     const loadFirst = (next: TransactionListRequest) => {
@@ -218,7 +224,7 @@ export class HttpTransactionsStore extends TransactionsStore {
       if (transactions().length === 0) status.set('loading');
       firstRequest = this.fetch(next.filters).subscribe({
         next: (page) => {
-          show({ key: '', ...page, cursor: page.nextCursor });
+          show({ key: '', ...page.body, cursor: page.body.nextCursor, fetchedAt: page.fetchedAt });
           remember();
         },
         // A refresh that fails keeps the rows already shown.
@@ -251,6 +257,7 @@ export class HttpTransactionsStore extends TransactionsStore {
       transactions: transactions.asReadonly(),
       count: count.asReadonly(),
       sum: sum.asReadonly(),
+      fetchedAt: fetchedAt.asReadonly(),
       hasMore: computed(() => cursor() !== null),
       status: status.asReadonly(),
       loadingMore: loadingMore.asReadonly(),
@@ -262,10 +269,15 @@ export class HttpTransactionsStore extends TransactionsStore {
         moreFailed.set(false);
         moreRequest = this.fetch(current.filters, before).subscribe({
           next: (page) => {
-            transactions.update((shown) => [...shown, ...page.transactions]);
-            cursor.set(page.nextCursor);
-            count.set(page.count);
-            sum.set(page.sum);
+            transactions.update((shown) => [...shown, ...page.body.transactions]);
+            cursor.set(page.body.nextCursor);
+            count.set(page.body.count);
+            sum.set(page.body.sum);
+            // The list is as old as its oldest page.
+            const earlier = fetchedAt();
+            if (page.fetchedAt && (!earlier || page.fetchedAt < earlier)) {
+              fetchedAt.set(page.fetchedAt);
+            }
             remember();
             loadingMore.set(false);
           },
@@ -278,10 +290,18 @@ export class HttpTransactionsStore extends TransactionsStore {
     };
   }
 
-  private fetch(filters: TransactionFilters, before?: string): Observable<TransactionsResponse> {
-    return this.http.get<TransactionsResponse>('/api/transactions', {
-      params: { ...filtersToParams(filters), ...(before === undefined ? {} : { before }) },
-    });
+  private fetch(
+    filters: TransactionFilters,
+    before?: string,
+  ): Observable<{ body: TransactionsResponse; fetchedAt: Date | undefined }> {
+    return this.http
+      .get<TransactionsResponse>('/api/transactions', {
+        params: { ...filtersToParams(filters), ...(before === undefined ? {} : { before }) },
+        observe: 'response',
+      })
+      .pipe(
+        map((response) => ({ body: response.body!, fetchedAt: fetchedAtOf(response.headers) })),
+      );
   }
 
   details(id: Signal<string | undefined>): ParamRead<TransactionDetails> {

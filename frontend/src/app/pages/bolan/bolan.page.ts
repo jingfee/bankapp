@@ -92,7 +92,7 @@ const PART_COLOURS = [
     Skeleton,
   ],
   template: `
-    <app-page title="Bolån">
+    <app-page title="Bolån" [fetchedAt]="fetchedAt()">
       @if (failed(); as message) {
         <app-callout variant="danger">{{ message }}</app-callout>
       }
@@ -775,6 +775,11 @@ export class BolanPage {
   private readonly now = today();
   private readonly mortgageRead = this.store.mortgage();
   private readonly figuresRead = this.store.figures();
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [
+    this.mortgageRead.fetchedAt(),
+    this.figuresRead.fetchedAt(),
+  ]);
 
   protected readonly mortgage = computed<MortgageResponse>(
     () => this.mortgageRead.value() ?? { parts: [], entries: [] },

@@ -1,4 +1,9 @@
-import { type HttpResourceRef, type HttpResourceRequest, httpResource } from '@angular/common/http';
+import {
+  type HttpHeaders,
+  type HttpResourceRef,
+  type HttpResourceRequest,
+  httpResource,
+} from '@angular/common/http';
 import { type Signal, computed, effect, linkedSignal, untracked } from '@angular/core';
 
 /**
@@ -15,6 +20,27 @@ export function keptValue<T>(
   });
 }
 
+/** When the device fetched what a response carries: its `Date` header, if it has a valid one. */
+export function fetchedAtOf(headers: HttpHeaders | undefined): Date | undefined {
+  const date = headers?.get('Date');
+  const at = date ? new Date(date) : undefined;
+  return at && !Number.isNaN(at.getTime()) ? at : undefined;
+}
+
+/** `keptValue` for when the value was fetched: kept the same way when a refresh fails. */
+export function keptFetchedAt(
+  resource: HttpResourceRef<unknown>,
+  active: Signal<boolean>,
+): Signal<Date | undefined> {
+  return linkedSignal<{ at: Date | undefined; active: boolean }, Date | undefined>({
+    source: () => ({
+      at: resource.hasValue() ? fetchedAtOf(resource.headers()) : undefined,
+      active: active(),
+    }),
+    computation: (next, previous) => next.at ?? (next.active ? previous?.value : undefined),
+  });
+}
+
 /** A read with parameters: what a store hands a page for one month, filter or id. */
 export interface ParamRead<T> {
   /** The latest fetch for the current parameters; undefined until the first succeeds. */
@@ -25,6 +51,8 @@ export interface ParamRead<T> {
   readonly failed: Signal<boolean>;
   /** What the latest fetch failed with, e.g. an `HttpErrorResponse` for a 404; undefined while it has not failed. */
   readonly error: Signal<unknown>;
+  /** When the device fetched `value`; undefined until the first fetch succeeds. */
+  readonly fetchedAt: Signal<Date | undefined>;
 }
 
 /**
@@ -57,8 +85,17 @@ export function paramRead<P, T>(
     computation: (next, previous) =>
       next.value ?? (previous?.source.key === next.key ? previous.value : undefined),
   });
+  const fetchedAt = linkedSignal<{ at: Date | undefined; key: string }, Date | undefined>({
+    source: () => ({
+      at: resource.hasValue() ? fetchedAtOf(resource.headers()) : undefined,
+      key: JSON.stringify(params() ?? null),
+    }),
+    computation: (next, previous) =>
+      next.at ?? (previous?.source.key === next.key ? previous.value : undefined),
+  });
   return {
     value,
+    fetchedAt,
     loading: computed(() => resource.isLoading() && value() === undefined),
     failed: computed(() => resource.status() === 'error' && value() === undefined),
     error: computed(() => (resource.status() === 'error' ? resource.error() : undefined)),

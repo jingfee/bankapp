@@ -15,6 +15,7 @@ export class FakeBanksStore extends BanksStore {
   readonly expiringCount = signal(0);
 
   readonly available = signal<Bank[] | undefined>(undefined);
+  readonly availableFetchedAt = signal<Date | undefined>(undefined);
   readonly availableLoading = signal(false);
   readonly availableFailed = signal(false);
 

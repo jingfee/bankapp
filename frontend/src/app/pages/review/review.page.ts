@@ -42,7 +42,7 @@ const COLLAPSE_MS = 450;
     Skeleton,
   ],
   template: `
-    <app-page width="narrow" title="Att granska">
+    <app-page width="narrow" title="Att granska" [fetchedAt]="fetchedAt()">
       @if (status() === 'ready' && remaining() > 0) {
         <p page-subtitle data-remaining class="text-sm text-muted" aria-live="polite">
           {{ remaining() }} kvar att bekräfta
@@ -296,6 +296,8 @@ const COLLAPSE_MS = 450;
 export class ReviewPage {
   private readonly store = inject(TransactionsStore);
   private readonly review = this.store.review();
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [this.review.fetchedAt()]);
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly categoryList = inject(CategoriesService);
 

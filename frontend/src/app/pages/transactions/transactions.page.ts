@@ -61,7 +61,7 @@ const SEARCH_DEBOUNCE_MS = 250;
   // otherwise they would cover the panel's footer.
   host: { class: 'relative', '[class.z-40]': 'panelOpen() || adding()' },
   template: `
-    <app-page width="narrow" title="Transaktioner">
+    <app-page width="narrow" title="Transaktioner" [fetchedAt]="fetchedAt()">
       <a
         page-actions
         routerLink="/transaktioner/ny"
@@ -264,6 +264,8 @@ export class TransactionsPage {
   /** What the list is asked for; the store follows it, and keeps the list for the way back. */
   private readonly request = signal<TransactionListRequest | undefined>(undefined);
   private readonly list = this.store.list(this.request);
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [this.list.fetchedAt()]);
   protected readonly status = this.list.status;
   protected readonly transactions = this.list.transactions;
   protected readonly count = this.list.count;

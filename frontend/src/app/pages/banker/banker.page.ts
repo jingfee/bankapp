@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   SHARE_OPTIONS,
@@ -61,7 +61,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
     Skeleton,
   ],
   template: `
-    <app-page title="Banker">
+    <app-page title="Banker" [fetchedAt]="fetchedAt()">
       @let result = loaded();
       @if (result) {
         <p
@@ -490,6 +490,8 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 })
 export class BankerPage {
   private readonly accountsStore = inject(AccountsStore);
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [this.accountsStore.fetchedAt()]);
   private readonly banks = inject(BanksStore);
   private readonly redirector = inject(Redirector);
   /** The bank the owner is removing, awaiting confirmation. */

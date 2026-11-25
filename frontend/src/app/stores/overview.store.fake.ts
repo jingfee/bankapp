@@ -35,6 +35,7 @@ export class FakeOverviewStore extends OverviewStore {
       }),
       loading: computed(() => params() !== undefined && answered() === undefined),
       failed: computed(() => answered() === 'error'),
+      fetchedAt: computed(() => undefined),
       error: computed(() => (answered() === 'error' ? new Error('failed') : undefined)),
     };
   }

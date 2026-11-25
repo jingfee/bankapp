@@ -90,7 +90,10 @@ function formatOriginal({ amount, currency }: Money): string {
     ShortDatePipe,
   ],
   template: `
-    <app-page [title]="state().status === 'gone' ? 'Transaktionen finns inte längre' : undefined">
+    <app-page
+      [fetchedAt]="fetchedAt()"
+      [title]="state().status === 'gone' ? 'Transaktionen finns inte längre' : undefined"
+    >
       <button page-back type="button" data-back class="btn btn-ghost btn-sm" (click)="back()">
         ← Transaktioner
       </button>
@@ -561,6 +564,11 @@ export class TransactionDetailsPage {
   private candidateRequest: Subscription | undefined;
 
   private readonly read = this.transactionsStore.details(computed(() => this.id() ?? undefined));
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [
+    this.read.fetchedAt(),
+    this.sharesStore.fetchedAt(),
+  ]);
   /**
    * What a change answered with, shown until the read has fetched again. It is dropped when the
    * read's value changes, which includes moving to another transaction.

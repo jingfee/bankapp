@@ -32,6 +32,7 @@ export class FakeTransactionsStore extends TransactionsStore {
     count: signal(0),
     sum: signal<Money | null>(null),
     hasMore: signal(false),
+    fetchedAt: signal<Date | undefined>(undefined),
     status: signal<'loading' | 'ready' | 'failed'>('loading'),
     loadingMore: signal(false),
     moreFailed: signal(false),
@@ -67,6 +68,7 @@ export class FakeTransactionsStore extends TransactionsStore {
       }),
       loading: computed(() => id() !== undefined && answered() === undefined),
       failed: computed(() => answered() === 'error' || answered() === 'gone'),
+      fetchedAt: computed(() => undefined),
       error: computed(() =>
         answered() === 'gone'
           ? new HttpErrorResponse({ status: 404 })
@@ -91,6 +93,7 @@ export class FakeTransactionsStore extends TransactionsStore {
       }),
       loading: computed(() => answer() === undefined),
       failed: computed(() => answer() === 'error'),
+      fetchedAt: computed(() => undefined),
       error: computed(() =>
         answer() === 'error' ? new HttpErrorResponse({ status: 500 }) : undefined,
       ),

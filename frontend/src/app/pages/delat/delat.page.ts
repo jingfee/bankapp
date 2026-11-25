@@ -80,7 +80,11 @@ interface SharedRow {
     Sheet,
   ],
   template: `
-    <app-page title="Delat" subtitle="Avräkning, hushållsandel och delade underkategorier.">
+    <app-page
+      [fetchedAt]="fetchedAt()"
+      title="Delat"
+      subtitle="Avräkning, hushållsandel och delade underkategorier."
+    >
       @if (error(); as message) {
         <app-callout variant="danger">{{ message }}</app-callout>
       }
@@ -678,6 +682,11 @@ export class DelatPage {
   private readonly categoriesService = inject(CategoriesService);
   private readonly settlementStore = inject(SettlementStore);
   private readonly sharesStore = inject(SharesStore);
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [
+    this.settlementStore.fetchedAt(),
+    this.sharesStore.fetchedAt(),
+  ]);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
 

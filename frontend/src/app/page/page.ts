@@ -4,11 +4,15 @@ import {
   DestroyRef,
   type ElementRef,
   afterNextRender,
+  computed,
+  effect,
   inject,
   input,
   signal,
   viewChild,
 } from '@angular/core';
+import { dateTime } from '../formatting/date-time.pipe';
+import { Offline } from '../offline/offline.service';
 
 /**
  * The shell every routed page sits in: the `<main>` with its width, padding and vertical rhythm,
@@ -23,6 +27,9 @@ import {
  * - `[page-actions]`: sits to the right of the title and wraps below it when there is no room.
  *
  * Everything else is the page body.
+ *
+ * While offline, a line under the title says when the device fetched the data the page shows
+ * (ADR 0017): the oldest of the `fetchedAt` times the page passes in, one per read.
  */
 @Component({
   selector: 'app-page',
@@ -58,6 +65,9 @@ import {
           <p data-page-subtitle class="text-muted max-sm:-mt-5">{{ text }}</p>
         }
         <div class="contents max-sm:[&>*]:-mt-5"><ng-content select="[page-subtitle]" /></div>
+        @if (savedFrom(); as from) {
+          <p data-saved-data class="text-muted max-sm:-mt-5">Visar sparad data från {{ from }}</p>
+        }
       </header>
       <ng-content />
     </main>
@@ -68,6 +78,22 @@ export class Page {
   readonly width = input<'narrow' | 'wide'>('wide');
   readonly title = input<string>();
   readonly subtitle = input<string>();
+  /** When the device fetched each read the page shows; reads not fetched yet are `undefined`. */
+  readonly fetchedAt = input<readonly (Date | undefined)[]>([]);
+
+  private readonly offline = inject(Offline);
+  /** The time the line is worded against, so `idag` becomes `igår` after midnight. */
+  private readonly now = signal(new Date());
+  private readonly oldest = computed(() => {
+    if (!this.offline.isOffline()) return undefined;
+    const times = this.fetchedAt().flatMap((at) => (at ? [at.getTime()] : []));
+    return times.length === 0 ? undefined : new Date(Math.min(...times));
+  });
+  /** Only while offline: the oldest fetch time, formatted. */
+  protected readonly savedFrom = computed(() => {
+    const oldest = this.oldest();
+    return oldest ? dateTime(oldest.toISOString(), this.now()) : undefined;
+  });
 
   private readonly sentinel = viewChild.required<ElementRef<HTMLElement>>('sentinel');
   /** True once the page has scrolled under the sticky phone header. */
@@ -75,6 +101,13 @@ export class Page {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
+    // A clock only while the line is shown.
+    effect((onCleanup) => {
+      if (!this.oldest()) return;
+      this.now.set(new Date());
+      const timer = setInterval(() => this.now.set(new Date()), 60_000);
+      onCleanup(() => clearInterval(timer));
+    });
     afterNextRender(() => {
       if (typeof IntersectionObserver === 'undefined') return;
       const observer = new IntersectionObserver(([entry]) =>

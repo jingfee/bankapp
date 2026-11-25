@@ -21,7 +21,7 @@ import type {
 import { type Observable, map, tap } from 'rxjs';
 import { AccountsStore } from './accounts.store';
 import { Invalidation } from './invalidation';
-import { keptValue } from './kept';
+import { keptFetchedAt, keptValue } from './kept';
 import { DAY_MS } from '../dates';
 
 /** How often the accounts are asked for again while a sync is running. */
@@ -47,6 +47,8 @@ export abstract class BanksStore {
 
   /** The banks that can be connected; undefined until they have been fetched. */
   abstract readonly available: Signal<Bank[] | undefined>;
+  /** When the device fetched `available`; undefined until the first fetch succeeds. */
+  abstract readonly availableFetchedAt: Signal<Date | undefined>;
   /** True while the list of banks is being fetched for the first time. */
   abstract readonly availableLoading: Signal<boolean>;
   /** True when the list of banks could not be fetched and there is nothing older to show. */
@@ -110,6 +112,7 @@ export class HttpBanksStore extends BanksStore {
     this.availableActive() ? '/api/banks' : undefined,
   );
   private readonly availableResponse = keptValue(this.availableResource, this.availableActive);
+  readonly availableFetchedAt = keptFetchedAt(this.availableResource, this.availableActive);
   readonly available = computed(() => this.availableResponse()?.banks);
   readonly availableLoading = computed(
     () => this.availableResource.isLoading() && this.availableResponse() === undefined,

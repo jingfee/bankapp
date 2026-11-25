@@ -33,6 +33,7 @@ export class FakeSavingsStore extends SavingsStore {
       }),
       loading: computed(() => current() === undefined),
       failed: computed(() => current() === 'error'),
+      fetchedAt: computed(() => undefined),
       error: computed(() => (current() === 'error' ? new Error('failed') : undefined)),
     };
   }
