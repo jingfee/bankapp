@@ -13,6 +13,7 @@ import {
 } from '@bankapp/shared';
 import { type Observable, concat, last } from 'rxjs';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
 import { Sheet } from '../../sheet/sheet';
@@ -77,6 +78,10 @@ const PART_COLOURS = [
 @Component({
   selector: 'app-bolan-page',
   imports: [
+<<<<<<< HEAD
+=======
+    ReadFailed,
+>>>>>>> f57ddef
     OfflineDisabled,
     ChartCard,
     ShortDatePipe,
@@ -97,7 +102,11 @@ const PART_COLOURS = [
   template: `
     <app-page title="Bolån" [fetchedAt]="fetchedAt()">
       @if (failed(); as message) {
-        <app-callout variant="danger">{{ message }}</app-callout>
+        @if (readFailed()) {
+          <app-read-failed>{{ message }}</app-read-failed>
+        } @else {
+          <app-callout variant="danger">{{ message }}</app-callout>
+        }
       }
 
       @if (!loaded()) {
@@ -964,6 +973,10 @@ export class BolanPage {
         : this.figuresRead.error() !== undefined
           ? 'Bolånets siffror kunde inte hämtas. Försök igen senare.'
           : null),
+  );
+  /** True when `failed` is a read that could not be fetched, not a removal that failed. */
+  protected readonly readFailed = computed(
+    () => this.actionFailed() === null && this.failed() !== null,
   );
   protected readonly busy = signal(false);
   protected readonly panel = signal<Panel | null>(null);

@@ -16,6 +16,7 @@ import {
 import { type Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { type CategorisedSubcategory, CategoriesService } from '../../categories.service';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
 import { Sheet } from '../../sheet/sheet';
@@ -62,6 +63,10 @@ interface SharedRow {
 @Component({
   selector: 'app-delat-page',
   imports: [
+<<<<<<< HEAD
+=======
+    ReadFailed,
+>>>>>>> f57ddef
     OfflineDisabled,
     ShortDatePipe,
     Page,
@@ -102,17 +107,15 @@ interface SharedRow {
           <app-skeleton shape="card" />
         </div>
       } @else if ('failed' in result) {
-        <app-callout variant="danger"
-          >Det delade kunde inte hämtas. Försök igen senare.</app-callout
-        >
+        <app-read-failed>Det delade kunde inte hämtas. Försök igen senare.</app-read-failed>
       } @else {
         <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
           <div class="flex min-w-0 flex-col gap-4">
             <section data-balance-card class="card glow-violet flex flex-col gap-4 p-5 sm:p-6">
               <h2 class="eyebrow">Avräkningssaldo</h2>
               @if (settlementFailed()) {
-                <app-callout variant="danger"
-                  >Avräkningen kunde inte hämtas. Försök igen senare.</app-callout
+                <app-read-failed
+                  >Avräkningen kunde inte hämtas. Försök igen senare.</app-read-failed
                 >
               } @else if (settlementLoading()) {
                 <app-skeleton shape="card" />
@@ -436,8 +439,8 @@ interface SharedRow {
             <section data-ratio-card class="card flex flex-col gap-4 p-5 sm:p-6">
               <h2 class="eyebrow">Hushållsandel</h2>
               @if (sharesFailed()) {
-                <app-callout variant="danger"
-                  >Hushållsandelen kunde inte hämtas. Försök igen senare.</app-callout
+                <app-read-failed
+                  >Hushållsandelen kunde inte hämtas. Försök igen senare.</app-read-failed
                 >
               } @else if (sharesLoading()) {
                 <app-skeleton shape="card" />
@@ -534,8 +537,9 @@ interface SharedRow {
                 </button>
               </div>
               @if (sharesFailed()) {
-                <app-callout variant="danger"
-                  >De delade underkategorierna kunde inte hämtas. Försök igen senare.</app-callout
+                <app-read-failed
+                  >De delade underkategorierna kunde inte hämtas. Försök igen
+                  senare.</app-read-failed
                 >
               } @else if (sharesLoading()) {
                 <app-skeleton shape="card" />

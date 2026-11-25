@@ -26,6 +26,7 @@ import { OverviewStore } from '../../stores/overview.store';
 import { SettlementStore } from '../../stores/settlement.store';
 import { TransactionList } from '../../transaction-list/transaction-list';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
@@ -158,6 +159,10 @@ function bars<T extends { id: number; name: string; total: number }>(
 @Component({
   selector: 'app-overview-page',
   imports: [
+<<<<<<< HEAD
+=======
+    ReadFailed,
+>>>>>>> f57ddef
     OfflineDisabled,
     ChartCard,
     Page,
@@ -235,9 +240,7 @@ function bars<T extends { id: number; name: string; total: number }>(
           </div>
         }
         @case ('failed') {
-          <app-callout variant="danger"
-            >Översikten kunde inte hämtas. Försök igen senare.</app-callout
-          >
+          <app-read-failed>Översikten kunde inte hämtas. Försök igen senare.</app-read-failed>
         }
         @default {
           @if (overview(); as o) {
@@ -544,9 +547,9 @@ function bars<T extends { id: number; name: string; total: number }>(
                                       />
                                       @if (openSubcategory() === sub.item.id) {
                                         @if (subStatus() === 'failed') {
-                                          <app-callout variant="danger" class="my-2">
+                                          <app-read-failed class="my-2">
                                             Transaktionerna kunde inte hämtas. Försök igen senare.
-                                          </app-callout>
+                                          </app-read-failed>
                                         } @else if (subStatus() === 'loading') {
                                           <div aria-busy="true" class="py-2">
                                             <app-skeleton [count]="2" />

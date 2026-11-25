@@ -23,6 +23,7 @@ import type {
   TransactionDetails,
 } from '@bankapp/shared';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
 import { Sheet } from '../../sheet/sheet';
@@ -83,6 +84,10 @@ function formatOriginal({ amount, currency }: Money): string {
 @Component({
   selector: 'app-transaction-details-page',
   imports: [
+<<<<<<< HEAD
+=======
+    ReadFailed,
+>>>>>>> f57ddef
     OfflineDisabled,
     Page,
     RouterLink,
@@ -120,9 +125,7 @@ function formatOriginal({ amount, currency }: Money): string {
           <a routerLink="/transaktioner" class="font-medium text-accent">Till transaktionerna →</a>
         }
         @case ('failed') {
-          <app-callout variant="danger"
-            >Transaktionen kunde inte hämtas. Försök igen senare.</app-callout
-          >
+          <app-read-failed>Transaktionen kunde inte hämtas. Försök igen senare.</app-read-failed>
           <a routerLink="/transaktioner" class="font-medium text-accent">Till transaktionerna →</a>
         }
         @default {

@@ -12,6 +12,7 @@ import {
 import { AccountsStore } from '../../stores/accounts.store';
 import { BanksStore } from '../../stores/banks.store';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Confirm } from '../../confirm/confirm';
 import { Menu, MenuItem } from '../../menu/menu';
 import { Disclosure } from '../../disclosure/disclosure';
@@ -49,6 +50,10 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 @Component({
   selector: 'app-banker-page',
   imports: [
+<<<<<<< HEAD
+=======
+    ReadFailed,
+>>>>>>> f57ddef
     OfflineDisabled,
     RouterLink,
     Confirm,
@@ -145,7 +150,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
       </div>
 
       @if (failed()) {
-        <app-callout variant="danger">Kontona kunde inte hämtas. Försök igen senare.</app-callout>
+        <app-read-failed>Kontona kunde inte hämtas. Försök igen senare.</app-read-failed>
       } @else if (!result) {
         <div aria-busy="true" class="grid gap-4 lg:grid-cols-2">
           <app-skeleton shape="card" />

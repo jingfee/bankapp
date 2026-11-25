@@ -9,6 +9,7 @@ import type {
 } from '@bankapp/shared';
 import { of, throwError } from 'rxjs';
 import { CategoriesService } from '../../categories.service';
+import { Offline } from '../../offline/offline.service';
 import { SharesStore } from '../../stores/shares.store';
 import { FakeSharesStore } from '../../stores/shares.store.fake';
 import { TransactionsStore } from '../../stores/transactions.store';
@@ -599,6 +600,14 @@ describe('TransactionDetailsPage', () => {
 
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Transaktionen finns inte längre');
     expect(page.querySelector('a')?.getAttribute('href')).toBe('/transaktioner');
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('says Inte sparad for a transaction that was never opened while offline', async () => {
+    TestBed.inject(Offline).markOffline();
+    const { page } = await render({ httpStatus: 0 });
+
+    expect(page.querySelector('[data-not-saved]')?.textContent).toContain('Inte sparad');
     expect(page.querySelector('[role="alert"]')).toBeNull();
   });
 

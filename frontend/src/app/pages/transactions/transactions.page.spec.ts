@@ -14,6 +14,7 @@ import { AccountsStore } from '../../stores/accounts.store';
 import { FakeAccountsStore } from '../../stores/accounts.store.fake';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
+import { Offline } from '../../offline/offline.service';
 import { EMPTY_FILTERS } from './transaction-filters';
 import { TransactionsPage } from './transactions.page';
 
@@ -253,6 +254,46 @@ describe('TransactionsPage', () => {
     const { page } = await render('error');
 
     expect(page.querySelector('[role=alert]')?.textContent).toContain('kunde inte hämtas');
+  });
+
+  describe('offline', () => {
+    it('says Inte sparad, not an error, for a list that was never saved', async () => {
+      TestBed.inject(Offline).markOffline();
+      const { page } = await render('error');
+
+      expect(page.querySelector('[data-not-saved]')?.textContent).toContain('Inte sparad');
+      expect(page.querySelector('[role=alert]')).toBeNull();
+    });
+
+    it('still says there are no transactions for an empty saved list', async () => {
+      TestBed.inject(Offline).markOffline();
+      const { page } = await render(response([]));
+
+      expect(page.querySelector('[data-not-saved]')).toBeNull();
+      expect(page.textContent).toContain('Inga transaktioner');
+    });
+
+    it('lets the owner ask for the next page, which may be saved', async () => {
+      TestBed.inject(Offline).markOffline();
+      const { page } = await render(response([transaction(1)], '2026-11-10:1'));
+
+      const more = page.querySelector('button[data-more]') as HTMLButtonElement;
+      expect(more.disabled).toBe(false);
+      more.click();
+      expect(store.calls).toContainEqual({ method: 'loadMore', args: [] });
+    });
+
+    it('disables Visa fler and says Inte sparad once the saved pages run out', async () => {
+      TestBed.inject(Offline).markOffline();
+      const { fixture, page } = await render(response([transaction(1)], '2026-11-10:1'));
+      store.listed.moreFailed.set(true);
+      await fixture.whenStable();
+
+      expect(rows(page)).toHaveLength(1);
+      expect((page.querySelector('button[data-more]') as HTMLButtonElement).disabled).toBe(true);
+      expect(page.querySelector('[data-more-not-saved]')?.textContent).toContain('Inte sparad');
+      expect(page.querySelector('[role=alert]')).toBeNull();
+    });
   });
 
   describe('a long history', () => {
