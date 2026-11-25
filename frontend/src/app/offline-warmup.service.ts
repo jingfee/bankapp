@@ -40,6 +40,11 @@ export class OfflineWarmup {
       });
   }
 
+  /** Runs again when the app is back from being offline, if it ran before (the owner is in). */
+  rerun(): void {
+    if (this.warmedUp) this.run();
+  }
+
   /**
    * Fetches everything now; a read that fails is simply not saved. Only for a signed-in owner:
    * signed out, every request would be refused with a 401.

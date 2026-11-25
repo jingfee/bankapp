@@ -8,6 +8,7 @@ import { Toast } from './toast/toast';
 import { ToastService } from './toast/toast.service';
 import { dateTime } from './formatting/date-time.pipe';
 import { CategoriesService } from './categories.service';
+import { Offline } from './offline/offline.service';
 import { BanksStore } from './stores/banks.store';
 import { TransactionsStore } from './stores/transactions.store';
 
@@ -121,6 +122,21 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
     </ng-template>
 
     <ng-template #syncLine>
+      @if (offline.isOffline()) {
+        <p
+          data-offline-line
+          class="flex items-center gap-2 px-3 text-xs font-medium text-offline"
+          [class.mb-1]="syncText()"
+          [class.mb-3]="!syncText()"
+        >
+          <span
+            data-offline-dot
+            class="size-2 shrink-0 rounded-full bg-offline"
+            aria-hidden="true"
+          ></span>
+          <span>Offline</span>
+        </p>
+      }
       @if (syncText(); as text) {
         <p data-sync-line class="mb-3 flex items-center gap-2 px-3 text-xs text-muted">
           <span
@@ -380,6 +396,19 @@ const LOGOUT_ICON = ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5'
           >
           <span class="flex flex-1 flex-col">
             <span class="text-sm">Ägare</span>
+            @if (offline.isOffline()) {
+              <span
+                data-offline-line
+                class="flex items-center gap-1.5 text-xs font-medium text-offline"
+              >
+                <span
+                  data-offline-dot
+                  class="size-2 shrink-0 rounded-full bg-offline"
+                  aria-hidden="true"
+                ></span>
+                Offline
+              </span>
+            }
             @if (syncText(); as text) {
               <span class="text-xs text-muted">{{ text }}</span>
             }
@@ -419,6 +448,7 @@ export class App {
   protected readonly moreIcon = MORE_ICON;
   protected readonly moreOpen = signal(false);
   protected readonly syncStatus = inject(BanksStore);
+  protected readonly offline = inject(Offline);
   private readonly url = signal(this.router.url);
   protected readonly railMenuOpen = signal(false);
   /** The item of the current page when it lives in the Mer sheet; shown on the fifth tab. */

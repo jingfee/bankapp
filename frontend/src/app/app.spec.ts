@@ -6,6 +6,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError } from 'rxjs';
 import { App } from './app';
+import { Offline } from './offline/offline.service';
 import { AuthService } from './auth/auth.service';
 import { routes } from './app.routes';
 import { AccountsStore } from './stores/accounts.store';
@@ -283,6 +284,85 @@ describe('App', () => {
       expect(dot?.classList.contains('bg-warning')).toBe(true);
       expect(html(fixture).querySelector('[data-attention]')).toBeNull();
       TestBed.inject(HttpTestingController).match(() => true);
+    });
+  });
+
+  describe('offline', () => {
+    const offlineLines = (fixture: { nativeElement: unknown }) =>
+      [...html(fixture).querySelectorAll('[data-offline-line]')].map((line) =>
+        line.textContent?.trim(),
+      );
+
+    it('says nothing while online', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+
+      expect(offlineLines(fixture)).toEqual([]);
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('says "Offline" in the sidebar, and keeps the last bank sync apart from it', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      TestBed.inject(BanksStore).report({
+        lastSyncedAt: new Date().toISOString(),
+        failed: false,
+        expiring: 0,
+      });
+      TestBed.inject(Offline).markOffline();
+      await fixture.whenStable();
+
+      const sidebarLines = [
+        ...html(fixture).querySelectorAll('aside:not([data-rail]) [data-offline-line]'),
+      ];
+      expect(sidebarLines.map((line) => line.textContent?.trim())).toEqual(['Offline']);
+      expect(sidebarLines[0].classList.contains('text-offline')).toBe(true);
+      // The sync line is its own line with its own dot and text.
+      const sync = html(fixture).querySelector('aside [data-sync-line]');
+      expect(sync?.textContent).toMatch(/Uppdaterad idag \d\d:\d\d/);
+      expect(sync?.textContent).not.toContain('Offline');
+      expect(sync?.querySelector('[data-sync-dot]')?.classList.contains('bg-offline')).toBe(false);
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('says "Offline" in the rail menu and in the Mer sheet of the phone', async () => {
+      const fixture = TestBed.createComponent(App);
+      await navigate(fixture, '/');
+      TestBed.inject(Offline).markOffline();
+      await fixture.whenStable();
+
+      (html(fixture).querySelector('[data-rail-logo]') as HTMLElement).click();
+      await fixture.whenStable();
+      expect(
+        html(fixture).querySelector('[data-rail-menu] [data-offline-line]')?.textContent,
+      ).toContain('Offline');
+
+      (html(fixture).querySelector('[data-more]') as HTMLElement).click();
+      await fixture.whenStable();
+      expect(
+        html(fixture).querySelector('[data-more-sheet] [data-offline-line]')?.textContent,
+      ).toContain('Offline');
+      TestBed.inject(HttpTestingController).match(() => true);
+    });
+
+    it('is gone once the server answers again', async () => {
+      vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+      try {
+        const fixture = TestBed.createComponent(App);
+        await navigate(fixture, '/');
+        const offline = TestBed.inject(Offline);
+        offline.markOffline();
+        await fixture.whenStable();
+        expect(offlineLines(fixture).length).toBeGreaterThan(0);
+
+        await offline.check();
+        await fixture.whenStable();
+
+        expect(offlineLines(fixture)).toEqual([]);
+        TestBed.inject(HttpTestingController).match(() => true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 

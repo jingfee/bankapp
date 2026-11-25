@@ -72,6 +72,14 @@ export class Invalidation {
     this.listeners.set(read, [...(this.listeners.get(read) ?? []), refresh]);
   }
 
+  /** Refreshes every read, for when the app is back from being offline. */
+  refreshAll(): void {
+    for (const read of ALL_READS) {
+      this.versions.get(read)!.update((n) => n + 1);
+      this.listeners.get(read)?.forEach((refresh) => refresh());
+    }
+  }
+
   fire(fact: Fact): void {
     for (const read of INVALIDATION_MAP[fact]) {
       this.versions.get(read)!.update((n) => n + 1);

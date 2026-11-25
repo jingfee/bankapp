@@ -39,6 +39,18 @@ describe('Invalidation', () => {
     expect(bumped.sort()).toEqual([...expected].sort());
   });
 
+  it('refreshAll refreshes every read, listeners and versions alike', () => {
+    const invalidation = TestBed.inject(Invalidation);
+    const refreshed: Read[] = [];
+    for (const read of ALL_READS) invalidation.onRead(read, () => refreshed.push(read));
+    const before = ALL_READS.map((read) => invalidation.version(read)());
+
+    invalidation.refreshAll();
+
+    expect(refreshed.sort()).toEqual([...ALL_READS].sort());
+    expect(ALL_READS.map((read) => invalidation.version(read)())).toEqual(before.map((n) => n + 1));
+  });
+
   it('refreshes every read for banks', () => {
     expect(table.find(([fact]) => fact === 'banks')![1]).toHaveLength(ALL_READS.length);
   });
