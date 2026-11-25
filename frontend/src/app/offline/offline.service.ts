@@ -73,6 +73,8 @@ export class Offline {
    * read from saved data when the network is dead, so no request ever shows it.
    */
   watch(): void {
+    // The browser already knows it has no network: no request needs to wait to find out.
+    if (!navigator.onLine) this.markOffline();
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('online', this.onOnline);
     this.destroyRef.onDestroy(() => {

@@ -11,23 +11,24 @@ import { type Observable, catchError, defer, filter, throwError, timeout } from 
 import { OFFLINE_TIMEOUT_MS, Offline, isOfflineFailure } from './offline.service';
 
 /**
- * A read the service worker may have saved. The health check and the auth calls are never saved
- * (see `ngsw-config.json`), so they are never timed out or answered from saved data.
+ * A read from the API. Every read is timed out (ADR 0017), the auth check included: on a fresh
+ * start the route guard waits on `/api/auth/me`, and off the tailnet that request can hang for a
+ * long time. The health check has its own timeout (`Offline.check`).
  */
-function isSavedRead(request: HttpRequest<unknown>): boolean {
-  return (
-    request.method === 'GET' &&
-    request.url.startsWith('/api/') &&
-    request.url !== '/api/health' &&
-    !request.url.startsWith('/api/auth/')
-  );
+function isRead(request: HttpRequest<unknown>): boolean {
+  return request.method === 'GET' && request.url !== '/api/health';
+}
+
+/** The auth calls are never saved (see `ngsw-config.json`), so saved data never answers them. */
+function isAuthCall(request: HttpRequest<unknown>): boolean {
+  return request.url.startsWith('/api/auth/');
 }
 
 /** What the device has saved for the request, or `undefined` if it never fetched it. */
 async function savedResponse(
   request: HttpRequest<unknown>,
 ): Promise<HttpResponse<unknown> | undefined> {
-  if (typeof caches === 'undefined') return undefined;
+  if (typeof caches === 'undefined' || isAuthCall(request)) return undefined;
   try {
     const saved = await caches.match(request.urlWithParams);
     if (!saved) return undefined;
@@ -64,7 +65,8 @@ function fromSaved(request: HttpRequest<unknown>): Observable<HttpResponse<unkno
  *
  * Reads wait about 3 seconds for the server; a read that gets no answer in time, no response, or
  * a 502, 503 or 504 makes the app offline and is answered from saved data instead, if there is
- * any. Changes are never timed out or answered from saved data, but a change that cannot reach
+ * any. A read with nothing saved (the auth check, for one) fails as if there were no response,
+ * at once while offline, so the route guard never waits on a server that is not there. Changes are never timed out or answered from saved data, but a change that cannot reach
  * the server still shows the app is offline. Any other error, a 401 included, is left to the
  * caller.
  *
@@ -77,7 +79,7 @@ export const offlineInterceptor: HttpInterceptorFn = (request, next) => {
 
   if (!request.url.startsWith('/api/')) return next(request);
 
-  if (!isSavedRead(request)) {
+  if (!isRead(request)) {
     return next(request).pipe(
       catchError((error: unknown) => {
         if (isOfflineFailure(error)) offline.markOffline();

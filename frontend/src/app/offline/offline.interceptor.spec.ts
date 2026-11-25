@@ -124,13 +124,14 @@ describe('offlineInterceptor', () => {
       await result;
     });
 
-    it('does not time out the auth calls, which are never saved', async () => {
-      http.get('/api/auth/me').subscribe({ error: () => undefined });
+    it('times out the auth check too, so a fresh start does not wait on a server that is not there', async () => {
+      const result = read('/api/auth/me');
       backend.expectOne('/api/auth/me');
 
-      await vi.advanceTimersByTimeAsync(OFFLINE_TIMEOUT_MS * 3);
+      await vi.advanceTimersByTimeAsync(OFFLINE_TIMEOUT_MS);
 
-      expect(offline.isOffline()).toBe(false);
+      expect(offline.isOffline()).toBe(true);
+      expect(await result).toEqual({ failedWith: 0 });
     });
 
     it('does not time out a change, which may take long', async () => {
@@ -166,6 +167,13 @@ describe('offlineInterceptor', () => {
 
     it('fails with no response for a read that was never saved', async () => {
       expect(await read('/api/transactions?q=ica')).toEqual({ failedWith: 0 });
+      backend.expectNone(() => true);
+    });
+
+    it('fails the auth check at once, never from saved data', async () => {
+      save('/api/auth/me', { username: 'owner' });
+
+      expect(await read('/api/auth/me')).toEqual({ failedWith: 0 });
       backend.expectNone(() => true);
     });
 
