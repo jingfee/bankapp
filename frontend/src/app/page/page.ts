@@ -5,6 +5,7 @@ import {
   type ElementRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   signal,
@@ -81,11 +82,17 @@ export class Page {
   readonly fetchedAt = input<readonly (Date | undefined)[]>([]);
 
   private readonly offline = inject(Offline);
-  /** Only while offline: the oldest fetch time, formatted. */
-  protected readonly savedFrom = computed(() => {
+  /** The time the line is worded against, so `idag` becomes `igår` after midnight. */
+  private readonly now = signal(new Date());
+  private readonly oldest = computed(() => {
     if (!this.offline.isOffline()) return undefined;
     const times = this.fetchedAt().flatMap((at) => (at ? [at.getTime()] : []));
-    return times.length === 0 ? undefined : dateTime(new Date(Math.min(...times)).toISOString());
+    return times.length === 0 ? undefined : new Date(Math.min(...times));
+  });
+  /** Only while offline: the oldest fetch time, formatted. */
+  protected readonly savedFrom = computed(() => {
+    const oldest = this.oldest();
+    return oldest ? dateTime(oldest.toISOString(), this.now()) : undefined;
   });
 
   private readonly sentinel = viewChild.required<ElementRef<HTMLElement>>('sentinel');
@@ -94,6 +101,13 @@ export class Page {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
+    // A clock only while the line is shown.
+    effect((onCleanup) => {
+      if (!this.oldest()) return;
+      this.now.set(new Date());
+      const timer = setInterval(() => this.now.set(new Date()), 60_000);
+      onCleanup(() => clearInterval(timer));
+    });
     afterNextRender(() => {
       if (typeof IntersectionObserver === 'undefined') return;
       const observer = new IntersectionObserver(([entry]) =>

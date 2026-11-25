@@ -74,7 +74,7 @@ describe('Page saved-data line', () => {
   const line = (el: HTMLElement) => el.querySelector('[data-saved-data]')?.textContent?.trim();
 
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-11-25T12:00:00+01:00'));
     isOffline.set(false);
     TestBed.configureTestingModule({
@@ -112,6 +112,19 @@ describe('Page saved-data line', () => {
     ]);
     fixture.detectChanges();
     expect(line(fixture.nativeElement)).toBe('Visar sparad data från 10 nov 08:15');
+  });
+
+  it('turns idag into igår when the device stays offline past midnight', () => {
+    isOffline.set(true);
+    vi.setSystemTime(new Date('2026-11-25T23:50:00+01:00'));
+    const fixture = TestBed.createComponent(SavedHost);
+    fixture.componentInstance.reads.set([new Date('2026-11-25T14:02:00+01:00')]);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBe('Visar sparad data från idag 14:02');
+
+    vi.advanceTimersByTime(20 * 60 * 1000);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBe('Visar sparad data från igår 14:02');
   });
 
   it('says nothing when no read has been fetched', () => {
