@@ -16,13 +16,20 @@ export class OverviewController {
     );
   }
 
+  /**
+   * The transactions behind the month's breakdown: every categorised one, or only those of
+   * `subcategoryId` when it is given. The app reads the whole month once, so a month it has
+   * saved can be drilled into offline (ADR 0017).
+   */
   @Get('transactions')
   transactions(
     @Query('month') month?: string,
     @Query('subcategoryId') subcategoryId?: string,
   ): OverviewTransactionsResponse {
-    if (month === undefined || subcategoryId === undefined || !/^\d{1,15}$/.test(subcategoryId)) {
-      throw new BadRequestException('month and subcategoryId are required');
+    if (month === undefined) throw new BadRequestException('month is required');
+    if (subcategoryId === undefined) return this.overview.listForMonth(this.validMonth(month));
+    if (!/^\d{1,15}$/.test(subcategoryId)) {
+      throw new BadRequestException('subcategoryId must be a number');
     }
     return this.overview.listForSubcategory(this.validMonth(month), Number(subcategoryId));
   }

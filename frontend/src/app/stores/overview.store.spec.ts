@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import type { OverviewResponse } from '@bankapp/shared';
+import type { OverviewResponse, Transaction } from '@bankapp/shared';
 import { type Fact, Invalidation } from './invalidation';
 import { type OverviewParams, OverviewStore } from './overview.store';
 
@@ -144,8 +144,7 @@ describe('OverviewStore reads', () => {
     params.set({ month: '2026-11', subcategoryId: 12 });
     await settle();
     const request = http.expectOne((r) => r.url === '/api/overview/transactions');
-    expect(request.request.params.get('month')).toBe('2026-11');
-    expect(request.request.params.get('subcategoryId')).toBe('12');
+    expect(request.request.urlWithParams).toBe('/api/overview/transactions?month=2026-11');
     request.flush({ transactions: [] });
     await settle();
     expect(read.value()).toEqual({ transactions: [] });
@@ -153,5 +152,26 @@ describe('OverviewStore reads', () => {
     TestBed.inject(Invalidation).fire('shares');
     await settle();
     http.expectOne((r) => r.url === '/api/overview/transactions').flush({ transactions: [] });
+  });
+
+  it("reads the whole month once and picks each subcategory's transactions out of it", async () => {
+    const inSubcategory = (id: string, subcategoryId: number) =>
+      ({ id, category: { subcategory: { id: subcategoryId } } }) as unknown as Transaction;
+    const params = signal({ month: '2026-11', subcategoryId: 12 });
+    const read = TestBed.runInInjectionContext(() =>
+      TestBed.inject(OverviewStore).subcategoryTransactions(params),
+    );
+    await settle();
+    http.expectOne('/api/overview/transactions?month=2026-11').flush({
+      transactions: [inSubcategory('a', 12), inSubcategory('b', 13), inSubcategory('c', 12)],
+    });
+    await settle();
+    expect(read.value()?.transactions.map((t) => t.id)).toEqual(['a', 'c']);
+
+    params.set({ month: '2026-11', subcategoryId: 13 });
+    await settle();
+
+    http.expectNone((r) => r.url === '/api/overview/transactions');
+    expect(read.value()?.transactions.map((t) => t.id)).toEqual(['b']);
   });
 });
