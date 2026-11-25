@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { LOGIN_PATH } from '../auth/auth.guard';
+import { PendingLogout } from '../auth/pending-logout';
 import { OfflineWarmup } from '../offline-warmup.service';
 import { Invalidation } from '../stores/invalidation';
 
@@ -51,6 +52,7 @@ export function saveFailureMessage(error: unknown, fallback: string): string {
 export class Offline {
   private readonly invalidation = inject(Invalidation);
   private readonly warmup = inject(OfflineWarmup);
+  private readonly pendingLogout = inject(PendingLogout);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -83,7 +85,12 @@ export class Offline {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((event) => {
-        if (this.started || event.urlAfterRedirects.startsWith(LOGIN_PATH)) return;
+        if (event.urlAfterRedirects.startsWith(LOGIN_PATH)) {
+          // Signed out offline: the login page is where the reminder to end the session waits.
+          if (this.pendingLogout.isPending()) void this.check();
+          return;
+        }
+        if (this.started) return;
         this.started = true;
         void this.check();
       });
@@ -121,7 +128,10 @@ export class Offline {
     if (!reachable) {
       this.offline.set(true);
       this.scheduleCheck();
-    } else if (this.offline()) {
+      return;
+    }
+    void this.pendingLogout.send();
+    if (this.offline()) {
       this.offline.set(false);
       this.invalidation.refreshAll();
       this.warmup.rerun();
