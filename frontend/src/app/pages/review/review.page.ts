@@ -17,6 +17,7 @@ import { accountLabel } from '../../share-display';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Empty } from '../../empty/empty';
 import { OfflineDisabled } from '../../offline/offline-disabled';
 import { Offline, saveFailureMessage } from '../../offline/offline.service';
@@ -32,6 +33,7 @@ const COLLAPSE_MS = 450;
 @Component({
   selector: 'app-review-page',
   imports: [
+    ReadFailed,
     RouterLink,
     ShortDatePipe,
     MoneyPipe,
@@ -56,9 +58,7 @@ const COLLAPSE_MS = 450;
           <div aria-busy="true"><app-skeleton [count]="5" /></div>
         }
         @case ('failed') {
-          <app-callout variant="danger"
-            >Transaktionerna kunde inte hämtas. Försök igen senare.</app-callout
-          >
+          <app-read-failed>Transaktionerna kunde inte hämtas. Försök igen senare.</app-read-failed>
         }
         @default {
           <header class="flex flex-col gap-3">
