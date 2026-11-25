@@ -54,6 +54,8 @@ describe('warming up saved data', () => {
         '/api/overview?month=2026-11&view=full',
         '/api/overview?month=2026-10&view=mine',
         '/api/overview?month=2026-10&view=full',
+        '/api/overview/transactions?month=2026-11',
+        '/api/overview/transactions?month=2026-10',
         '/api/transactions',
         '/api/transactions/review',
         '/api/transactions/review/count',
@@ -91,7 +93,7 @@ describe('warming up saved data', () => {
 
       warmup.rerun();
 
-      expect(fetched()).toHaveLength(17);
+      expect(fetched()).toHaveLength(19);
     });
 
     it('does nothing when nobody is signed in', () => {
@@ -117,7 +119,7 @@ describe('warming up saved data', () => {
 
     it('runs once the owner is in the app, and only once however much they navigate', async () => {
       await router.navigateByUrl('/banker');
-      expect(fetched()).toHaveLength(17);
+      expect(fetched()).toHaveLength(19);
 
       await router.navigateByUrl('/delat');
       await router.navigateByUrl('/');
@@ -131,7 +133,7 @@ describe('warming up saved data', () => {
       await router.navigateByUrl('/logga-in');
       await router.navigateByUrl('/banker');
 
-      expect(fetched()).toHaveLength(17);
+      expect(fetched()).toHaveLength(19);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type {
   OverviewCategory,
   OverviewResponse,
@@ -81,6 +81,17 @@ export class OverviewService {
       transactions: queryTransactions(this.db, {
         ...countedIn(month),
         where: eq(transactions.subcategoryId, subcategoryId),
+        orderBy: [desc(transactions.date), desc(transactions.id)],
+      }).map(toListed),
+    };
+  }
+
+  /** Every categorised transaction in `month`, newest first: each subcategory's drill-down at once. */
+  listForMonth(month: string): OverviewTransactionsResponse {
+    return {
+      transactions: queryTransactions(this.db, {
+        ...countedIn(month),
+        where: isNotNull(transactions.subcategoryId),
         orderBy: [desc(transactions.date), desc(transactions.id)],
       }).map(toListed),
     };

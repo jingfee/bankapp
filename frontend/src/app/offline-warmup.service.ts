@@ -6,6 +6,7 @@ import { filter } from 'rxjs';
 import { OVERVIEW_VIEWS } from '@bankapp/shared';
 import { LOGIN_PATH } from './auth/auth.guard';
 import { monthOf, shiftMonth } from './dates';
+import { overviewTransactionsRequest } from './stores/overview.store';
 
 /**
  * Fetches the main pages' reads in the background, so the service worker keeps them as saved
@@ -53,6 +54,8 @@ export class OfflineWarmup {
     const month = monthOf(new Date());
     for (const target of [month, shiftMonth(month, -1)]) {
       for (const view of OVERVIEW_VIEWS) this.get('/api/overview', { month: target, view });
+      const drillDowns = overviewTransactionsRequest(target);
+      this.get(drillDowns.url, drillDowns.params);
     }
     for (const url of [
       '/api/transactions',

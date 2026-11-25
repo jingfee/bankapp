@@ -305,8 +305,20 @@ describe('overview of a month', () => {
     expect(body.transactions.map((t) => t.id)).toEqual([late, early]);
   });
 
-  it('rejects a transactions request without a valid month and subcategory', async () => {
+  it('lists every categorised transaction of a month at once, newest first, for drilling down offline', async () => {
+    const food = store(-10, '2026-11-02', 'Livsmedel');
+    const dinner = store(-40, '2026-11-21', 'Restaurang');
+    store(-30, '2026-10-20', 'Livsmedel');
+    store(-50, '2026-11-22', null);
+    const body = (
+      await api(app).get('/api/overview/transactions').query({ month: '2026-11' }).expect(200)
+    ).body as OverviewTransactionsResponse;
+    expect(body.transactions.map((t) => t.id)).toEqual([dinner, food]);
+  });
+
+  it('rejects a transactions request without a valid month or subcategory', async () => {
     await api(app).get('/api/overview/transactions').expect(400);
+    await api(app).get('/api/overview/transactions').query({ month: 'x' }).expect(400);
     await api(app)
       .get('/api/overview/transactions')
       .query({ month: '2026-11', subcategoryId: 'x' })

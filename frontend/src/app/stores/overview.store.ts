@@ -1,4 +1,4 @@
-import { Injectable, type Signal, forwardRef, inject } from '@angular/core';
+import { Injectable, type Signal, computed, forwardRef, inject } from '@angular/core';
 import type { OverviewResponse, OverviewTransactionsResponse, OverviewView } from '@bankapp/shared';
 import { Invalidation } from './invalidation';
 import { type ParamRead, paramRead } from './kept';
@@ -29,7 +29,8 @@ export abstract class OverviewStore {
   abstract overview(params: Signal<OverviewParams>): ParamRead<OverviewResponse>;
   /**
    * The transactions of one subcategory in one month, newest first. Nothing is fetched while
-   * `params` is undefined.
+   * `params` is undefined. The whole month is read at once and the subcategory picked out of it,
+   * so every drill-down of a month the device has saved works offline (ADR 0017).
    */
   abstract subcategoryTransactions(
     params: Signal<SubcategoryParams | undefined>,
@@ -51,13 +52,28 @@ export class HttpOverviewStore extends OverviewStore {
   subcategoryTransactions(
     params: Signal<SubcategoryParams | undefined>,
   ): ParamRead<OverviewTransactionsResponse> {
-    return paramRead<SubcategoryParams, OverviewTransactionsResponse>(
-      params,
-      ({ month, subcategoryId }) => ({
-        url: '/api/overview/transactions',
-        params: { month, subcategoryId },
-      }),
+    const month = paramRead<string, OverviewTransactionsResponse>(
+      computed(() => params()?.month),
+      (month) => overviewTransactionsRequest(month),
       this.invalidation.version('overview'),
     );
+    return {
+      ...month,
+      value: computed(() => {
+        const subcategoryId = params()?.subcategoryId;
+        const all = month.value();
+        if (subcategoryId === undefined || all === undefined) return undefined;
+        return {
+          transactions: all.transactions.filter(
+            (t) => t.category?.subcategory.id === subcategoryId,
+          ),
+        };
+      }),
+    };
   }
+}
+
+/** The read behind a month's drill-downs; the warm-up asks for the same, so it is saved. */
+export function overviewTransactionsRequest(month: string) {
+  return { url: '/api/overview/transactions', params: { month } };
 }

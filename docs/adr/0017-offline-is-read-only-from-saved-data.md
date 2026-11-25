@@ -11,7 +11,7 @@ Offline means the app cannot reach its own server, or the server cannot answer (
 ## What is saved
 
 - Every read the owner has opened is kept, as it was last fetched.
-- On every start and every return from offline, the app also fetches the current and previous month's overview in both views, the first page of transactions, the review list, everything on the Delat, Bolån, Sparande and Banker pages, accounts and categories. The main pages therefore work offline even if they were not opened recently.
+- On every start and every return from offline, the app also fetches the current and previous month's overview in both views and the transactions behind it (read a month at a time, so every category can be drilled into), the first page of transactions, the review list, everything on the Delat, Bolån, Sparande and Banker pages, accounts and categories. The main pages therefore work offline even if they were not opened recently.
 - Saved data older than 30 days is not shown. Logging out deletes it.
 
 ## How it behaves offline

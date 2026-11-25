@@ -89,7 +89,7 @@ describe('service worker caching', () => {
       '/api/mortgage',
       '/api/mortgage/figures',
       '/api/overview?month=2026-11&view=mine',
-      '/api/overview/transactions?month=2026-11&subcategoryId=3',
+      '/api/overview/transactions?month=2026-11',
       '/api/savings',
       '/api/settlement',
       '/api/transactions',
@@ -120,7 +120,7 @@ describe('service worker caching', () => {
       expect(pages).not.toBe(opened);
       expect(opened?.cacheConfig.maxSize).toBeGreaterThanOrEqual(500);
       // Months and drill-downs the owner has been through are browsing too, not main pages.
-      expect(dataGroupFor('/api/overview/transactions?month=2026-11&subcategoryId=3')).toBe(opened);
+      expect(dataGroupFor('/api/overview/transactions?month=2026-11')).toBe(opened);
       expect(dataGroupFor('/api/transactions?q=ica')).toBe(opened);
       expect(dataGroupFor('/api/overview?month=2026-11&view=mine')).toBe(pages);
     });
