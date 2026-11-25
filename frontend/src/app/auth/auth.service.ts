@@ -1,8 +1,9 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { LoginRequest, MeResponse } from '@bankapp/shared';
-import { type Observable, catchError, map, of, tap, throwError } from 'rxjs';
+import { type Observable, catchError, from, map, of, switchMap, tap, throwError } from 'rxjs';
 import { Offline, isOfflineFailure } from '../offline/offline.service';
+import { hasSavedData } from '../offline/saved-data';
 import { PendingLogout } from './pending-logout';
 
 /** Whether the owner is signed in, as far as the server has told us. */
@@ -13,11 +14,24 @@ export class AuthService {
   private readonly pending = inject(PendingLogout);
   private signedIn = false;
 
-  /** Asks the server whether the session cookie is still good; remembered once it is. */
+  /**
+   * Asks the server whether the session cookie is still good; remembered once it is.
+   *
+   * While the app is starting, a device with saved data lets the owner in at once, without
+   * waiting for the server (ADR 0018): logging out deletes saved data, so it means the owner was
+   * signed in here. If the session has ended on the server, the background refresh gets a 401 and
+   * the auth interceptor sends the owner to the login page.
+   */
   check(): Observable<boolean> {
     // Signed out offline: the server session may still be live, but the owner chose to leave.
     if (this.pending.isPending()) return of(false);
     if (this.signedIn) return of(true);
+    // No `caches`, no saved data: nothing to show before the server answers.
+    if (!this.offline.isStarting() || typeof caches === 'undefined') return this.askServer();
+    return from(hasSavedData()).pipe(switchMap((saved) => (saved ? of(true) : this.askServer())));
+  }
+
+  private askServer(): Observable<boolean> {
     return this.http.get<MeResponse>('/api/auth/me').pipe(
       tap(() => (this.signedIn = true)),
       map(() => true),

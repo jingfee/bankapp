@@ -4,12 +4,15 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { OFFLINE_TIMEOUT_MS, Offline } from './offline.service';
 import { offlineInterceptor } from './offline.interceptor';
+import { SAVED_DATA_MAX_AGE_MS } from './saved-data';
 
 describe('offlineInterceptor', () => {
   let http: HttpClient;
   let backend: HttpTestingController;
   let offline: Offline;
   let saved: Map<string, unknown>;
+  /** The `Date` each saved response carries, when it is not now. */
+  let dates: Map<string, string>;
 
   /** What the service worker has saved, by URL. */
   function save(url: string, body: unknown) {
@@ -19,11 +22,15 @@ describe('offlineInterceptor', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     saved = new Map();
+    dates = new Map();
     vi.stubGlobal('caches', {
       match: (url: string) =>
         Promise.resolve(
           saved.has(url)
-            ? new Response(JSON.stringify(saved.get(url)), { status: 200 })
+            ? new Response(JSON.stringify(saved.get(url)), {
+                status: 200,
+                headers: { Date: dates.get(url) ?? new Date().toUTCString() },
+              })
             : undefined,
         ),
     });
@@ -46,6 +53,13 @@ describe('offlineInterceptor', () => {
     vi.unstubAllGlobals();
   });
 
+  /** The server has answered the health check since the start: reads go to it first. */
+  async function reachServer() {
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+    await offline.check();
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')));
+  }
+
   /** The result of a read: its body, or the status of the error. */
   async function read(url: string): Promise<unknown> {
     const result = new Promise((resolve) =>
@@ -59,6 +73,8 @@ describe('offlineInterceptor', () => {
   }
 
   describe('which failures mean offline', () => {
+    beforeEach(reachServer);
+
     it.each([502, 503, 504])('goes offline on a %s', async (status) => {
       const result = read('/api/settlement');
       backend.expectOne('/api/settlement').flush(null, { status, statusText: 'x' });
@@ -97,6 +113,8 @@ describe('offlineInterceptor', () => {
   });
 
   describe('the timeout', () => {
+    beforeEach(reachServer);
+
     it('decides offline when a read has not been answered after about 3 seconds', async () => {
       save('/api/settlement', { balance: 5 });
       const result = read('/api/settlement');
@@ -183,6 +201,45 @@ describe('offlineInterceptor', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       backend.expectOne('/api/sync').flush(null, { status: 503, statusText: 'x' });
+    });
+  });
+
+  describe('when the app starts, before the server has answered', () => {
+    it('shows saved data straight away, without asking the server', async () => {
+      save('/api/settlement', { balance: 5 });
+
+      expect(await read('/api/settlement')).toEqual({ balance: 5 });
+      backend.expectNone(() => true);
+      expect(offline.isOffline()).toBe(false);
+    });
+
+    it('asks the server for a read that was never saved', async () => {
+      const result = read('/api/settlement');
+      await vi.advanceTimersByTimeAsync(0);
+      backend.expectOne('/api/settlement').flush({ balance: 1 });
+
+      expect(await result).toEqual({ balance: 1 });
+    });
+
+    it('does not show saved data older than 30 days', async () => {
+      const old = new Date(Date.now() - SAVED_DATA_MAX_AGE_MS - 60_000).toUTCString();
+      saved.set('/api/settlement', { balance: 5 });
+      dates.set('/api/settlement', old);
+      const result = read('/api/settlement');
+      await vi.advanceTimersByTimeAsync(0);
+      backend.expectOne('/api/settlement').flush({ balance: 1 });
+
+      expect(await result).toEqual({ balance: 1 });
+    });
+
+    it('asks the server first once it has answered', async () => {
+      save('/api/settlement', { balance: 5 });
+      await reachServer();
+
+      const result = read('/api/settlement');
+      backend.expectOne('/api/settlement').flush({ balance: 1 });
+
+      expect(await result).toEqual({ balance: 1 });
     });
   });
 

@@ -203,6 +203,29 @@ describe('Offline', () => {
       expect(offline.isOffline()).toBe(true);
     });
 
+    it('refreshes every read and the warm-up when the server first answers, if saved data was shown', async () => {
+      serverAnswers(200);
+      offline.showedSavedData();
+
+      await offline.check();
+
+      expect(offline.isStarting()).toBe(false);
+      expect([...refreshed].sort()).toEqual([...ALL_READS].sort());
+      expect(warmups).toBe(1);
+      offline.showedSavedData();
+      await offline.check();
+      expect(warmups).toBe(1);
+    });
+
+    it('is still starting while the server has not answered', async () => {
+      serverAnswers('never');
+
+      await offline.check();
+
+      expect(offline.isStarting()).toBe(true);
+      expect(offline.isOffline()).toBe(true);
+    });
+
     it('does not warm up again when nothing was wrong', async () => {
       serverAnswers(200);
 
