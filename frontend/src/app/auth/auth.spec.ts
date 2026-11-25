@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from '../app.routes';
+import { Offline } from '../offline/offline.service';
 import { authInterceptor } from './auth.interceptor';
 import { AuthService } from './auth.service';
 
@@ -106,7 +107,7 @@ describe('authentication', () => {
       let failed = false;
 
       auth.logout().subscribe({ error: () => (failed = true) });
-      http.expectOne('/api/auth/logout').error(new ProgressEvent('error'));
+      http.expectOne('/api/auth/logout').flush(null, { status: 500, statusText: 'Server Error' });
       auth.check().subscribe();
 
       expect(failed).toBe(true);
@@ -123,6 +124,114 @@ describe('authentication', () => {
       auth.check().subscribe();
 
       http.expectOne('/api/auth/me').flush(null, unauthorised);
+    });
+
+    describe('logging out while offline', () => {
+      const noContent = { status: 204, statusText: 'No Content' };
+      let names: string[];
+
+      beforeEach(() => {
+        localStorage.clear();
+        names = ['ngsw:/:db:control', 'ngsw:/:1a2b3c:data:pages:cache'];
+        vi.stubGlobal('caches', {
+          keys: () => Promise.resolve([...names]),
+          delete: (name: string) => {
+            names = names.filter((existing) => existing !== name);
+            return Promise.resolve(true);
+          },
+        });
+      });
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+        localStorage.clear();
+      });
+
+      /** The app is offline and the owner presses Logga ut. */
+      function logOutOffline() {
+        const auth = TestBed.inject(AuthService);
+        TestBed.inject(Offline).markOffline();
+        let done = false;
+        auth.logout().subscribe(() => (done = true));
+        return { auth, done: () => done };
+      }
+
+      it('deletes saved data at once, without asking the server, and counts as signed out', async () => {
+        const { auth, done } = logOutOffline();
+
+        http.expectNone('/api/auth/logout');
+        expect(done()).toBe(true);
+        await vi.waitFor(() => expect(names).toEqual(['ngsw:/:db:control']));
+        const answers: boolean[] = [];
+        auth.check().subscribe((ok) => answers.push(ok));
+        http.expectNone('/api/auth/me');
+        expect(answers).toEqual([false]);
+      });
+
+      it('deletes saved data and signs out too when the logout request finds no server', async () => {
+        const auth = TestBed.inject(AuthService);
+        let done = false;
+
+        auth.logout().subscribe(() => (done = true));
+        http.expectOne('/api/auth/logout').error(new ProgressEvent('error'));
+
+        expect(done).toBe(true);
+        await vi.waitFor(() => expect(names).toEqual(['ngsw:/:db:control']));
+      });
+
+      it('sends the pending logout once when the server is reached again', async () => {
+        logOutOffline();
+        vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+
+        await TestBed.inject(Offline).check();
+        http.expectOne('/api/auth/logout').flush(null, noContent);
+        await TestBed.inject(Offline).check();
+
+        http.expectNone('/api/auth/logout');
+      });
+
+      it('keeps the reminder, across a restart, until the server has answered', async () => {
+        logOutOffline();
+        vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+        await TestBed.inject(Offline).check();
+        http.expectOne('/api/auth/logout').error(new ProgressEvent('error'));
+
+        expect(localStorage.length).toBeGreaterThan(0);
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+          providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes)],
+        });
+        http = TestBed.inject(HttpTestingController);
+        TestBed.inject(Offline).markOffline();
+        await TestBed.inject(Offline).check();
+
+        http.expectOne('/api/auth/logout').flush(null, noContent);
+      });
+
+      it('does not end the new session when the owner logs in before the server was reached', async () => {
+        const { auth } = logOutOffline();
+
+        auth.login({ username: 'owner', password: 'x' }).subscribe();
+        http.expectOne('/api/auth/login').flush(null, noContent);
+        vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+        await TestBed.inject(Offline).check();
+
+        http.expectNone('/api/auth/logout');
+        const answers: boolean[] = [];
+        auth.check().subscribe((ok) => answers.push(ok));
+        expect(answers).toEqual([true]);
+      });
+
+      it('keeps the reminder when the login itself fails', async () => {
+        const { auth } = logOutOffline();
+
+        auth.login({ username: 'owner', password: 'wrong' }).subscribe({ error: () => undefined });
+        http.expectOne('/api/auth/login').flush(null, unauthorised);
+        vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+        await TestBed.inject(Offline).check();
+
+        http.expectOne('/api/auth/logout').flush(null, noContent);
+      });
     });
 
     describe('saved data', () => {

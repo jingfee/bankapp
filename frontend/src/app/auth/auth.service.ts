@@ -1,16 +1,22 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { LoginRequest, MeResponse } from '@bankapp/shared';
-import { type Observable, catchError, map, of, tap } from 'rxjs';
+import { type Observable, catchError, map, of, tap, throwError } from 'rxjs';
+import { Offline, isOfflineFailure } from '../offline/offline.service';
+import { PendingLogout } from './pending-logout';
 
 /** Whether the owner is signed in, as far as the server has told us. */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly offline = inject(Offline);
+  private readonly pending = inject(PendingLogout);
   private signedIn = false;
 
   /** Asks the server whether the session cookie is still good; remembered once it is. */
   check(): Observable<boolean> {
+    // Signed out offline: the server session may still be live, but the owner chose to leave.
+    if (this.pending.isPending()) return of(false);
     if (this.signedIn) return of(true);
     return this.http.get<MeResponse>('/api/auth/me').pipe(
       tap(() => (this.signedIn = true)),
@@ -25,15 +31,37 @@ export class AuthService {
   }
 
   login(request: LoginRequest): Observable<void> {
-    return this.http.post<void>('/api/auth/login', request).pipe(tap(() => (this.signedIn = true)));
+    return this.http.post<void>('/api/auth/login', request).pipe(
+      tap(() => {
+        this.signedIn = true;
+        // A new session: ending "the" session later would end this one.
+        this.pending.clear();
+      }),
+    );
   }
 
+  /**
+   * Online, the server ends the session and then saved data is deleted. Offline (or when the
+   * server cannot be reached) saved data is deleted at once and the server is told on the next
+   * reconnect (ADR 0017).
+   */
   logout(): Observable<void> {
+    if (this.offline.isOffline()) return of(this.logoutOffline());
     return this.http.post<void>('/api/auth/logout', {}).pipe(
       // Only a session the server has ended counts as logged out; if the request fails the
       // session is still live, so the error goes to the caller instead of pretending.
       tap(() => this.markSignedOut()),
+      catchError((error: unknown) => {
+        if (!isOfflineFailure(error)) return throwError(() => error);
+        this.offline.markOffline();
+        return of(this.logoutOffline());
+      }),
     );
+  }
+
+  private logoutOffline(): void {
+    this.pending.remember();
+    this.markSignedOut();
   }
 
   /** The session is over, by logout or because the server rejected it. */
