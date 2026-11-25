@@ -8,7 +8,7 @@ import type {
 } from '@bankapp/shared';
 import { type Observable, tap } from 'rxjs';
 import { Invalidation } from './invalidation';
-import { keptValue } from './kept';
+import { keptFetchedAt, keptValue } from './kept';
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpSettlementStore) })
 export abstract class SettlementStore {
@@ -17,6 +17,8 @@ export abstract class SettlementStore {
    * what was fetched before; undefined until the first fetch succeeds.
    */
   abstract readonly settlement: Signal<SettlementResponse | undefined>;
+  /** When the device fetched `settlement`; undefined until the first fetch succeeds. */
+  abstract readonly fetchedAt: Signal<Date | undefined>;
   /** True while the first fetch is under way. */
   abstract readonly loading: Signal<boolean>;
   /** True when the settlement could not be fetched and there is nothing older to show. */
@@ -49,6 +51,7 @@ export class HttpSettlementStore extends SettlementStore {
   );
 
   readonly settlement = keptValue(this.resource, this.active);
+  readonly fetchedAt = keptFetchedAt(this.resource, this.active);
   readonly loading = computed(() => this.resource.isLoading() && this.settlement() === undefined);
   readonly failed = computed(
     () => this.resource.status() === 'error' && this.settlement() === undefined,

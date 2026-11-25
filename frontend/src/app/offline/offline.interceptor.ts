@@ -1,5 +1,6 @@
 import {
   HttpErrorResponse,
+  HttpHeaders,
   HttpEventType,
   type HttpInterceptorFn,
   type HttpRequest,
@@ -31,7 +32,10 @@ async function savedResponse(
     const saved = await caches.match(request.urlWithParams);
     if (!saved) return undefined;
     const text = await saved.text();
+    // The saved response's `Date` is when the device fetched it; pages show it (`fetchedAt`).
+    const date = saved.headers.get('Date');
     return new HttpResponse({
+      headers: new HttpHeaders(date ? { Date: date } : {}),
       body: text === '' ? null : (JSON.parse(text) as unknown),
       status: saved.status,
       url: request.urlWithParams,

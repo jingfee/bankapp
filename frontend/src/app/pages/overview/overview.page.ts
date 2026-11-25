@@ -168,7 +168,7 @@ function bars<T extends { id: number; name: string; total: number }>(
     Skeleton,
   ],
   template: `
-    <app-page>
+    <app-page [fetchedAt]="fetchedAt()">
       <div page-title class="flex items-center gap-1">
         <button
           type="button"
@@ -690,6 +690,12 @@ export class OverviewPage {
     this.subRead.loading() ? 'loading' : this.subRead.failed() ? 'failed' : 'ready',
   );
   protected readonly subTransactions = computed(() => this.subRead.value()?.transactions ?? []);
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [
+    this.overviewRead.fetchedAt(),
+    this.subRead.fetchedAt(),
+    this.settlementStore.fetchedAt(),
+  ]);
 
   protected readonly canGoForward = computed(() => this.month() < this.currentMonth);
 

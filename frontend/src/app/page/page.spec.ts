@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Offline } from '../offline/offline.service';
 import { Page } from './page';
 
 @Component({
@@ -57,5 +58,66 @@ describe('Page', () => {
     expect(el.querySelector('[data-custom-title]')?.textContent).toBe('Egen titel');
     expect(el.querySelector('[data-custom-subtitle]')?.textContent).toBe('Egen status');
     expect(el.querySelector('[data-page-title]')).toBeNull();
+  });
+});
+
+@Component({
+  imports: [Page],
+  template: `<app-page title="Rubrik" [fetchedAt]="reads()"><p>Innehåll</p></app-page>`,
+})
+class SavedHost {
+  readonly reads = signal<(Date | undefined)[]>([]);
+}
+
+describe('Page saved-data line', () => {
+  const isOffline = signal(false);
+  const line = (el: HTMLElement) => el.querySelector('[data-saved-data]')?.textContent?.trim();
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-25T12:00:00+01:00'));
+    isOffline.set(false);
+    TestBed.configureTestingModule({
+      providers: [{ provide: Offline, useValue: { isOffline: isOffline.asReadonly() } }],
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('says nothing while online', () => {
+    const fixture = TestBed.createComponent(SavedHost);
+    fixture.componentInstance.reads.set([new Date('2026-11-24T14:02:00+01:00')]);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBeUndefined();
+  });
+
+  it('says when the saved data was fetched while offline, and goes when back online', () => {
+    isOffline.set(true);
+    const fixture = TestBed.createComponent(SavedHost);
+    fixture.componentInstance.reads.set([new Date('2026-11-24T14:02:00+01:00')]);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBe('Visar sparad data från igår 14:02');
+
+    isOffline.set(false);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBeUndefined();
+  });
+
+  it('shows the oldest of several reads', () => {
+    isOffline.set(true);
+    const fixture = TestBed.createComponent(SavedHost);
+    fixture.componentInstance.reads.set([
+      new Date('2026-11-25T09:30:00+01:00'),
+      new Date('2026-11-10T08:15:00+01:00'),
+      undefined,
+    ]);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBe('Visar sparad data från 10 nov 08:15');
+  });
+
+  it('says nothing when no read has been fetched', () => {
+    isOffline.set(true);
+    const fixture = TestBed.createComponent(SavedHost);
+    fixture.detectChanges();
+    expect(line(fixture.nativeElement)).toBeUndefined();
   });
 });

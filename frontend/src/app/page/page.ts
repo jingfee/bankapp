@@ -4,11 +4,14 @@ import {
   DestroyRef,
   type ElementRef,
   afterNextRender,
+  computed,
   inject,
   input,
   signal,
   viewChild,
 } from '@angular/core';
+import { dateTime } from '../formatting/date-time.pipe';
+import { Offline } from '../offline/offline.service';
 
 /**
  * The shell every routed page sits in: the `<main>` with its width, padding and vertical rhythm,
@@ -23,6 +26,9 @@ import {
  * - `[page-actions]`: sits to the right of the title and wraps below it when there is no room.
  *
  * Everything else is the page body.
+ *
+ * While offline, a line under the title says when the device fetched the data the page shows
+ * (ADR 0017): the oldest of the `fetchedAt` times the page passes in, one per read.
  */
 @Component({
   selector: 'app-page',
@@ -58,6 +64,9 @@ import {
           <p data-page-subtitle class="text-muted max-sm:-mt-5">{{ text }}</p>
         }
         <div class="contents max-sm:[&>*]:-mt-5"><ng-content select="[page-subtitle]" /></div>
+        @if (savedFrom(); as from) {
+          <p data-saved-data class="text-muted max-sm:-mt-5">Visar sparad data från {{ from }}</p>
+        }
       </header>
       <ng-content />
     </main>
@@ -68,6 +77,16 @@ export class Page {
   readonly width = input<'narrow' | 'wide'>('wide');
   readonly title = input<string>();
   readonly subtitle = input<string>();
+  /** When the device fetched each read the page shows; reads not fetched yet are `undefined`. */
+  readonly fetchedAt = input<readonly (Date | undefined)[]>([]);
+
+  private readonly offline = inject(Offline);
+  /** Only while offline: the oldest fetch time, formatted. */
+  protected readonly savedFrom = computed(() => {
+    if (!this.offline.isOffline()) return undefined;
+    const times = this.fetchedAt().flatMap((at) => (at ? [at.getTime()] : []));
+    return times.length === 0 ? undefined : dateTime(new Date(Math.min(...times)).toISOString());
+  });
 
   private readonly sentinel = viewChild.required<ElementRef<HTMLElement>>('sentinel');
   /** True once the page has scrolled under the sticky phone header. */

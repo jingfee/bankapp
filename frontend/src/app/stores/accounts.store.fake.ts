@@ -11,6 +11,7 @@ export class FakeAccountsStore extends AccountsStore {
   readonly failures = this.recorder.failures;
 
   readonly accounts = signal<AccountsResponse | undefined>(undefined);
+  readonly fetchedAt = signal<Date | undefined>(undefined);
   readonly loading = signal(false);
   readonly failed = signal(false);
 

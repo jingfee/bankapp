@@ -84,7 +84,7 @@ interface Chart {
     Skeleton,
   ],
   template: `
-    <app-page title="Sparande">
+    <app-page title="Sparande" [fetchedAt]="fetchedAt()">
       @if (failed()) {
         <app-callout variant="danger">Sparandet kunde inte hämtas. Försök igen senare.</app-callout>
       } @else if (!data()) {
@@ -304,6 +304,8 @@ interface Chart {
 })
 export class SparandePage {
   private readonly read = inject(SavingsStore).savings();
+  /** When the device fetched what the page shows; the page says so while offline. */
+  protected readonly fetchedAt = computed(() => [this.read.fetchedAt()]);
 
   protected readonly data = computed<SavingsResponse | null>(() => this.read.value() ?? null);
   protected readonly failed = this.read.failed;

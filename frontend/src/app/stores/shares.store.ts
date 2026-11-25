@@ -9,7 +9,7 @@ import type {
 } from '@bankapp/shared';
 import { type Observable, map, tap } from 'rxjs';
 import { Invalidation } from './invalidation';
-import { keptValue } from './kept';
+import { keptFetchedAt, keptValue } from './kept';
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpSharesStore) })
 export abstract class SharesStore {
@@ -19,6 +19,8 @@ export abstract class SharesStore {
   abstract readonly householdRatioInForceFrom: Signal<string | null | undefined>;
   /** The subcategories whose share is not Jag; undefined until they have been fetched. */
   abstract readonly subcategoryShares: Signal<SubcategoryShare[] | undefined>;
+  /** When the device fetched what is shown: the older of the ratio and the shares. */
+  abstract readonly fetchedAt: Signal<Date | undefined>;
   /** True while either is being fetched for the first time. */
   abstract readonly loading: Signal<boolean>;
   /** True when either could not be fetched and there is nothing older to show for it. */
@@ -51,6 +53,12 @@ export class HttpSharesStore extends SharesStore {
   private readonly ratioResponse = keptValue(this.ratioResource, this.active);
   private readonly sharesResponse = keptValue(this.sharesResource, this.active);
 
+  private readonly ratioFetchedAt = keptFetchedAt(this.ratioResource, this.active);
+  private readonly sharesFetchedAt = keptFetchedAt(this.sharesResource, this.active);
+  readonly fetchedAt = computed(() => {
+    const times = [this.ratioFetchedAt(), this.sharesFetchedAt()].flatMap((at) => (at ? [at] : []));
+    return times.length === 0 ? undefined : new Date(Math.min(...times.map((at) => at.getTime())));
+  });
   readonly householdRatio = computed(() => this.ratioResponse()?.entries);
   readonly householdRatioInForceFrom = computed(() => this.ratioResponse()?.inForceFrom);
   readonly subcategoryShares = computed(() => this.sharesResponse()?.shares);

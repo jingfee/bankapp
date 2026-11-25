@@ -13,6 +13,7 @@ export class FakeSharesStore extends SharesStore {
   readonly householdRatio = signal<HouseholdRatioEntry[] | undefined>(undefined);
   readonly householdRatioInForceFrom = signal<string | null | undefined>(undefined);
   readonly subcategoryShares = signal<SubcategoryShare[] | undefined>(undefined);
+  readonly fetchedAt = signal<Date | undefined>(undefined);
   readonly loading = signal(false);
   readonly failed = signal(false);
 

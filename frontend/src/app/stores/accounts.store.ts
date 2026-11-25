@@ -11,6 +11,7 @@ import {
 import type { AccountsResponse, ShareOption } from '@bankapp/shared';
 import { type Observable, tap } from 'rxjs';
 import { Invalidation } from './invalidation';
+import { keptFetchedAt } from './kept';
 
 @Injectable({ providedIn: 'root', useClass: forwardRef(() => HttpAccountsStore) })
 export abstract class AccountsStore {
@@ -19,6 +20,8 @@ export abstract class AccountsStore {
    * refresh that fails keeps what was fetched before; undefined until the first fetch succeeds.
    */
   abstract readonly accounts: Signal<AccountsResponse | undefined>;
+  /** When the device fetched `accounts`; undefined until the first fetch succeeds. */
+  abstract readonly fetchedAt: Signal<Date | undefined>;
   /** True while the first fetch is under way. */
   abstract readonly loading: Signal<boolean>;
   /** True when the accounts could not be fetched and there is nothing older to show. */
@@ -60,6 +63,7 @@ export class HttpAccountsStore extends AccountsStore {
       return next.value ?? (next.active ? previous?.value : undefined);
     },
   });
+  readonly fetchedAt = keptFetchedAt(this.resource, this.active);
   readonly loading = computed(() => this.resource.isLoading() && this.accounts() === undefined);
   readonly failed = computed(
     () => this.resource.status() === 'error' && this.accounts() === undefined,
