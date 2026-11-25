@@ -8,6 +8,8 @@ import { APP_LOCALE } from '../../formatting/locale';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { shortDate } from '../../formatting/short-date.pipe';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
+import { Offline } from '../../offline/offline.service';
 import { Empty } from '../../empty/empty';
 import { Icon } from '../../icon/icon';
 import { ManualTransactionSheet } from '../../manual-transaction-sheet/manual-transaction-sheet';
@@ -46,6 +48,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 @Component({
   selector: 'app-transactions-page',
   imports: [
+    ReadFailed,
     OfflineDisabled,
     TransactionList,
     RouterLink,
@@ -176,9 +179,7 @@ const SEARCH_DEBOUNCE_MS = 250;
           <div aria-busy="true"><app-skeleton [count]="8" /></div>
         }
         @case ('failed') {
-          <app-callout variant="danger"
-            >Transaktionerna kunde inte hämtas. Försök igen senare.</app-callout
-          >
+          <app-read-failed>Transaktionerna kunde inte hämtas. Försök igen senare.</app-read-failed>
         }
         @default {
           @if (transactions().length === 0) {
@@ -214,15 +215,20 @@ const SEARCH_DEBOUNCE_MS = 250;
             </p>
           }
           <app-transaction-list [transactions]="transactions()" />
-          @if (moreFailed()) {
+          @if (moreNotSaved()) {
+            <p data-more-not-saved class="text-center text-sm text-muted">
+              Inte sparad. Fler transaktioner hämtas först när du är online igen.
+            </p>
+          } @else if (moreFailed()) {
             <app-callout variant="danger">Fler transaktioner kunde inte hämtas.</app-callout>
           }
           @if (hasMore()) {
+            <!-- A read, not a change: offline it still asks for the next page, which may be saved. -->
             <button
               type="button"
               data-more
               class="btn btn-secondary w-full"
-              [appOfflineDisabled]="loadingMore()"
+              [disabled]="loadingMore() || moreNotSaved()"
               (click)="list.loadMore()"
             >
               Visa fler
@@ -280,6 +286,13 @@ export class TransactionsPage {
   protected readonly hasMore = this.list.hasMore;
   protected readonly loadingMore = this.list.loadingMore;
   protected readonly moreFailed = this.list.moreFailed;
+  private readonly offline = inject(Offline);
+  /**
+   * Offline, the next page was asked for and never saved: the saved pages have run out. This is
+   * not the end of the history, so the list says so and Visa fler stays disabled until the app
+   * is online and the list is fetched again.
+   */
+  protected readonly moreNotSaved = computed(() => this.moreFailed() && this.offline.isOffline());
 
   protected readonly filters = signal<TransactionFilters>(EMPTY_FILTERS);
   protected readonly searchText = signal('');

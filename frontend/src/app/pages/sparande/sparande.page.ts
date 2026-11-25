@@ -14,6 +14,7 @@ import {
 } from '../../chart-card/chart-card';
 import { monthTicks } from '../../chart-card/month-ticks';
 import { Callout } from '../../callout/callout';
+import { ReadFailed } from '../../offline/not-saved';
 import { Disclosure } from '../../disclosure/disclosure';
 import { Empty } from '../../empty/empty';
 import { Page } from '../../page/page';
@@ -72,6 +73,7 @@ interface Chart {
 @Component({
   selector: 'app-sparande-page',
   imports: [
+    ReadFailed,
     ChartCard,
     ShortDatePipe,
     Page,
@@ -86,7 +88,7 @@ interface Chart {
   template: `
     <app-page title="Sparande" [fetchedAt]="fetchedAt()">
       @if (failed()) {
-        <app-callout variant="danger">Sparandet kunde inte hämtas. Försök igen senare.</app-callout>
+        <app-read-failed>Sparandet kunde inte hämtas. Försök igen senare.</app-read-failed>
       } @else if (!data()) {
         <div aria-busy="true" class="flex flex-col gap-4">
           <app-skeleton shape="tiles" [count]="3" />

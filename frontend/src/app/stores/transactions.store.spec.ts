@@ -247,6 +247,20 @@ describe('TransactionsStore reads', () => {
       close();
     });
 
+    it('does not show the rows of other filters when the new filters cannot be fetched', () => {
+      const { read, request, close } = openList({ filters: EMPTY_FILTERS, restore: false });
+      http.expectOne(list).flush(page([row(1)], 'c1'));
+
+      request.set({ filters: { ...EMPTY_FILTERS, q: 'ica' }, restore: false });
+      TestBed.tick();
+      http.expectOne(list).error(new ProgressEvent('error'));
+
+      expect(read.status()).toBe('failed');
+      expect(read.transactions()).toEqual([]);
+      expect(read.hasMore()).toBe(false);
+      close();
+    });
+
     it('is not fetched again for a fact that does not touch it', () => {
       const { close } = openList({ filters: EMPTY_FILTERS, restore: false });
       http.expectOne(list).flush(page([row(1)]));

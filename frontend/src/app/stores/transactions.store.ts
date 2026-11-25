@@ -190,6 +190,8 @@ export class HttpTransactionsStore extends TransactionsStore {
     const loadingMore = signal(false);
     const moreFailed = signal(false);
     let current: TransactionListRequest | undefined;
+    /** The filters the rows shown were fetched for. */
+    let shownKey: string | undefined;
     let firstRequest: Subscription | undefined;
     let moreRequest: Subscription | undefined;
 
@@ -200,6 +202,15 @@ export class HttpTransactionsStore extends TransactionsStore {
       sum.set(page.sum);
       fetchedAt.set(page.fetchedAt);
       status.set('ready');
+    };
+    /** Rows of other filters are not a result for these: they are dropped, not kept. */
+    const clear = () => {
+      transactions.set([]);
+      cursor.set(null);
+      count.set(0);
+      sum.set(null);
+      fetchedAt.set(undefined);
+      shownKey = undefined;
     };
     const remember = () => {
       this.listed = {
@@ -217,18 +228,23 @@ export class HttpTransactionsStore extends TransactionsStore {
       moreRequest?.unsubscribe();
       loadingMore.set(false);
       moreFailed.set(false);
-      if (next.restore && this.listed?.key === filtersKey(next.filters)) {
+      const key = filtersKey(next.filters);
+      if (next.restore && this.listed?.key === key) {
         show(this.listed);
+        shownKey = key;
         return;
       }
       if (transactions().length === 0) status.set('loading');
       firstRequest = this.fetch(next.filters).subscribe({
         next: (page) => {
           show({ key: '', ...page.body, cursor: page.body.nextCursor, fetchedAt: page.fetchedAt });
+          shownKey = key;
           remember();
         },
-        // A refresh that fails keeps the rows already shown.
+        // A refresh that fails keeps the rows already shown, but only for the same filters: a
+        // filter that could not be fetched (offline and never saved) is not the last list.
         error: () => {
+          if (shownKey !== key) clear();
           if (transactions().length === 0) status.set('failed');
         },
       });

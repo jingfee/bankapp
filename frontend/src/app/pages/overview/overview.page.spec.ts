@@ -13,6 +13,7 @@ import type {
   SettlementResponse,
   Transaction,
 } from '@bankapp/shared';
+import { Offline } from '../../offline/offline.service';
 import { AccountsStore } from '../../stores/accounts.store';
 import { FakeAccountsStore } from '../../stores/accounts.store.fake';
 import { SettlementStore } from '../../stores/settlement.store';
@@ -963,6 +964,23 @@ describe('OverviewPage', () => {
 
     expect(page.textContent).toContain('Inga transaktioner den här månaden');
     expect(page.querySelector('a[href="/anslut-bank"]')?.textContent?.trim()).toBe('Anslut bank');
+  });
+
+  it('says Inte sparad, not an error, for a month that was never saved while offline', async () => {
+    TestBed.inject(Offline).markOffline();
+    const { page } = await render('error');
+
+    expect(page.querySelector('[data-not-saved]')?.textContent).toContain('Inte sparad');
+    expect(page.querySelector('[role=alert]')).toBeNull();
+  });
+
+  it('still shows today’s empty state for a month without transactions, offline or not', async () => {
+    TestBed.inject(Offline).markOffline();
+    const { page } = await render();
+
+    expect(page.textContent).toContain('Inga transaktioner den här månaden');
+
+    expect(page.querySelector('[data-not-saved]')).toBeNull();
   });
 
   it('shows an error when the overview cannot be fetched', async () => {
