@@ -5,9 +5,12 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { routes } from '../app.routes';
-import { Offline } from '../offline/offline.service';
+import { offlineInterceptor } from '../offline/offline.interceptor';
+import { OFFLINE_TIMEOUT_MS, Offline } from '../offline/offline.service';
 import { authInterceptor } from './auth.interceptor';
 import { AuthService } from './auth.service';
+
+const unauthorised = { status: 401, statusText: 'Unauthorized' };
 
 describe('authentication', () => {
   let http: HttpTestingController;
@@ -24,8 +27,6 @@ describe('authentication', () => {
   });
 
   afterEach(() => http.verify());
-
-  const unauthorised = { status: 401, statusText: 'Unauthorized' };
 
   describe('route guard', () => {
     it('sends a signed-out visitor to the login page, remembering where they were going', async () => {
@@ -273,5 +274,100 @@ describe('authentication', () => {
         await vi.waitFor(() => expect(names).toEqual(kept));
       });
     });
+  });
+});
+
+describe('starting the app while the server cannot be reached', () => {
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('caches', { match: () => Promise.resolve(undefined) });
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')));
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([authInterceptor, offlineInterceptor])),
+        provideHttpClientTesting(),
+        provideRouter(routes),
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('lets the owner in after about 3 seconds, and then moves between pages at once', async () => {
+    const harness = await RouterTestingHarness.create();
+    let arrived = false;
+    void harness.navigateByUrl('/banker').then(() => (arrived = true));
+    await vi.advanceTimersByTimeAsync(0);
+    http.expectOne('/api/auth/me'); // never answered: off the tailnet
+
+    await vi.advanceTimersByTimeAsync(OFFLINE_TIMEOUT_MS);
+    expect(arrived).toBe(true);
+    expect(TestBed.inject(Offline).isOffline()).toBe(true);
+
+    let moved = false;
+    void harness.navigateByUrl('/delat').then(() => (moved = true));
+    await vi.advanceTimersByTimeAsync(0);
+
+    http.expectNone('/api/auth/me');
+    expect(moved).toBe(true);
+    expect(TestBed.inject(Router).url).toBe('/delat');
+  });
+});
+
+describe('starting the app on a device with saved data', () => {
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    vi.stubGlobal('caches', {
+      match: (url: string) =>
+        Promise.resolve(
+          url === '/api/accounts'
+            ? new Response('[]', { status: 200, headers: { Date: new Date().toUTCString() } })
+            : undefined,
+        ),
+    });
+    vi.stubGlobal('fetch', () => new Promise(() => undefined)); // the server never answers
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([authInterceptor, offlineInterceptor])),
+        provideHttpClientTesting(),
+        provideRouter(routes),
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lets the owner in at once, without waiting for the server', async () => {
+    const harness = await RouterTestingHarness.create();
+
+    await harness.navigateByUrl('/banker');
+
+    http.expectNone('/api/auth/me');
+    expect(TestBed.inject(Router).url).toBe('/banker');
+  });
+
+  it('sends the owner to the login page once the server says the session is gone', async () => {
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response(null, { status: 200 })));
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/banker');
+    TestBed.inject(Offline).showedSavedData();
+
+    await TestBed.inject(Offline).check();
+
+    // A read fetched again in the background is refused: the session ended while away.
+    TestBed.inject(HttpClient)
+      .get('/api/banks')
+      .subscribe({ error: () => undefined });
+    await vi.waitFor(() => http.expectOne('/api/banks').flush(null, unauthorised));
+
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/logga-in?tillbaka=%2Fbanker'));
   });
 });

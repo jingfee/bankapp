@@ -5,6 +5,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { LOGIN_PATH } from '../auth/auth.guard';
 import { PendingLogout } from '../auth/pending-logout';
+import { CategoriesService } from '../categories.service';
 import { OfflineWarmup } from '../offline-warmup.service';
 import { Invalidation } from '../stores/invalidation';
 
@@ -53,6 +54,7 @@ export class Offline {
   private readonly invalidation = inject(Invalidation);
   private readonly warmup = inject(OfflineWarmup);
   private readonly pendingLogout = inject(PendingLogout);
+  private readonly categories = inject(CategoriesService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -62,6 +64,10 @@ export class Offline {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private checking = false;
   private started = false;
+  /** The server has answered since the app started. */
+  private reached = false;
+  /** Saved data was shown before the server had answered. */
+  private savedShown = false;
 
   constructor() {
     this.destroyRef.onDestroy(() => clearTimeout(this.timer));
@@ -73,6 +79,8 @@ export class Offline {
    * read from saved data when the network is dead, so no request ever shows it.
    */
   watch(): void {
+    // The browser already knows it has no network: no request needs to wait to find out.
+    if (!navigator.onLine) this.markOffline();
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('online', this.onOnline);
     this.destroyRef.onDestroy(() => {
@@ -96,6 +104,19 @@ export class Offline {
       });
   }
 
+  /**
+   * True from the start of the app until the server first answers `check`. Meanwhile reads are
+   * answered from saved data at once (ADR 0018), and refreshed once the server answers.
+   */
+  isStarting(): boolean {
+    return !this.reached;
+  }
+
+  /** A read was answered from saved data while starting, so it needs fetching once reached. */
+  showedSavedData(): void {
+    this.savedShown = true;
+  }
+
   /** A request could not reach the server. Safe to call again while already offline. */
   markOffline(): void {
     if (this.offline()) return;
@@ -105,7 +126,8 @@ export class Offline {
 
   /**
    * Asks the server whether it answers. Offline until it does; when it does after being offline,
-   * every read is fetched again and the warm-up runs again.
+   * or for the first time after saved data was shown on start, every read is fetched again and
+   * the warm-up runs again.
    */
   async check(): Promise<void> {
     if (this.checking) return;
@@ -131,8 +153,11 @@ export class Offline {
       return;
     }
     void this.pendingLogout.send();
-    if (this.offline()) {
+    const firstAnswer = !this.reached;
+    this.reached = true;
+    if (this.offline() || (firstAnswer && this.savedShown)) {
       this.offline.set(false);
+      this.categories.reset();
       this.invalidation.refreshAll();
       this.warmup.rerun();
     }
