@@ -1,7 +1,16 @@
 import { similarUpdatedNote } from '../../similar-updated-note';
 import { Location, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, computed, inject, linkedSignal, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  linkedSignal,
+  signal,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { type Subscription, map } from 'rxjs';
@@ -34,6 +43,8 @@ import { MANUAL_LABEL, SHARE_LABELS, householdPercentLabel } from '../../share-d
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { Page } from '../../page/page';
+import { OfflineDisabled } from '../../offline/offline-disabled';
+import { Offline, saveFailureMessage } from '../../offline/offline.service';
 
 type State =
   { status: 'loading' | 'failed' | 'gone' } | { status: 'ready'; details: TransactionDetails };
@@ -72,6 +83,7 @@ function formatOriginal({ amount, currency }: Money): string {
 @Component({
   selector: 'app-transaction-details-page',
   imports: [
+    OfflineDisabled,
     Page,
     RouterLink,
     MoneyPipe,
@@ -131,13 +143,18 @@ function formatOriginal({ amount, currency }: Money): string {
                     </h1>
                     @if (t.account === null) {
                       <app-menu data-manual-actions label="Åtgärder för transaktionen">
-                        <a appMenuItem data-edit [routerLink]="['/transaktioner', t.id, 'redigera']"
+                        <a
+                          appMenuItem
+                          appOfflineDisabled
+                          data-edit
+                          [routerLink]="['/transaktioner', t.id, 'redigera']"
                           >Redigera</a
                         >
                         <button
                           appMenuItem
                           type="button"
                           data-delete
+                          appOfflineDisabled
                           [danger]="true"
                           (click)="confirmingDelete.set(true)"
                         >
@@ -226,7 +243,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         data-category-button
                         class="btn btn-secondary btn-sm"
                         [attr.aria-expanded]="picking()"
-                        [disabled]="saving()"
+                        [appOfflineDisabled]="saving()"
                         (click)="togglePicker()"
                       >
                         {{ picking() ? 'Stäng' : 'Ändra' }}
@@ -244,7 +261,7 @@ function formatOriginal({ amount, currency }: Money): string {
                           type="button"
                           data-confirm-category
                           class="btn btn-positive btn-sm"
-                          [disabled]="saving()"
+                          [appOfflineDisabled]="saving()"
                           (click)="setCategory(c.subcategory.id, 'Kategorin bekräftades')"
                         >
                           Stämmer
@@ -256,7 +273,7 @@ function formatOriginal({ amount, currency }: Money): string {
                         type="button"
                         data-remove-category
                         class="btn btn-ghost btn-sm self-start"
-                        [disabled]="saving()"
+                        [appOfflineDisabled]="saving()"
                         (click)="setCategory(null, 'Kategorin togs bort')"
                       >
                         Ta bort kategori
@@ -339,7 +356,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       type="button"
                       data-remove-share
                       class="btn btn-ghost btn-sm self-start"
-                      [disabled]="saving()"
+                      [appOfflineDisabled]="saving()"
                       (click)="setShare(null)"
                     >
                       Ta bort egen andel
@@ -375,7 +392,7 @@ function formatOriginal({ amount, currency }: Money): string {
                       type="button"
                       data-remove-offset
                       class="btn btn-secondary btn-sm self-start"
-                      [disabled]="saving()"
+                      [appOfflineDisabled]="saving()"
                       (click)="setOffset(null)"
                     >
                       Ta bort kvittning
@@ -387,6 +404,7 @@ function formatOriginal({ amount, currency }: Money): string {
                     <button
                       type="button"
                       data-offset-toggle
+                      appOfflineDisabled
                       class="btn btn-secondary btn-sm self-start"
                       aria-haspopup="dialog"
                       (click)="toggleOffset()"
@@ -494,7 +512,7 @@ function formatOriginal({ amount, currency }: Money): string {
                   type="button"
                   [attr.data-offset-candidate]="candidate.id"
                   class="tx-row flex w-full justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
-                  [disabled]="saving()"
+                  [appOfflineDisabled]="saving()"
                   (click)="setOffset(candidate.id)"
                 >
                   <span class="flex min-w-0 flex-col [overflow-wrap:anywhere]">
@@ -530,6 +548,7 @@ export class TransactionDetailsPage {
   private readonly categoryList = inject(CategoriesService);
   private readonly sharesStore = inject(SharesStore);
   private readonly toast = inject(ToastService);
+  private readonly offline = inject(Offline);
   private readonly route = inject(ActivatedRoute);
 
   /** The id in the URL; `/transaktioner/:id/redigera` opens the edit form over the page. */
@@ -668,6 +687,10 @@ export class TransactionDetailsPage {
   constructor() {
     this.sharesStore.activate();
     inject(DestroyRef).onDestroy(() => this.sharesStore.deactivate());
+    // A picker left open when the app goes offline closes: a change cannot be made from it.
+    effect(() => {
+      if (this.offline.isOffline()) untracked(() => this.picking.set(false));
+    });
     // Following a link to the linked purchase or refund keeps this page and changes the id.
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(() => this.reset());
   }
@@ -740,8 +763,8 @@ export class TransactionDetailsPage {
         this.toast.show(share === null ? 'Egen andel togs bort' : 'Andelen sparades');
         this.saving.set(false);
       },
-      error: () => {
-        this.shareError.set('Andelen kunde inte sparas. Försök igen.');
+      error: (error: unknown) => {
+        this.shareError.set(saveFailureMessage(error, 'Andelen kunde inte sparas. Försök igen.'));
         this.saving.set(false);
       },
     });
@@ -781,8 +804,10 @@ export class TransactionDetailsPage {
         this.offsetting.set(false);
         this.saving.set(false);
       },
-      error: () => {
-        this.categoryError.set('Kvittningen kunde inte sparas. Försök igen.');
+      error: (error: unknown) => {
+        this.categoryError.set(
+          saveFailureMessage(error, 'Kvittningen kunde inte sparas. Försök igen.'),
+        );
         this.saving.set(false);
       },
     });
@@ -821,8 +846,10 @@ export class TransactionDetailsPage {
         this.picking.set(false);
         this.saving.set(false);
       },
-      error: () => {
-        this.categoryError.set('Kategorin kunde inte sparas. Försök igen.');
+      error: (error: unknown) => {
+        this.categoryError.set(
+          saveFailureMessage(error, 'Kategorin kunde inte sparas. Försök igen.'),
+        );
         this.saving.set(false);
       },
     });

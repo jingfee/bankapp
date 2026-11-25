@@ -13,11 +13,14 @@ import { DateField } from '../date-field/date-field';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { MoneyPipe } from '../formatting/money.pipe';
 import { SavingsStore } from '../stores/savings.store';
+import { OfflineDisabled } from '../offline/offline-disabled';
+import { saveFailureMessage } from '../offline/offline.service';
 
 /** Manuella sparkonton: savings accounts the app cannot reach, such as an ISK, kept up to date by hand. */
 @Component({
   selector: 'app-manual-savings-section',
   imports: [
+    OfflineDisabled,
     ShortDatePipe,
     DateField,
     MoneyPipe,
@@ -36,6 +39,7 @@ import { SavingsStore } from '../stores/savings.store';
         <button
           type="button"
           data-open-add-account
+          appOfflineDisabled
           class="btn btn-sm btn-secondary"
           (click)="openAdd()"
         >
@@ -74,7 +78,13 @@ import { SavingsStore } from '../stores/savings.store';
                 </span>
               </span>
               <app-menu [label]="'Åtgärder för ' + account.name">
-                <button appMenuItem type="button" data-rename (click)="startRename(account)">
+                <button
+                  appMenuItem
+                  appOfflineDisabled
+                  type="button"
+                  data-rename
+                  (click)="startRename(account)"
+                >
                   Byt namn
                 </button>
                 @if (account.closedOn) {
@@ -82,7 +92,7 @@ import { SavingsStore } from '../stores/savings.store';
                     appMenuItem
                     type="button"
                     data-reopen
-                    [disabled]="busy()"
+                    [appOfflineDisabled]="busy()"
                     (click)="reopen(account)"
                   >
                     Öppna igen
@@ -92,6 +102,7 @@ import { SavingsStore } from '../stores/savings.store';
                     appMenuItem
                     type="button"
                     data-close
+                    appOfflineDisabled
                     (click)="closingId.set(account.id); closeDate.set(today())"
                   >
                     Avsluta…
@@ -105,6 +116,7 @@ import { SavingsStore } from '../stores/savings.store';
                 <button
                   type="button"
                   data-new-entry
+                  appOfflineDisabled
                   class="btn btn-sm btn-secondary"
                   (click)="startEntry(account)"
                 >
@@ -132,6 +144,7 @@ import { SavingsStore } from '../stores/savings.store';
                         appMenuItem
                         type="button"
                         data-edit-entry
+                        appOfflineDisabled
                         (click)="startEntry(account, entry)"
                       >
                         Ändra
@@ -141,7 +154,7 @@ import { SavingsStore } from '../stores/savings.store';
                         type="button"
                         data-delete-entry
                         [danger]="true"
-                        [disabled]="busy()"
+                        [appOfflineDisabled]="busy()"
                         (click)="deleting.set({ account, entry })"
                       >
                         Ta bort…
@@ -196,7 +209,7 @@ import { SavingsStore } from '../stores/savings.store';
             data-save-account
             data-save-rename
             class="btn btn-primary flex-1"
-            [disabled]="busy() || name().trim() === ''"
+            [appOfflineDisabled]="busy() || name().trim() === ''"
           >
             Spara
           </button>
@@ -225,7 +238,7 @@ import { SavingsStore } from '../stores/savings.store';
             type="submit"
             data-confirm-close
             class="btn btn-primary flex-1"
-            [disabled]="busy() || closeDate() === ''"
+            [appOfflineDisabled]="busy() || closeDate() === ''"
           >
             Avsluta konto
           </button>
@@ -291,7 +304,12 @@ import { SavingsStore } from '../stores/savings.store';
           >
             Avbryt
           </button>
-          <button type="submit" data-save-entry class="btn btn-primary flex-1" [disabled]="busy()">
+          <button
+            type="submit"
+            data-save-entry
+            class="btn btn-primary flex-1"
+            [appOfflineDisabled]="busy()"
+          >
             Spara
           </button>
         </ng-container>
@@ -487,7 +505,7 @@ export class ManualSavingsSection {
         this.entryError.set(
           (error as { status?: number }).status === 409
             ? 'Det finns redan en saldonotering för det datumet.'
-            : 'Saldonoteringen kunde inte sparas. Försök igen senare.',
+            : saveFailureMessage(error, 'Saldonoteringen kunde inte sparas. Försök igen senare.'),
         );
       },
     });
@@ -521,9 +539,9 @@ export class ManualSavingsSection {
         this.busy.set(false);
         done(result);
       },
-      error: () => {
+      error: (error: unknown) => {
         this.busy.set(false);
-        this.actionFailed.set(message);
+        this.actionFailed.set(saveFailureMessage(error, message));
         failedToo?.();
       },
     });

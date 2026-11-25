@@ -9,10 +9,11 @@ import { Icon } from '../../icon/icon';
 import { Page } from '../../page/page';
 import { Skeleton } from '../../skeleton/skeleton';
 import { Redirector } from '../../redirector';
+import { OfflineDisabled } from '../../offline/offline-disabled';
 
 @Component({
   selector: 'app-connect-bank-page',
-  imports: [RouterLink, Page, Callout, Empty, Icon, Skeleton],
+  imports: [OfflineDisabled, RouterLink, Page, Callout, Empty, Icon, Skeleton],
   template: `
     <app-page
       width="narrow"
@@ -74,7 +75,7 @@ import { Redirector } from '../../redirector';
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 disabled:opacity-50"
-                  [disabled]="starting()"
+                  [appOfflineDisabled]="starting()"
                   (click)="connect(bank.name)"
                 >
                   @if (bank.logoUrl) {

@@ -1,5 +1,6 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import type { ShareOption } from '@bankapp/shared';
+import { Offline } from '../offline/offline.service';
 import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
 
 /** The one way a share is chosen: Jag, 50/50, Hushåll, Partner as a segmented control. */
@@ -20,7 +21,7 @@ import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
           [attr.data-share]="choice.option"
           [attr.aria-pressed]="value() === choice.option"
           [attr.title]="choice.disabled ? householdTitle() : null"
-          [disabled]="disabled() || choice.disabled"
+          [disabled]="disabled() || choice.disabled || offline.isOffline()"
           class="px-1 disabled:opacity-40"
           (click)="choose(choice.option)"
         >
@@ -36,6 +37,8 @@ import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
   host: { '[attr.fullwidth]': 'fullWidth() ? "" : null' },
 })
 export class ShareControl {
+  /** Choosing a share changes something, so every choice is disabled while offline. */
+  protected readonly offline = inject(Offline);
   /** The share option currently chosen. */
   readonly value = input<ShareOption | null>(null);
   readonly label = input('Välj andel');

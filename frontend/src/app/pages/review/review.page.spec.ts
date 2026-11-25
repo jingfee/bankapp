@@ -1,3 +1,5 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type {
@@ -8,20 +10,24 @@ import type {
 } from '@bankapp/shared';
 import { of } from 'rxjs';
 import { CategoriesService } from '../../categories.service';
+import { Offline } from '../../offline/offline.service';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
 import { ReviewPage } from './review.page';
 
 describe('ReviewPage', () => {
   let store: FakeTransactionsStore;
+  const isOffline = signal(false);
 
   beforeEach(() => {
+    isOffline.set(false);
     store = new FakeTransactionsStore();
     TestBed.configureTestingModule({
       imports: [ReviewPage],
       providers: [
         { provide: TransactionsStore, useValue: store },
         { provide: CategoriesService, useValue: { list: () => of(categories) } },
+        { provide: Offline, useValue: { isOffline: isOffline.asReadonly() } },
         provideRouter([]),
       ],
     });
@@ -109,6 +115,48 @@ describe('ReviewPage', () => {
       '4 gissade eller okategoriserade',
     );
     expect(ids(section)).toEqual(['4', '2', '3', '1']);
+  });
+
+  it('disables every change while offline, keeps reading open, and enables them again when back online', async () => {
+    const { fixture, page } = await render({
+      count: 2,
+      transactions: [transaction(2, { category: guess }), transaction(1)],
+      replacements: [{ manual: transaction(8), bank: transaction(9) }],
+    });
+    const changes = () =>
+      Array.from(
+        page.querySelectorAll<HTMLButtonElement>(
+          '[data-confirm], [data-change], [data-replace], [data-not-same]',
+        ),
+      );
+    expect(changes()).toHaveLength(5);
+    expect(changes().every((button) => !button.disabled)).toBe(true);
+
+    isOffline.set(true);
+    await fixture.whenStable();
+    expect(changes().every((button) => button.disabled)).toBe(true);
+    changes()[0]!.click();
+    expect(calls('setCategory')).toHaveLength(0);
+    // Reading stays possible: the rows still link to their details.
+    expect(page.querySelector('li[data-id="2"] a[href="/transaktioner/2"]')).not.toBeNull();
+
+    isOffline.set(false);
+    await fixture.whenStable();
+    expect(changes().every((button) => !button.disabled)).toBe(true);
+  });
+
+  it('says the app is offline, not a generic error, when a save fails because it went offline', async () => {
+    store.failures['setCategory'] = new HttpErrorResponse({ status: 0 });
+    const { fixture, page } = await render({
+      count: 1,
+      transactions: [transaction(2, { category: guess })],
+    });
+
+    (page.querySelector('li[data-id="2"] [data-confirm]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(page.textContent).toContain('Du är offline');
+    expect(page.textContent).not.toContain('Försök igen.');
   });
 
   it('shows a skeleton while the review is being read', async () => {

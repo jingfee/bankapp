@@ -37,6 +37,8 @@ import { ShareControl } from '../../share-control/share-control';
 import { SHARE_LABELS } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
+import { OfflineDisabled } from '../../offline/offline-disabled';
+import { saveFailureMessage } from '../../offline/offline.service';
 
 interface Loaded {
   categories: Category[];
@@ -60,6 +62,7 @@ interface SharedRow {
 @Component({
   selector: 'app-delat-page',
   imports: [
+    OfflineDisabled,
     ShortDatePipe,
     Page,
     NgTemplateOutlet,
@@ -136,6 +139,7 @@ interface SharedRow {
                   <button
                     type="button"
                     data-open-setting
+                    appOfflineDisabled
                     class="btn btn-secondary btn-sm"
                     (click)="settingOpen.set(true)"
                   >
@@ -145,6 +149,7 @@ interface SharedRow {
                     <button
                       type="button"
                       data-close-month
+                      appOfflineDisabled
                       class="btn btn-secondary btn-sm"
                       (click)="startClosing(period)"
                     >
@@ -196,7 +201,7 @@ interface SharedRow {
                       type="submit"
                       data-save-balance
                       class="btn btn-primary flex-1"
-                      [disabled]="saving() || !amountValid() || asOf() === ''"
+                      [appOfflineDisabled]="saving() || !amountValid() || asOf() === ''"
                     >
                       Spara saldo
                     </button>
@@ -240,7 +245,9 @@ interface SharedRow {
                         type="submit"
                         data-confirm-close
                         class="btn btn-primary flex-1"
-                        [disabled]="saving() || closingDate() === '' || !nextMonthValid(period)"
+                        [appOfflineDisabled]="
+                          saving() || closingDate() === '' || !nextMonthValid(period)
+                        "
                       >
                         Avsluta
                       </button>
@@ -262,6 +269,7 @@ interface SharedRow {
                       appMenuItem
                       type="button"
                       data-edit-month
+                      appOfflineDisabled
                       (click)="startEditMonth(period)"
                     >
                       Ändra månad
@@ -295,7 +303,7 @@ interface SharedRow {
                         type="submit"
                         data-save-month
                         class="btn btn-primary flex-1"
-                        [disabled]="saving() || !monthDraftValid()"
+                        [appOfflineDisabled]="saving() || !monthDraftValid()"
                       >
                         Spara
                       </button>
@@ -398,7 +406,7 @@ interface SharedRow {
                             appMenuItem
                             type="button"
                             data-save-report
-                            [disabled]="saving()"
+                            [appOfflineDisabled]="saving()"
                             (click)="saveReport(period)"
                           >
                             Spara rapport igen
@@ -409,7 +417,7 @@ interface SharedRow {
                               type="button"
                               data-undo-close
                               [danger]="true"
-                              [disabled]="saving()"
+                              [appOfflineDisabled]="saving()"
                               (click)="undoing.set(period.month)"
                             >
                               Ångra avslut…
@@ -461,7 +469,7 @@ interface SharedRow {
                       type="button"
                       data-save-slider
                       class="btn btn-primary btn-sm"
-                      [disabled]="saving()"
+                      [appOfflineDisabled]="saving()"
                       (click)="saveSlider()"
                     >
                       Spara
@@ -488,7 +496,7 @@ interface SharedRow {
                           appMenuItem
                           type="button"
                           data-edit
-                          [disabled]="saving()"
+                          [appOfflineDisabled]="saving()"
                           (click)="startEdit(entry)"
                         >
                           Ändra
@@ -498,7 +506,7 @@ interface SharedRow {
                           type="button"
                           data-remove
                           [danger]="true"
-                          [disabled]="saving() || ratio().length === 1"
+                          [appOfflineDisabled]="saving() || ratio().length === 1"
                           (click)="removing.set(entry)"
                         >
                           Ta bort…
@@ -516,6 +524,7 @@ interface SharedRow {
                 <button
                   type="button"
                   data-add-shared
+                  appOfflineDisabled
                   class="btn btn-secondary btn-sm ml-auto whitespace-nowrap"
                   [attr.aria-expanded]="picking()"
                   (click)="picking.set(!picking())"
@@ -640,7 +649,12 @@ interface SharedRow {
         }
         <ng-container sheet-footer>
           <button type="button" class="btn btn-ghost" (click)="editing.set(null)">Avbryt</button>
-          <button type="submit" data-save-edit class="btn btn-primary flex-1" [disabled]="saving()">
+          <button
+            type="submit"
+            data-save-edit
+            class="btn btn-primary flex-1"
+            [appOfflineDisabled]="saving()"
+          >
             Spara
           </button>
         </ng-container>
@@ -912,8 +926,8 @@ export class DelatPage {
         done?.();
         this.saving.set(false);
       },
-      error: () => {
-        this.error.set(failure);
+      error: (error: unknown) => {
+        this.error.set(saveFailureMessage(error, failure));
         // A confirmation gives way to the error on the page.
         this.undoing.set(null);
         this.saving.set(false);
@@ -951,8 +965,8 @@ export class DelatPage {
         this.settingOpen.set(false);
         this.saving.set(false);
       },
-      error: () => {
-        this.error.set('Saldot kunde inte sparas. Försök igen.');
+      error: (error: unknown) => {
+        this.error.set(saveFailureMessage(error, 'Saldot kunde inte sparas. Försök igen.'));
         this.saving.set(false);
       },
     });
@@ -1013,10 +1027,12 @@ export class DelatPage {
           this.saving.set(false);
           done?.();
         },
-        error: () => {
+        error: (error: unknown) => {
           this.saving.set(false);
           this.removing.set(null);
-          this.error.set('Hushållsandelen kunde inte sparas. Försök igen senare.');
+          this.error.set(
+            saveFailureMessage(error, 'Hushållsandelen kunde inte sparas. Försök igen senare.'),
+          );
         },
       });
   }
@@ -1051,7 +1067,7 @@ export class DelatPage {
         this.error.set(
           (error as { status?: number }).status === 409
             ? 'Hushåll kan väljas först när en hushållsandel har ställts in.'
-            : 'Andelen kunde inte sparas. Försök igen senare.',
+            : saveFailureMessage(error, 'Andelen kunde inte sparas. Försök igen senare.'),
         );
       },
     });

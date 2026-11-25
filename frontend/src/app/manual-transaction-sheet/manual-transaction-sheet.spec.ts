@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import type { CategoriesResponse, Transaction, TransactionDetails } from '@bankapp/shared';
 import { of } from 'rxjs';
 import { CategoriesService } from '../categories.service';
+import { Offline } from '../offline/offline.service';
 import { FakeSharesStore } from '../stores/shares.store.fake';
 import { FakeTransactionsStore } from '../stores/transactions.store.fake';
 import { SharesStore } from '../stores/shares.store';
@@ -54,8 +55,10 @@ class Host {
 describe('ManualTransactionSheet', () => {
   let transactionsStore: FakeTransactionsStore;
   let sharesStore: FakeSharesStore;
+  const isOffline = signal(false);
 
   beforeEach(() => {
+    isOffline.set(false);
     transactionsStore = new FakeTransactionsStore();
     sharesStore = new FakeSharesStore();
     sharesStore.subcategoryShares.set([{ subcategoryId: 11, share: 'half' }]);
@@ -70,6 +73,7 @@ describe('ManualTransactionSheet', () => {
         { provide: TransactionsStore, useValue: transactionsStore },
         { provide: SharesStore, useValue: sharesStore },
         { provide: CategoriesService, useValue: { list: () => of(categories.categories) } },
+        { provide: Offline, useValue: { isOffline: isOffline.asReadonly() } },
       ],
     });
     const fixture = TestBed.createComponent(Host);
@@ -100,6 +104,54 @@ describe('ManualTransactionSheet', () => {
   function click(page: HTMLElement, selector: string) {
     (page.querySelector(selector) as HTMLElement).click();
   }
+
+  it('cannot be saved while offline, and can again when back online', async () => {
+    const { fixture, page } = await render();
+    const save = page.querySelector<HTMLButtonElement>('[data-save]')!;
+
+    isOffline.set(true);
+    await fixture.whenStable();
+    expect(save.disabled).toBe(true);
+
+    isOffline.set(false);
+    await fixture.whenStable();
+    expect(save.disabled).toBe(false);
+  });
+
+  it('stays open with what was entered when the save fails because the app went offline, and saves once back online', async () => {
+    transactionsStore.failures['addManual'] = new HttpErrorResponse({ status: 0 });
+    const { fixture, host, page } = await render();
+    fill(page, '[data-description]', 'ICA Maxi');
+    fill(page, '[data-amount]', '300,50');
+    click(page, '[data-category-tile="1"]');
+    await fixture.whenStable();
+    click(page, '[data-subcategory="11"]');
+    await fixture.whenStable();
+
+    // The request that cannot reach the server is what makes the app offline (the interceptor).
+    click(page, '[data-save]');
+    isOffline.set(true);
+    await fixture.whenStable();
+
+    expect(host.closed).toBe(0);
+    expect(page.querySelector('[data-sheet]')).not.toBeNull();
+    expect(page.querySelector<HTMLInputElement>('[data-description]')!.value).toBe('ICA Maxi');
+    expect(page.querySelector<HTMLInputElement>('[data-amount]')!.value).toBe('300,50');
+    expect(page.querySelector('[data-subcategory="11"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(page.querySelector('[data-sheet]')!.textContent).toContain('Du är offline');
+    expect(page.querySelector<HTMLButtonElement>('[data-save]')!.disabled).toBe(true);
+
+    delete transactionsStore.failures['addManual'];
+    transactionsStore.responses['addManual'] = { id: 9 };
+    isOffline.set(false);
+    await fixture.whenStable();
+    click(page, '[data-save]');
+
+    expect(called('addManual')).toHaveLength(2);
+    expect(host.saved).toEqual([{ id: 9 }]);
+  });
 
   it('adds an expense as a negative amount, dated today and inheriting the subcategory share', async () => {
     transactionsStore.responses['addManual'] = { id: 9 };

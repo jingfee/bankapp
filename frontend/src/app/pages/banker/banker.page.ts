@@ -22,6 +22,8 @@ import { MoneyPipe } from '../../formatting/money.pipe';
 import { Redirector } from '../../redirector';
 import { ShareControl } from '../../share-control/share-control';
 import { Page } from '../../page/page';
+import { OfflineDisabled } from '../../offline/offline-disabled';
+import { saveFailureMessage } from '../../offline/offline.service';
 
 const DATE_TIME = new DateTimePipe();
 const DAY_FORMAT = new Intl.DateTimeFormat('sv-SE', { timeZone: APP_TIMEZONE });
@@ -47,6 +49,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 @Component({
   selector: 'app-banker-page',
   imports: [
+    OfflineDisabled,
     RouterLink,
     Confirm,
     Menu,
@@ -98,7 +101,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
             type="button"
             data-sync
             class="btn btn-secondary max-sm:w-11 max-sm:px-0"
-            [disabled]="result.syncing || manualSyncPending()"
+            [appOfflineDisabled]="result.syncing || manualSyncPending()"
             (click)="updateNow()"
           >
             <svg
@@ -121,6 +124,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         }
         <a
           routerLink="/anslut-bank"
+          appOfflineDisabled
           class="btn btn-primary max-sm:w-11 max-sm:px-0"
           aria-label="Anslut bank"
         >
@@ -149,7 +153,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
         </div>
       } @else if (result.banks.length === 0) {
         <app-empty icon="landmark" text="Inga banker anslutna">
-          <a empty-action routerLink="/anslut-bank" class="btn btn-primary">Anslut bank</a>
+          <a empty-action routerLink="/anslut-bank" appOfflineDisabled class="btn btn-primary"
+            >Anslut bank</a
+          >
         </app-empty>
       } @else {
         @if (summary(); as done) {
@@ -217,7 +223,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     type="button"
                     data-renew
                     class="btn btn-sm btn-primary flex-none max-[419px]:order-last max-[419px]:w-full"
-                    [disabled]="renewing()"
+                    [appOfflineDisabled]="renewing()"
                     (click)="renew(group.bank, false)"
                   >
                     Förnya
@@ -229,7 +235,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                       appMenuItem
                       type="button"
                       data-renew
-                      [disabled]="renewing()"
+                      [appOfflineDisabled]="renewing()"
                       (click)="renew(group.bank, true)"
                     >
                       Förnya
@@ -240,7 +246,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                     type="button"
                     data-remove-bank
                     [danger]="true"
-                    [disabled]="removing()"
+                    [appOfflineDisabled]="removing()"
                     (click)="startRemove(group)"
                   >
                     Ta bort bank…
@@ -334,7 +340,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           class="switch"
                           data-toggle-savings
                           [checked]="account.savings"
-                          [disabled]="togglingHidden()"
+                          [appOfflineDisabled]="togglingHidden()"
                           (change)="setSavings(account.id, !account.savings)"
                         />
                       </label>
@@ -346,7 +352,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                           class="switch"
                           data-toggle-hidden
                           [checked]="!account.hidden"
-                          [disabled]="togglingHidden()"
+                          [appOfflineDisabled]="togglingHidden()"
                           (change)="setHidden(account.id, !account.hidden)"
                         />
                       </label>
@@ -409,7 +415,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                             data-toggle-hidden
                             [attr.aria-label]="'Visa ' + account.name"
                             [checked]="!account.hidden"
-                            [disabled]="togglingHidden()"
+                            [appOfflineDisabled]="togglingHidden()"
                             (change)="setHidden(account.id, !account.hidden)"
                           />
                         </label>
@@ -419,6 +425,7 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
                   <button
                     type="button"
                     data-delete-bank
+                    appOfflineDisabled
                     class="btn btn-sm btn-danger-soft self-start"
                     (click)="startDelete(removed.bank)"
                   >
@@ -600,7 +607,7 @@ export class BankerPage {
         this.shareFailed.set(
           (error as { status?: number }).status === 409
             ? 'Hushåll kan väljas först när en hushållsandel har ställts in.'
-            : 'Andelen kunde inte sparas. Försök igen senare.',
+            : saveFailureMessage(error, 'Andelen kunde inte sparas. Försök igen senare.'),
         );
       },
     });

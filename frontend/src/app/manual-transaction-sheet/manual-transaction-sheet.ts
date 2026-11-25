@@ -27,6 +27,8 @@ import { Skeleton } from '../skeleton/skeleton';
 import { CategoryTiles } from '../category-tiles/category-tiles';
 import { DateField } from '../date-field/date-field';
 import { today } from '../dates';
+import { OfflineDisabled } from '../offline/offline-disabled';
+import { saveFailureMessage } from '../offline/offline.service';
 import { ShareControl } from '../share-control/share-control';
 import { SharesStore } from '../stores/shares.store';
 import { TransactionsStore } from '../stores/transactions.store';
@@ -41,7 +43,7 @@ const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
  */
 @Component({
   selector: 'app-manual-transaction-sheet',
-  imports: [CategoryTiles, DateField, ShareControl, Callout, Sheet, Skeleton],
+  imports: [CategoryTiles, DateField, ShareControl, Callout, Sheet, Skeleton, OfflineDisabled],
   template: `
     <app-sheet
       [heading]="transactionId() === null ? 'Ny transaktion' : 'Redigera transaktion'"
@@ -194,7 +196,7 @@ const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
             type="submit"
             data-save
             class="btn btn-primary flex-1"
-            [disabled]="saving() || !amountValid()"
+            [appOfflineDisabled]="saving() || !amountValid()"
           >
             Spara transaktion
           </button>
@@ -340,7 +342,7 @@ export class ManualTransactionSheet implements OnInit {
         this.error.set(
           error instanceof HttpErrorResponse && error.status === 409
             ? 'Ställ in ett hushållsförhållande innan du väljer Hushåll.'
-            : 'Transaktionen kunde inte sparas. Försök igen.',
+            : saveFailureMessage(error, 'Transaktionen kunde inte sparas. Försök igen.'),
         );
         this.saving.set(false);
       },
