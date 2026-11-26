@@ -15,7 +15,7 @@ import {
   type OverviewResponse,
   type OverviewView,
 } from '@bankapp/shared';
-import { owesText } from '../../balance-display';
+import { transferText } from '../../balance-display';
 import { dayOf, monthOf, shiftMonth } from '../../dates';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -959,7 +959,7 @@ export class OverviewPage {
     return {
       closed: false,
       amount: money.transform(Math.abs(balance)),
-      lines: [owesText(balance)],
+      lines: [transferText(balance, settlement.names)],
       link: { path: '/delat', params: { manad: open.month } },
     };
   }

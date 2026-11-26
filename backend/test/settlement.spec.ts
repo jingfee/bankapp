@@ -90,6 +90,10 @@ describe('the settlement balance', () => {
     (await api(app).get('/api/settlement').expect(200)).body as SettlementResponse;
   const balance = async () => (await get()).balance;
 
+  it('names the owner and the partner as configured', async () => {
+    expect((await get()).names).toEqual({ owner: 'Jag', partner: 'Partner' });
+  });
+
   it('rejects a setting without a number or with a bad day', async () => {
     await setBalance('lots' as unknown as number).expect(400);
     await setBalance(100, '15 nov').expect(400);

@@ -104,6 +104,7 @@ describe('DelatPage', () => {
     balance: null,
     periods: [],
     balanceSettings: [],
+    names: { owner: 'Kim', partner: 'Robin' },
     ...overrides,
   });
 
@@ -235,7 +236,7 @@ describe('DelatPage', () => {
 
       expect(text(page.querySelector('[data-balance]'))).toBe('312,00 kr');
       expect(text(page.querySelector('[data-balance-direction]'))).toBe(
-        'Partnern är skyldig dig · sedan avräkningen 20 okt',
+        'Att överföra: Robin → Kim · sedan avräkningen 20 okt',
       );
     });
 
@@ -251,7 +252,7 @@ describe('DelatPage', () => {
 
       expect(text(page.querySelector('[data-balance]'))).toBe('312,00 kr');
       expect(text(page.querySelector('[data-balance-direction]'))).toContain(
-        'Du är skyldig partnern',
+        'Att överföra: Kim → Robin',
       );
     });
 

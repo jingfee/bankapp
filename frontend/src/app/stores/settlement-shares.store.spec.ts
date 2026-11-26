@@ -10,6 +10,7 @@ const settlement = (balance: number): SettlementResponse => ({
   balance,
   periods: [],
   balanceSettings: [],
+  names: { owner: 'Jag', partner: 'Partner' },
 });
 
 describe('SettlementStore and SharesStore reads', () => {

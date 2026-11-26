@@ -31,7 +31,7 @@ import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementStore } from '../../stores/settlement.store';
 import { SharesStore } from '../../stores/shares.store';
-import { owesText } from '../../balance-display';
+import { transferText } from '../../balance-display';
 import { isMonth, today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
 import { ShareControl } from '../../share-control/share-control';
@@ -47,7 +47,12 @@ interface Loaded {
 
 type State = Loaded | { failed: true };
 
-const NO_SETTLEMENT: SettlementResponse = { balance: null, periods: [], balanceSettings: [] };
+const NO_SETTLEMENT: SettlementResponse = {
+  balance: null,
+  periods: [],
+  balanceSettings: [],
+  names: { owner: 'Jag', partner: 'Partner' },
+};
 
 /** A shared subcategory as a row of the list. */
 interface SharedRow {
@@ -786,7 +791,9 @@ export class DelatPage {
   }
 
   protected readonly balanceAmount = computed(() => Math.abs(this.settlement().balance ?? 0));
-  protected readonly balanceDirection = computed(() => owesText(this.settlement().balance ?? 0));
+  protected readonly balanceDirection = computed(() =>
+    transferText(this.settlement().balance ?? 0, this.settlement().names),
+  );
   /** The latest settlement's or balance setting's date, as " · sedan avräkningen <date>". */
   protected readonly sinceText = computed(() => {
     const { periods, balanceSettings } = this.settlement();

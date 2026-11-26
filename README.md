@@ -45,6 +45,8 @@ The backend refuses to start unless all of these are set and valid. Locally, cop
 | `TIMEZONE`                        | IANA time zone for scheduled jobs, e.g. `Europe/Stockholm` |
 | `BANKAPP_USERNAME`                | The owner's username for logging in                        |
 | `BANKAPP_PASSWORD_HASH`           | scrypt hash of the owner's password (see below)            |
+| `OWNER_NAME`                      | Optional: the owner's name on Delat (default _Jag_)        |
+| `PARTNER_NAME`                    | Optional: the partner's name on Delat (default _Partner_)  |
 
 **Settlement reports.** Closing a month with _Avsluta månad_ saves an Excel report as `<REPORTS_DIR>/<yyyy>/<yyyy-MM> Avräkning <månad> <yyyy>.xlsx`. `REPORTS_DIR` defaults to `DATA_DIR/reports`, and the app refuses to start if it cannot be created or written. In Docker, mount a host folder there (the example compose file maps `./reports` to `/reports`): it must be writable by uid 1000 and should be kept private, as the reports hold personal data (ADR 0002).
 

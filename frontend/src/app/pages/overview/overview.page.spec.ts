@@ -142,6 +142,7 @@ describe('OverviewPage', () => {
           balance: setting,
           periods: setting === null ? [] : [period('2026-11', { carriedOut: setting })],
           balanceSettings: [],
+          names: { owner: 'Kim', partner: 'Robin' },
         };
 
   const transaction = (id: number, overrides: Partial<Transaction> = {}): Transaction => ({
@@ -244,11 +245,11 @@ describe('OverviewPage', () => {
       return page;
     };
 
-    it('shows what the partner owes and links to Delat', async () => {
+    it('shows who transfers to whom and links to Delat', async () => {
       const { page } = await render(overview(), accountsOf([]), 4312);
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('4\u00a0312,00\u00a0kr');
-      expect(text(card(page))).toContain('Partnern är skyldig dig');
+      expect(text(card(page))).toContain('Att överföra: Robin → Kim');
       expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-11');
     });
 
@@ -256,7 +257,7 @@ describe('OverviewPage', () => {
       const { page } = await render(overview(), accountsOf([]), -250);
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('250,00\u00a0kr');
-      expect(text(card(page))).toContain('Du är skyldig partnern');
+      expect(text(card(page))).toContain('Att överföra: Kim → Robin');
     });
 
     it('shows what a closed month paid, with where it was closed and what was left', async () => {
@@ -267,6 +268,7 @@ describe('OverviewPage', () => {
           period('2026-10', { closedThrough: '2026-11-02', paid: 800, carriedOut: 120 }),
         ],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('800,00\u00a0kr');
@@ -280,6 +282,7 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
       expect(text(card(closed)?.querySelector('[data-settlement-badge]'))).toBe('✓');
       expect(card(closed)?.classList.contains('settlement-row-open')).toBe(false);
@@ -295,6 +298,7 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page))).not.toContain('kvar');
@@ -305,6 +309,7 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-12'), period('2026-10', { closedThrough: '2026-12-03', paid: 300 })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page))).toContain('Avslutad 3 dec');
@@ -315,9 +320,10 @@ describe('OverviewPage', () => {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
-      expect(text(card(page))).toContain('Partnern är skyldig dig');
+      expect(text(card(page))).toContain('Att överföra: Robin → Kim');
       expect(text(card(page))).not.toContain('inte avslutad');
     });
 
@@ -326,6 +332,7 @@ describe('OverviewPage', () => {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('90,00\u00a0kr');
@@ -338,6 +345,7 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31' })],
         balanceSettings: [],
+        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(card(page)).toBeNull();

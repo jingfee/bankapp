@@ -57,7 +57,7 @@ export interface ReplayInput {
 /** A period before the service has looked on disk for its report. */
 export type ReplayPeriod = Omit<SettlementPeriod, 'reportSaved'>;
 
-export interface SettlementReplay extends Omit<SettlementResponse, 'periods'> {
+export interface SettlementReplay extends Omit<SettlementResponse, 'periods' | 'names'> {
   periods: ReplayPeriod[];
 }
 

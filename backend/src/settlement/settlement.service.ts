@@ -4,6 +4,8 @@ import type { CloseMonthRequest, SettlementPeriod, SettlementResponse } from '@b
 import { ReportsService } from '../reports/reports.service';
 import { queryTransactions } from '../transactions/query';
 import { CLOCK, type Clock } from '../clock';
+import type { AppConfig } from '../config/config';
+import { APP_CONFIG } from '../config/config.module';
 import type { AppDatabase } from '../db/database';
 import { DATABASE } from '../db/database.module';
 import { NoSuchClosedPeriod } from '../domain-errors';
@@ -27,6 +29,7 @@ export class SettlementService {
     @Inject(DATABASE) private readonly db: AppDatabase,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly reports: ReportsService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   private readonly logger = new Logger(SettlementService.name);
@@ -144,6 +147,7 @@ export class SettlementService {
   private withReports(replayed: SettlementReplay): SettlementResponse {
     return {
       ...replayed,
+      names: { owner: this.config.ownerName, partner: this.config.partnerName },
       periods: replayed.periods.map((period) => ({
         ...period,
         reportSaved: period.closedThrough === null ? null : this.reports.exists(period.month),

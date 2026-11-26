@@ -59,6 +59,7 @@ export {
 export type {
   BalanceSetting,
   CloseMonthRequest,
+  PartyNames,
   SetBalanceSettingRequest,
   SetOpenMonthRequest,
   SettlementBalanceResponse,
