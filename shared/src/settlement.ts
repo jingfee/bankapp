@@ -68,7 +68,10 @@ export interface SettlementPeriod {
   overdue: boolean;
 }
 
-/** The owner's and the partner's names as shown on Delat, from OWNER_NAME and PARTNER_NAME. */
+/**
+ * Response body of `GET /api/names`: what the UI calls the owner and the partner, from
+ * OWNER_NAME and PARTNER_NAME (_Jag_ and _Partner_ when not set).
+ */
 export interface PartyNames {
   owner: string;
   partner: string;
@@ -76,8 +79,6 @@ export interface PartyNames {
 
 /** Response body of `GET /api/settlement` and `POST /api/settlement/balance-settings`. */
 export interface SettlementResponse {
-  /** Who is who, for wording such as _Att överföra: Partner → Jag_. */
-  names: PartyNames;
   /** What the partner owes the owner now (negative: the owner owes), null before any setting. */
   balance: number | null;
   /** Settlement periods, newest first; empty before the first balance setting. */

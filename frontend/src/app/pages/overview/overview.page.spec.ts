@@ -13,6 +13,7 @@ import type {
   SettlementResponse,
   Transaction,
 } from '@bankapp/shared';
+import { Names } from '../../names';
 import { Offline } from '../../offline/offline.service';
 import { AccountsStore } from '../../stores/accounts.store';
 import { FakeAccountsStore } from '../../stores/accounts.store.fake';
@@ -43,10 +44,12 @@ describe('OverviewPage', () => {
         { provide: SettlementStore, useValue: settlementStore },
       ],
     });
+    TestBed.inject(Names).set({ owner: 'Kim', partner: 'Robin' });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   const totals = (income: number, spending: number): OverviewTotals => ({
@@ -142,7 +145,6 @@ describe('OverviewPage', () => {
           balance: setting,
           periods: setting === null ? [] : [period('2026-11', { carriedOut: setting })],
           balanceSettings: [],
-          names: { owner: 'Kim', partner: 'Robin' },
         };
 
   const transaction = (id: number, overrides: Partial<Transaction> = {}): Transaction => ({
@@ -268,7 +270,6 @@ describe('OverviewPage', () => {
           period('2026-10', { closedThrough: '2026-11-02', paid: 800, carriedOut: 120 }),
         ],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('800,00\u00a0kr');
@@ -282,7 +283,6 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
       expect(text(card(closed)?.querySelector('[data-settlement-badge]'))).toBe('✓');
       expect(card(closed)?.classList.contains('settlement-row-open')).toBe(false);
@@ -298,7 +298,6 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31', paid: 800 })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page))).not.toContain('kvar');
@@ -309,7 +308,6 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-12'), period('2026-10', { closedThrough: '2026-12-03', paid: 300 })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page))).toContain('Avslutad 3 dec');
@@ -320,7 +318,6 @@ describe('OverviewPage', () => {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page))).toContain('Att överföra: Robin → Kim');
@@ -332,7 +329,6 @@ describe('OverviewPage', () => {
         balance: 90,
         periods: [period('2026-10', { overdue: true, carriedOut: 90 })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('90,00\u00a0kr');
@@ -345,7 +341,6 @@ describe('OverviewPage', () => {
         balance: 0,
         periods: [period('2026-11'), period('2026-10', { closedThrough: '2026-10-31' })],
         balanceSettings: [],
-        names: { owner: 'Kim', partner: 'Robin' },
       });
 
       expect(card(page)).toBeNull();
@@ -745,7 +740,7 @@ describe('OverviewPage', () => {
         [`${month} ${id}`]: { transactions } satisfies OverviewTransactionsResponse,
       }));
 
-    it('shows din del on shared drill-down rows in Min andel, with real amounts', async () => {
+    it("shows the owner's part on shared drill-down rows in Min andel, with real amounts", async () => {
       const { fixture, page } = await render(body());
       drillDown('2026-11', 12, [
         transaction(1, {
@@ -760,7 +755,7 @@ describe('OverviewPage', () => {
 
       const rows = page.querySelectorAll('li[data-transaction]');
       expect(text(rows[0]?.querySelector('[data-amount]'))).toBe('−200,00\u00a0kr');
-      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('din del −100,00\u00a0kr');
+      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('Kims del −100,00\u00a0kr');
       expect(rows[1]?.querySelector('[data-own-share]')).toBeNull();
     });
 

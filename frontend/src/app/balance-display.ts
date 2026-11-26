@@ -1,7 +1,5 @@
 import type { PartyNames } from '@bankapp/shared';
-
-/** The names when the server sends none: saved data from before the names existed. */
-const DEFAULT_NAMES: PartyNames = { owner: 'Jag', partner: 'Partner' };
+import { DEFAULT_NAMES } from './names';
 
 /**
  * Which way the settlement balance is to be transferred, e.g. _Att överföra: Partner → Jag_.

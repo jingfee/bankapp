@@ -12,6 +12,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { authInterceptor } from './auth/auth.interceptor';
 import { AppUpdateService } from './app-update.service';
 import { routes } from './app.routes';
+import { Names } from './names';
 import { OfflineWarmup } from './offline-warmup.service';
 import { offlineInterceptor } from './offline/offline.interceptor';
 import { Offline } from './offline/offline.service';
@@ -32,5 +33,6 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(AppUpdateService).watch()),
     provideAppInitializer(() => inject(OfflineWarmup).watch()),
     provideAppInitializer(() => inject(Offline).watch()),
+    provideAppInitializer(() => inject(Names).watch()),
   ],
 };

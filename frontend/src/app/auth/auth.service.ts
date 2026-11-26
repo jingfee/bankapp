@@ -4,6 +4,7 @@ import type { LoginRequest, MeResponse } from '@bankapp/shared';
 import { type Observable, catchError, from, map, of, switchMap, tap, throwError } from 'rxjs';
 import { Offline, isOfflineFailure } from '../offline/offline.service';
 import { hasSavedData } from '../offline/saved-data';
+import { Names } from '../names';
 import { PendingLogout } from './pending-logout';
 
 /** Whether the owner is signed in, as far as the server has told us. */
@@ -12,6 +13,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly offline = inject(Offline);
   private readonly pending = inject(PendingLogout);
+  private readonly names = inject(Names);
   private signedIn = false;
 
   /**
@@ -81,6 +83,7 @@ export class AuthService {
   /** The session is over, by logout or because the server rejected it. */
   markSignedOut(): void {
     this.signedIn = false;
+    this.names.clear();
     void clearCachedData();
   }
 }

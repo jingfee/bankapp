@@ -1,10 +1,11 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CATEGORY_PALETTE, type CategoryColour, type Transaction } from '@bankapp/shared';
 import { TransactionCategoryBadge } from '../category-icon/transaction-category-badge';
 import { DateHeadingPipe } from '../formatting/date-heading.pipe';
 import { MoneyPipe } from '../formatting/money.pipe';
-import { SHARE_LABELS, accountLabel } from '../share-display';
+import { Names, possessive } from '../names';
+import { accountLabel, shareLabels } from '../share-display';
 
 const money = new MoneyPipe();
 
@@ -100,7 +101,7 @@ interface DayGroup {
                   </span>
                   @if (showOwnShare() && badge(transaction)) {
                     <span data-own-share class="text-sm text-muted tabular-nums"
-                      >din del {{ ownShare(transaction) }}</span
+                      >{{ ownShareLabel() }} del {{ ownShare(transaction) }}</span
                     >
                   }
                 </span>
@@ -119,16 +120,25 @@ export class TransactionList {
   /** Adds *din del* under the real amount of shared transactions (Min andel). */
   readonly showOwnShare = input(false);
 
+  private readonly names = inject(Names).names;
+  private readonly labels = computed(() => shareLabels(this.names()));
+  /** _din_, or the owner's name in the genitive. */
+  protected readonly ownShareLabel = computed(() =>
+    possessive(this.names(), 'owner', { midSentence: true }),
+  );
+
   protected badge(transaction: Transaction): string | null {
     const option = transaction.share.option;
-    return option === 'me' ? null : SHARE_LABELS[option];
+    return option === 'me' ? null : this.labels()[option];
   }
 
   protected tint(colour: CategoryColour): string {
     return CATEGORY_PALETTE[colour].tint;
   }
 
-  protected readonly accountLabel = accountLabel;
+  protected accountLabel(transaction: Transaction): string {
+    return accountLabel(transaction, this.names());
+  }
 
   /** The owner's part of the real amount, to the öre. */
   protected ownShare(transaction: Transaction): string {

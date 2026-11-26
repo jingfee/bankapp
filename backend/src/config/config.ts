@@ -25,9 +25,9 @@ export interface AppConfig {
   username: string;
   /** scrypt hash of the owner's password, made with `pnpm hash-password`; never the password itself. */
   passwordHash: string;
-  /** The owner's name on Delat; _Jag_ when OWNER_NAME is not set. */
+  /** What the UI and the reports call the owner; _Jag_ when OWNER_NAME is not set. */
   ownerName: string;
-  /** The partner's name on Delat; _Partner_ when PARTNER_NAME is not set. */
+  /** What the UI and the reports call the partner; _Partner_ when PARTNER_NAME is not set. */
   partnerName: string;
 }
 

@@ -11,6 +11,7 @@ import type {
 import { type Observable, map, of, throwError } from 'rxjs';
 import { routes } from '../../app.routes';
 import { CategoriesService } from '../../categories.service';
+import { Names } from '../../names';
 import { SettlementStore } from '../../stores/settlement.store';
 import { FakeSettlementStore } from '../../stores/settlement.store.fake';
 import { SharesStore } from '../../stores/shares.store';
@@ -51,10 +52,12 @@ describe('DelatPage', () => {
         },
       ],
     });
+    TestBed.inject(Names).set({ owner: 'Kim', partner: 'Robin' });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   const categories: CategoriesResponse = {
@@ -104,7 +107,6 @@ describe('DelatPage', () => {
     balance: null,
     periods: [],
     balanceSettings: [],
-    names: { owner: 'Kim', partner: 'Robin' },
     ...overrides,
   });
 
@@ -215,7 +217,7 @@ describe('DelatPage', () => {
       const { page } = await render();
 
       expect(text(page.querySelector('[data-switch-help]'))).toContain(
-        'partnerns andel av det som redan är betalt, per idag',
+        'Robins andel av det som redan är betalt, per idag',
       );
       expect(page.querySelector('[data-balance]')).toBeNull();
     });
@@ -810,7 +812,7 @@ describe('DelatPage', () => {
         ['Restaurang', 'partner'],
       ]);
       expect(text(page.querySelector('[data-shared-card]'))).toContain(
-        'Alla andra underkategorier räknas som Jag (100 %). Ett kontos eller en transaktions egen andel går före.',
+        'Alla andra underkategorier räknas som Kim (100 %). Ett kontos eller en transaktions egen andel går före.',
       );
     });
 
@@ -819,7 +821,7 @@ describe('DelatPage', () => {
 
       expect(
         [...rows(page)[0]!.querySelectorAll('button[data-share]')].map((b) => text(b)),
-      ).toEqual(['Jag', '50/50', 'Hushåll', 'Partner']);
+      ).toEqual(['Kim', '50/50', 'Hushåll', 'Robin']);
     });
 
     it('adds a subcategory at 50/50 from the picker, changes it and removes it', async () => {

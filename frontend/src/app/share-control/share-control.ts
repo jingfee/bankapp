@@ -1,9 +1,10 @@
 import { Component, computed, inject, input, output } from '@angular/core';
 import type { ShareOption } from '@bankapp/shared';
 import { Offline } from '../offline/offline.service';
-import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
+import { Names } from '../names';
+import { SHARE_OPTION_ORDER, shareLabels } from '../share-display';
 
-/** The one way a share is chosen: Jag, 50/50, Hushåll, Partner as a segmented control. */
+/** The one way a share is chosen: the owner, 50/50, Hushåll, the partner as a segmented control. */
 @Component({
   selector: 'app-share-control',
   template: `
@@ -39,6 +40,7 @@ import { SHARE_LABELS, SHARE_OPTION_ORDER } from '../share-display';
 export class ShareControl {
   /** Choosing a share changes something, so every choice is disabled while offline. */
   protected readonly offline = inject(Offline);
+  private readonly names = inject(Names).names;
   /** The share option currently chosen. */
   readonly value = input<ShareOption | null>(null);
   readonly label = input('Välj andel');
@@ -50,13 +52,14 @@ export class ShareControl {
   readonly householdTitle = input('Hushåll kan väljas först när en hushållsandel har ställts in.');
   readonly changed = output<ShareOption>();
 
-  protected readonly choices = computed(() =>
-    SHARE_OPTION_ORDER.map((option) => ({
+  protected readonly choices = computed(() => {
+    const labels = shareLabels(this.names());
+    return SHARE_OPTION_ORDER.map((option) => ({
       option,
-      label: SHARE_LABELS[option],
+      label: labels[option],
       disabled: option === 'household' && this.householdDisabled(),
-    })),
-  );
+    }));
+  });
 
   protected choose(option: ShareOption): void {
     this.changed.emit(option);
