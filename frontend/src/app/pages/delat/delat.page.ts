@@ -31,11 +31,12 @@ import { parseAmount } from '../../formatting/amount';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SettlementStore } from '../../stores/settlement.store';
 import { SharesStore } from '../../stores/shares.store';
-import { owesText } from '../../balance-display';
+import { transferText } from '../../balance-display';
 import { isMonth, today, shiftMonth } from '../../dates';
 import { APP_LOCALE } from '../../formatting/locale';
 import { ShareControl } from '../../share-control/share-control';
-import { SHARE_LABELS } from '../../share-display';
+import { Names, possessive } from '../../names';
+import { shareLabels } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { Page } from '../../page/page';
 import { OfflineDisabled } from '../../offline/offline-disabled';
@@ -120,9 +121,10 @@ interface SharedRow {
                 <div data-switch-help>
                   <h3 class="card-title">Ställ in saldot för att börja</h3>
                   <p class="mt-2 text-sm text-muted">
-                    Ställ in saldot till partnerns andel av det som redan är betalt, per idag. Har
-                    partnerns senaste överföring också täckt räkningar som betalas de närmaste
-                    dagarna är saldot negativt tills de bokförs. Kommande fakturor räknas inte.
+                    Ställ in saldot till {{ partners() }} andel av det som redan är betalt, per
+                    idag. Har {{ partners() }} senaste överföring också täckt räkningar som betalas
+                    de närmaste dagarna är saldot negativt tills de bokförs. Kommande fakturor
+                    räknas inte.
                   </p>
                 </div>
               } @else {
@@ -366,7 +368,7 @@ interface SharedRow {
                         <dd data-carried-in class="text-right amount">
                           {{ period.carriedIn | money }}
                         </dd>
-                        <dt class="text-muted">Partnerns del</dt>
+                        <dt class="text-muted">{{ partnersCapital() }} del</dt>
                         <dd data-period-part class="text-right amount">
                           {{ partnerPartSum(period) | money }}
                         </dd>
@@ -455,7 +457,7 @@ interface SharedRow {
                   class="slider"
                   min="1"
                   max="99"
-                  aria-label="Din andel i procent"
+                  [attr.aria-label]="ownersCapital() + ' andel i procent'"
                   [value]="sliderValue()"
                   [style.--fill.%]="sliderValue()"
                   (input)="slider.set(+value($event))"
@@ -542,8 +544,8 @@ interface SharedRow {
                 <app-skeleton shape="card" />
               } @else {
                 <p class="text-sm text-muted">
-                  Alla andra underkategorier räknas som Jag (100 %). Ett kontos eller en
-                  transaktions egen andel går före.
+                  Alla andra underkategorier räknas som {{ names().owner }} (100 %). Ett kontos
+                  eller en transaktions egen andel går före.
                 </p>
 
                 @if (picking()) {
@@ -633,7 +635,7 @@ interface SharedRow {
           />
         </label>
         <label class="flex flex-col gap-1 text-sm text-muted">
-          Din andel i procent
+          {{ ownersCapital() }} andel i procent
           <input
             type="number"
             data-edit-percent
@@ -703,6 +705,13 @@ export class DelatPage {
     this.sharesStore.fetchedAt(),
   ]);
   private readonly toast = inject(ToastService);
+  protected readonly names = inject(Names).names;
+  /** _partnerns_ mid-sentence, or the partner's name in the genitive. */
+  protected readonly partners = computed(() =>
+    possessive(this.names(), 'partner', { midSentence: true }),
+  );
+  protected readonly partnersCapital = computed(() => possessive(this.names(), 'partner'));
+  protected readonly ownersCapital = computed(() => possessive(this.names(), 'owner'));
   private readonly route = inject(ActivatedRoute);
 
   protected readonly fallbackIcon: CategoryIcon = 'arrow-left-right';
@@ -786,7 +795,9 @@ export class DelatPage {
   }
 
   protected readonly balanceAmount = computed(() => Math.abs(this.settlement().balance ?? 0));
-  protected readonly balanceDirection = computed(() => owesText(this.settlement().balance ?? 0));
+  protected readonly balanceDirection = computed(() =>
+    transferText(this.settlement().balance ?? 0, this.names()),
+  );
   /** The latest settlement's or balance setting's date, as " · sedan avräkningen <date>". */
   protected readonly sinceText = computed(() => {
     const { periods, balanceSettings } = this.settlement();
@@ -846,7 +857,7 @@ export class DelatPage {
   });
 
   protected shareName(option: ShareOption): string {
-    return SHARE_LABELS[option];
+    return shareLabels(this.names())[option];
   }
 
   /** `2026-10` as "Oktober 2026". */
@@ -1050,7 +1061,7 @@ export class DelatPage {
       subcategory.id,
       option,
       option === 'me'
-        ? () => this.toast.show(`${subcategory.name} räknas som Jag igen`)
+        ? () => this.toast.show(`${subcategory.name} räknas som ${this.names().owner} igen`)
         : undefined,
     );
   }

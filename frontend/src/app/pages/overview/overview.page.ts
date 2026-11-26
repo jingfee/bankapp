@@ -15,7 +15,8 @@ import {
   type OverviewResponse,
   type OverviewView,
 } from '@bankapp/shared';
-import { owesText } from '../../balance-display';
+import { transferText } from '../../balance-display';
+import { Names } from '../../names';
 import { dayOf, monthOf, shiftMonth } from '../../dates';
 import { CategoryBar } from '../../category-bar/category-bar';
 import { MoneyPipe } from '../../formatting/money.pipe';
@@ -648,6 +649,7 @@ export class OverviewPage {
   private readonly accounts = inject(AccountsStore).accounts;
 
   private readonly settlementStore = inject(SettlementStore);
+  private readonly names = inject(Names).names;
   /** The card is a convenience, so a failure just leaves it out. */
   private readonly settlement = this.settlementStore.settlement;
 
@@ -959,7 +961,7 @@ export class OverviewPage {
     return {
       closed: false,
       amount: money.transform(Math.abs(balance)),
-      lines: [owesText(balance)],
+      lines: [transferText(balance, this.names())],
       link: { path: '/delat', params: { manad: open.month } },
     };
   }

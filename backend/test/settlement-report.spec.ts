@@ -22,7 +22,7 @@ describe('the settlement report', () => {
   beforeEach(async () => {
     reportsDir = mkdtempSync(join(tmpdir(), 'bankapp-report-test-'));
     app = await createApp({
-      config: { ...testConfig, reportsDir },
+      config: { ...testConfig, reportsDir, ownerName: 'Kim', partnerName: 'Robin' },
       enableBanking: new FakeEnableBankingClient(),
       database: { inMemory: true },
       now: () => new Date('2026-11-15T12:00:00'),
@@ -123,6 +123,7 @@ describe('the settlement report', () => {
     expect(values.get('Ingående saldo')).toBe(period.carriedIn);
     expect(values.get('Utgående saldo')).toBe(period.carriedOut);
     expect(values.get('Betalt genom avräkningar')).toBe(300);
+    expect(values.get('Robins andel av perioden')).toBe(750);
 
     const rows = workbook.getWorksheet('Transaktioner')!;
     expect(rows.rowCount).toBe(1 + period.items.length + 1);
@@ -136,7 +137,8 @@ describe('the settlement report', () => {
     expect(first.getCell(5).numFmt).toBe('# ##0,00 "kr"');
     expect(first.getCell(6).value).toBe('50/50');
     expect(first.getCell(7).value).toBe(500);
-    expect(first.getCell(8).value).toBe('Jag');
+    expect(first.getCell(8).value).toBe('Kim');
+    expect(rows.getRow(1).getCell(7).value).toBe('Robins andel');
     expect(first.getCell(9).value).toBe('Bokförd');
     expect(rows.getRow(3).getCell(9).value).toBe('Reserverad');
     const totals = rows.getRow(rows.rowCount);

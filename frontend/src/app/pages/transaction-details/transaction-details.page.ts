@@ -40,7 +40,8 @@ import { Skeleton } from '../../skeleton/skeleton';
 import { ShareControl } from '../../share-control/share-control';
 import { MoneyPipe } from '../../formatting/money.pipe';
 import { SharesStore } from '../../stores/shares.store';
-import { MANUAL_LABEL, SHARE_LABELS, householdPercentLabel } from '../../share-display';
+import { Names, possessive } from '../../names';
+import { MANUAL_LABEL, householdPercentLabel, paidByLabel, shareLabels } from '../../share-display';
 import { ToastService } from '../../toast/toast.service';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { Page } from '../../page/page';
@@ -339,13 +340,13 @@ function formatOriginal({ amount, currency }: Money): string {
                   </div>
                   <div class="flex justify-between gap-3 text-sm">
                     <span class="flex flex-col">
-                      <span class="text-muted">Din del</span>
+                      <span class="text-muted">{{ ownerPartLabel() }}</span>
                       <span data-share-part class="amount">{{
                         ownerPart() | money: t.amount.currency
                       }}</span>
                     </span>
                     <span class="flex flex-col items-end">
-                      <span class="text-muted">Partnerns del</span>
+                      <span class="text-muted">{{ partnerPartLabel() }}</span>
                       <span data-share-partner-part class="amount">{{
                         partnerPart() | money: t.amount.currency
                       }}</span>
@@ -550,6 +551,12 @@ export class TransactionDetailsPage {
   private readonly toast = inject(ToastService);
   private readonly offline = inject(Offline);
   private readonly route = inject(ActivatedRoute);
+  private readonly names = inject(Names).names;
+  /** _Din del_ and _Partnerns del_, by name where the names are set. */
+  protected readonly ownerPartLabel = computed(() => `${possessive(this.names(), 'owner')} del`);
+  protected readonly partnerPartLabel = computed(
+    () => `${possessive(this.names(), 'partner')} del`,
+  );
 
   /** The id in the URL; `/transaktioner/:id/redigera` opens the edit form over the page. */
   protected readonly id = toSignal(this.route.paramMap.pipe(map((params) => params.get('id'))), {
@@ -642,7 +649,7 @@ export class TransactionDetailsPage {
     fields.push({
       label: 'Betald av',
       key: 'paidBy',
-      value: t.paidBy === 'partner' ? 'Partner' : 'Jag',
+      value: paidByLabel(t.paidBy, this.names()),
     });
     if (t.counterparty)
       fields.push({ label: 'Motpart', key: 'counterparty', value: t.counterparty });
@@ -724,7 +731,7 @@ export class TransactionDetailsPage {
     if (share === undefined) return '';
     return share.option === 'household'
       ? householdPercentLabel(share.percent)
-      : SHARE_LABELS[share.option];
+      : shareLabels(this.names())[share.option];
   });
 
   protected readonly shareSource = computed(() => {
@@ -736,7 +743,7 @@ export class TransactionDetailsPage {
   protected readonly sharedLabel = computed(() => {
     const share = this.details()?.share;
     if (share === undefined || share.option === 'me') return null;
-    return SHARE_LABELS[share.option];
+    return shareLabels(this.names())[share.option];
   });
 
   /** The owner's part of the amount, signed like the amount. */

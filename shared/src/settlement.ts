@@ -68,6 +68,15 @@ export interface SettlementPeriod {
   overdue: boolean;
 }
 
+/**
+ * Response body of `GET /api/names`: what the UI calls the owner and the partner, from
+ * OWNER_NAME and PARTNER_NAME (_Jag_ and _Partner_ when not set).
+ */
+export interface PartyNames {
+  owner: string;
+  partner: string;
+}
+
 /** Response body of `GET /api/settlement` and `POST /api/settlement/balance-settings`. */
 export interface SettlementResponse {
   /** What the partner owes the owner now (negative: the owner owes), null before any setting. */

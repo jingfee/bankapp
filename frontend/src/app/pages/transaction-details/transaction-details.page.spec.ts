@@ -15,6 +15,7 @@ import { FakeSharesStore } from '../../stores/shares.store.fake';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { FakeTransactionsStore } from '../../stores/transactions.store.fake';
 import { ToastService } from '../../toast/toast.service';
+import { Names } from '../../names';
 import { TransactionDetailsPage } from './transaction-details.page';
 
 describe('TransactionDetailsPage', () => {
@@ -164,6 +165,28 @@ describe('TransactionDetailsPage', () => {
       expect(shareText(page, 'partner-part')).toMatch(/^−125,00\skr$/);
       expect(page.querySelector<HTMLElement>('[data-share-bar]')?.style.width).toBe('50%');
       expect(text(page.querySelector('[data-share-pill]'))).toBe('Delad · 50/50');
+    });
+
+    it('calls the owner and the partner by name', async () => {
+      TestBed.inject(Names).set({ owner: 'Kim', partner: 'Robin' });
+      const { page, field } = await render(
+        details({
+          account: null,
+          paidBy: 'partner',
+          share: { option: 'partner', percent: 0, source: 'transaction' },
+        }),
+      );
+      localStorage.clear();
+
+      expect(field('paidBy')).toBe('Robin');
+      expect(shareText(page, 'name')).toBe('Robin');
+      expect(text(page.querySelector('[data-share-pill]'))).toBe('Delad · Robin');
+      expect(text(page.querySelector('[data-share-part]')?.previousElementSibling ?? null)).toBe(
+        'Kims del',
+      );
+      expect(
+        text(page.querySelector('[data-share-partner-part]')?.previousElementSibling ?? null),
+      ).toBe('Robins del');
     });
 
     it('names the household ratio and the other sources', async () => {

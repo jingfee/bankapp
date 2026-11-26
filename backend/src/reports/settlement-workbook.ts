@@ -1,17 +1,19 @@
 import ExcelJS from 'exceljs';
-import type { SettlementPeriod, ShareOption } from '@bankapp/shared';
+import type { PartyNames, SettlementPeriod, ShareOption } from '@bankapp/shared';
+import { partnerPossessive } from '../names/possessive';
 import { roundOre } from '../transactions/owners-part';
 
 const MONEY_FORMAT = '# ##0,00 "kr"';
 const DATE_FORMAT = 'yyyy-MM-dd';
 const DATETIME_FORMAT = 'yyyy-MM-dd HH:mm';
 
-const SHARE_NAMES: Record<ShareOption, string> = {
-  me: 'Jag',
+/** What each share option is called: Jag and Partner are the owner's and the partner's names. */
+const shareNames = (names: PartyNames): Record<ShareOption, string> => ({
+  me: names.owner,
   half: '50/50',
   household: 'Hushåll',
-  partner: 'Partner',
-};
+  partner: names.partner,
+});
 
 /** "Oktober 2026" for `2026-10`. */
 export function monthTitle(month: string): string {
@@ -35,7 +37,10 @@ const day = (value: string) => new Date(`${value}T00:00:00Z`);
 export async function buildSettlementWorkbook(
   period: SettlementPeriod,
   madeAt: Date,
+  names: PartyNames,
 ): Promise<ExcelJS.Workbook> {
+  const labels = shareNames(names);
+  const partnersPart = `${partnerPossessive(names.partner)} andel`;
   const workbook = new ExcelJS.Workbook();
   workbook.created = madeAt;
   workbook.creator = 'Bankapp';
@@ -60,7 +65,7 @@ export async function buildSettlementWorkbook(
     DATE_FORMAT,
   );
   addRow('Ingående saldo', period.carriedIn, MONEY_FORMAT);
-  addRow('Partnerns andel av perioden', partnerPart, MONEY_FORMAT);
+  addRow(`${partnersPart} av perioden`, partnerPart, MONEY_FORMAT);
   addRow('Betalt genom avräkningar', period.paid, MONEY_FORMAT);
   addRow('Utgående saldo', period.carriedOut, MONEY_FORMAT);
   if (period.balanceSettings.length > 0) {
@@ -81,7 +86,7 @@ export async function buildSettlementWorkbook(
     { header: 'Kategori', width: 34 },
     { header: 'Belopp', width: 16, style: { numFmt: MONEY_FORMAT } },
     { header: 'Andel', width: 18 },
-    { header: 'Partnerns andel', width: 18, style: { numFmt: MONEY_FORMAT } },
+    { header: partnersPart, width: 18, style: { numFmt: MONEY_FORMAT } },
     { header: 'Betald av', width: 12 },
     { header: 'Status', width: 12 },
   ];
@@ -93,10 +98,10 @@ export async function buildSettlementWorkbook(
       item.category === null ? '' : `${item.category} › ${item.subcategory}`,
       item.amount,
       item.share === 'household'
-        ? `${SHARE_NAMES.household} (${item.ownerPercent}/${100 - item.ownerPercent})`
-        : SHARE_NAMES[item.share],
+        ? `${labels.household} (${item.ownerPercent}/${100 - item.ownerPercent})`
+        : labels[item.share],
       item.partnerPart,
-      item.paidBy === 'partner' ? 'Partner' : 'Jag',
+      item.paidBy === 'partner' ? names.partner : names.owner,
       item.status === 'booked' ? 'Bokförd' : 'Reserverad',
     ]);
   }

@@ -13,6 +13,7 @@ import { CategoryIconComponent } from '../../category-icon/category-icon';
 import { TransactionCategoryBadge } from '../../category-icon/transaction-category-badge';
 import { ShortDatePipe } from '../../formatting/short-date.pipe';
 import { MoneyPipe } from '../../formatting/money.pipe';
+import { Names } from '../../names';
 import { accountLabel } from '../../share-display';
 import { TransactionsStore } from '../../stores/transactions.store';
 import { similarUpdatedNote } from '../../similar-updated-note';
@@ -306,7 +307,10 @@ export class ReviewPage {
   private readonly categoryList = inject(CategoriesService);
   private readonly offline = inject(Offline);
 
-  protected readonly accountLabel = accountLabel;
+  private readonly names = inject(Names).names;
+  protected accountLabel(transaction: Transaction): string {
+    return accountLabel(transaction, this.names());
+  }
   protected readonly status = computed(() =>
     this.review.value() !== undefined ? 'ready' : this.review.failed() ? 'failed' : 'loading',
   );

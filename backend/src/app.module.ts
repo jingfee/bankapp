@@ -15,6 +15,7 @@ import { DatabaseModule, type DatabaseLocation } from './db/database.module';
 import type { EnableBankingClient } from './enable-banking/enable-banking-client';
 import { EnableBankingModule } from './enable-banking/enable-banking.module';
 import { HealthController } from './health/health.controller';
+import { NamesController } from './names/names.controller';
 import { ManualSavingsModule } from './manual-savings/manual-savings.module';
 import { MortgageModule } from './mortgage/mortgage.module';
 import { OverviewModule } from './overview/overview.module';
@@ -81,7 +82,7 @@ export class AppModule {
         BackupModule,
         ...staticFrontendModules,
       ],
-      controllers: [HealthController],
+      controllers: [HealthController, NamesController],
     };
   }
 }

@@ -21,6 +21,7 @@ import type {
 } from '@bankapp/shared';
 import { formatAmountInput, parseAmount } from '../formatting/amount';
 import { CategoriesService } from '../categories.service';
+import { Names } from '../names';
 import { Callout } from '../callout/callout';
 import { Sheet } from '../sheet/sheet';
 import { Skeleton } from '../skeleton/skeleton';
@@ -169,7 +170,7 @@ const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
                 [attr.aria-pressed]="paidBy() === 'owner'"
                 (click)="paidBy.set('owner')"
               >
-                Jag
+                {{ names().owner }}
               </button>
               <button
                 type="button"
@@ -177,7 +178,7 @@ const INCOMPLETE = 'Fyll i belopp, beskrivning och underkategori.';
                 [attr.aria-pressed]="paidBy() === 'partner'"
                 (click)="paidBy.set('partner')"
               >
-                Partner
+                {{ names().partner }}
               </button>
             </div>
           </section>
@@ -216,6 +217,7 @@ export class ManualTransactionSheet implements OnInit {
   private readonly transactionsStore = inject(TransactionsStore);
   private readonly categoryService = inject(CategoriesService);
   private readonly sharesStore = inject(SharesStore);
+  protected readonly names = inject(Names).names;
   private readonly destroyRef = inject(DestroyRef);
   private readonly amountInput = viewChild<ElementRef<HTMLInputElement>>('amountInput');
 

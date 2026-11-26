@@ -48,6 +48,7 @@
         "/api/mortgage/**",
         "/api/overview",
         "/api/overview?**",
+        "/api/names",
         "/api/savings",
         "/api/settlement"
       ],

@@ -13,6 +13,7 @@ import type {
   SettlementResponse,
   Transaction,
 } from '@bankapp/shared';
+import { Names } from '../../names';
 import { Offline } from '../../offline/offline.service';
 import { AccountsStore } from '../../stores/accounts.store';
 import { FakeAccountsStore } from '../../stores/accounts.store.fake';
@@ -43,10 +44,12 @@ describe('OverviewPage', () => {
         { provide: SettlementStore, useValue: settlementStore },
       ],
     });
+    TestBed.inject(Names).set({ owner: 'Kim', partner: 'Robin' });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   const totals = (income: number, spending: number): OverviewTotals => ({
@@ -244,11 +247,11 @@ describe('OverviewPage', () => {
       return page;
     };
 
-    it('shows what the partner owes and links to Delat', async () => {
+    it('shows who transfers to whom and links to Delat', async () => {
       const { page } = await render(overview(), accountsOf([]), 4312);
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('4\u00a0312,00\u00a0kr');
-      expect(text(card(page))).toContain('Partnern är skyldig dig');
+      expect(text(card(page))).toContain('Att överföra: Robin → Kim');
       expect(card(page)?.getAttribute('href')).toBe('/delat?manad=2026-11');
     });
 
@@ -256,7 +259,7 @@ describe('OverviewPage', () => {
       const { page } = await render(overview(), accountsOf([]), -250);
 
       expect(text(card(page)?.querySelector('[data-amount]'))).toBe('250,00\u00a0kr');
-      expect(text(card(page))).toContain('Du är skyldig partnern');
+      expect(text(card(page))).toContain('Att överföra: Kim → Robin');
     });
 
     it('shows what a closed month paid, with where it was closed and what was left', async () => {
@@ -317,7 +320,7 @@ describe('OverviewPage', () => {
         balanceSettings: [],
       });
 
-      expect(text(card(page))).toContain('Partnern är skyldig dig');
+      expect(text(card(page))).toContain('Att överföra: Robin → Kim');
       expect(text(card(page))).not.toContain('inte avslutad');
     });
 
@@ -737,7 +740,7 @@ describe('OverviewPage', () => {
         [`${month} ${id}`]: { transactions } satisfies OverviewTransactionsResponse,
       }));
 
-    it('shows din del on shared drill-down rows in Min andel, with real amounts', async () => {
+    it("shows the owner's part on shared drill-down rows in Min andel, with real amounts", async () => {
       const { fixture, page } = await render(body());
       drillDown('2026-11', 12, [
         transaction(1, {
@@ -752,7 +755,7 @@ describe('OverviewPage', () => {
 
       const rows = page.querySelectorAll('li[data-transaction]');
       expect(text(rows[0]?.querySelector('[data-amount]'))).toBe('−200,00\u00a0kr');
-      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('din del −100,00\u00a0kr');
+      expect(text(rows[0]?.querySelector('[data-own-share]'))).toBe('Kims del −100,00\u00a0kr');
       expect(rows[1]?.querySelector('[data-own-share]')).toBeNull();
     });
 

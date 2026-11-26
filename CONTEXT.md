@@ -256,7 +256,7 @@ The owner's part of costs shared as _Hushåll_, such as the mortgage, broadband 
 _Avoid_: Custom share, split ratio, household share
 
 **Partner** (sv: _Partner_):
-The one other person the owner splits costs with. The partner has no access to the app and no accounts in it; they appear only as who paid a manual transaction and as the sender of settlements.
+The one other person the owner splits costs with. The partner has no access to the app and no accounts in it; they appear only as who paid a manual transaction and as the sender of settlements. The UI and the settlement reports call them by `PARTNER_NAME` (_Partner_ when not set), and the owner by `OWNER_NAME` (_Jag_), wherever they would otherwise say _Jag_ or _Partner_.
 _Avoid_: Wife, spouse, other party, co-owner
 
 **Shared transaction** (sv: _Delad_):
@@ -268,8 +268,8 @@ A transfer from the partner paying down the settlement balance, categorised Öve
 _Avoid_: Repayment, refund, income, offset
 
 **Settlement balance** (sv: _Avräkningssaldo_):
-What the partner owes the owner right now, negative when the owner owes the partner. It starts from the latest balance setting and is worked out live from every transaction since: up by the partner's part, 100% − share, of each transaction paid by the owner (a purchase raises it, a refund or income lowers it); down by the owner's part of each one paid by the partner; and down by each settlement. Transfers, hidden accounts and transactions dated before their account was first connected do not count; pending transactions do, so the balance follows them as they change, book or disappear, and any difference is simply settled next time. It has no months and no cutoff; settlement periods only group its history (ADRs 0008 and 0014).
-_Avoid_: Debt, owed amount, settlement total, avräkning (for the balance)
+What the partner owes the owner right now, negative when the owner owes the partner. The UI says which way it is to be transferred, by name (_Att överföra: <partner> → <owner>_), never who owes whom. It starts from the latest balance setting and is worked out live from every transaction since: up by the partner's part, 100% − share, of each transaction paid by the owner (a purchase raises it, a refund or income lowers it); down by the owner's part of each one paid by the partner; and down by each settlement. Transfers, hidden accounts and transactions dated before their account was first connected do not count; pending transactions do, so the balance follows them as they change, book or disappear, and any difference is simply settled next time. It has no months and no cutoff; settlement periods only group its history (ADRs 0008 and 0014).
+_Avoid_: Debt, owed amount, settlement total, avräkning (for the balance), är skyldig
 
 **Balance setting** (sv: _Inställt saldo_):
 The owner stating that the settlement balance was a given amount as of a given day (today by default). Transactions dated before that day count as included in it; those dated on or after it count on top. The latest setting wins; earlier ones stay in the history. Until the first one, there is no settlement balance.

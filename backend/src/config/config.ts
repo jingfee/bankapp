@@ -25,6 +25,10 @@ export interface AppConfig {
   username: string;
   /** scrypt hash of the owner's password, made with `pnpm hash-password`; never the password itself. */
   passwordHash: string;
+  /** What the UI and the reports call the owner; _Jag_ when OWNER_NAME is not set. */
+  ownerName: string;
+  /** What the UI and the reports call the partner; _Partner_ when PARTNER_NAME is not set. */
+  partnerName: string;
 }
 
 export class ConfigError extends Error {
@@ -37,6 +41,15 @@ export class ConfigError extends Error {
 /** Banks allow about four syncs a day without the owner present; more would be refused. */
 export const MAX_SYNC_TIMES = 4;
 export const DEFAULT_SYNC_TIMES = ['06:00', '11:00', '16:00', '21:00'];
+export const DEFAULT_OWNER_NAME = 'Jag';
+export const DEFAULT_PARTNER_NAME = 'Partner';
+
+/** An optional name: blank or left out means the default. */
+const name = (fallback: string) =>
+  z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() || fallback);
 
 const required = (name: string) =>
   z
@@ -78,6 +91,8 @@ const schema = z.object({
   BANKAPP_PASSWORD_HASH: required('BANKAPP_PASSWORD_HASH').refine(isPasswordHash, {
     error: 'BANKAPP_PASSWORD_HASH is not a hash made by `pnpm hash-password`',
   }),
+  OWNER_NAME: name(DEFAULT_OWNER_NAME),
+  PARTNER_NAME: name(DEFAULT_PARTNER_NAME),
   TIMEZONE: required('TIMEZONE').refine(isTimeZone, {
     error: 'TIMEZONE must be an IANA time zone such as Europe/Stockholm',
   }),
@@ -141,6 +156,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     syncTimes: values.SYNC_TIMES,
     username: values.BANKAPP_USERNAME,
     passwordHash: values.BANKAPP_PASSWORD_HASH,
+    ownerName: values.OWNER_NAME,
+    partnerName: values.PARTNER_NAME,
   };
 }
 

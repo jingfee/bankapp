@@ -43,7 +43,19 @@ describe('loadConfig', () => {
       syncTimes: ['06:00', '11:00', '16:00', '21:00'],
       username: 'owner',
       passwordHash: hash,
+      ownerName: 'Jag',
+      partnerName: 'Partner',
     });
+  });
+
+  it('reads OWNER_NAME and PARTNER_NAME, trimmed', () => {
+    const config = loadConfig({ ...validEnv, OWNER_NAME: ' Kim ', PARTNER_NAME: 'Robin' });
+    expect([config.ownerName, config.partnerName]).toEqual(['Kim', 'Robin']);
+  });
+
+  it('falls back to Jag and Partner when the names are blank', () => {
+    const config = loadConfig({ ...validEnv, OWNER_NAME: '  ', PARTNER_NAME: '' });
+    expect([config.ownerName, config.partnerName]).toEqual(['Jag', 'Partner']);
   });
 
   it.each(['BANKAPP_USERNAME', 'BANKAPP_PASSWORD_HASH'])('requires %s', (name) => {

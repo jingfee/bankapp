@@ -35,6 +35,8 @@ export const testConfig: AppConfig = {
   username: 'owner',
   // The hash of TEST_PASSWORD, made once so tests do not pay for scrypt on every start.
   passwordHash: TEST_PASSWORD_HASH,
+  ownerName: 'Jag',
+  partnerName: 'Partner',
 };
 
 /** Stands in for Enable Banking in backend tests. */

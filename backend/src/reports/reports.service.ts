@@ -26,7 +26,10 @@ export class ReportsService {
 
   /** Writes the report of a closed period, replacing an earlier one; throws when it cannot. */
   async write(period: SettlementPeriod): Promise<void> {
-    const workbook = await buildSettlementWorkbook(period, this.wallClock());
+    const workbook = await buildSettlementWorkbook(period, this.wallClock(), {
+      owner: this.config.ownerName,
+      partner: this.config.partnerName,
+    });
     const file = this.path(period.month);
     // The reports hold personal data: readable by the app's user only.
     mkdirSync(join(file, '..'), { recursive: true, mode: 0o700 });
